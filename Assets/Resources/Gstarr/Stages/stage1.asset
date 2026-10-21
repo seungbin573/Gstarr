@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e2d1cc9de95f0ac4f91bd048d76cf3e6, type: 3}
+  m_Name: stage1
+  m_EditorClassIdentifier: Assembly-CSharp::Gstarr.Game.StageData
+  order: 1
+  displayName: STAGE 1
+  music: {fileID: 8300000, guid: d315ebe4c7709eb40944ff4281aa714c, type: 3}
+  beatChart: {fileID: 0}
+  gloryChart: {fileID: 4900000, guid: 0c4f7be93731d5c4f8003975ea514c39, type: 3}
+  firstBeatOffset: 0.479
+  sceneName: Stage_1

@@ -1,6 +1,8 @@
 using System.IO;
 using System.Linq;
 using Gstarr.CameraSystem;
+using Gstarr.Combat;
+using Gstarr.Items;
 using Gstarr.Player;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -14,7 +16,7 @@ namespace Gstarr.EditorTools
     public static class LevelSceneBuilder
     {
         private const string ProjectRoot = "Assets/_Project";
-        private const string PlaceholderFolder = ProjectRoot + "/Art/Placeholder";
+        private const string PlaceholderFolder = "Assets/arts/Placeholder";
         private const string TilesetPath = PlaceholderFolder + "/PlaceholderTileset.png";
         private const string PlayerSpritePath = PlaceholderFolder + "/PlaceholderPlayer.png";
         private const string NoFrictionPath = ProjectRoot + "/Physics/NoFriction.physicsMaterial2D";
@@ -36,10 +38,11 @@ namespace Gstarr.EditorTools
             EnsureLayer("Player");
 
             var tileset = CreatePlaceholderTileset();
-            var playerSprite = CreatePlaceholderPlayerSprite();
+            var playerSprite = LoadPlayerSprite();
             var noFriction = CreateNoFrictionMaterial();
 
-            string scenePath = AssetDatabase.GenerateUniqueAssetPath($"{ScenesFolder}/Level_01.unity");
+            int stageNumber = StageAutoGenerator.NextStageNumber();
+            string scenePath = $"{ScenesFolder}/{StageAutoGenerator.StageScenePrefix}{stageNumber}.unity";
             Scene scene;
             if (File.Exists(TemplateScenePath) && AssetDatabase.CopyAsset(TemplateScenePath, scenePath))
             {
@@ -63,11 +66,22 @@ namespace Gstarr.EditorTools
 
             var player = CreatePlayer(playerSprite, noFriction, new Vector3(-2f, 0.5f, 0f));
             SetupCamera(player.transform);
+            var enemySprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/arts/character/enemy1.png");
+            if (enemySprite == null) enemySprite = playerSprite;
+            EnemyActor.Spawn(enemySprite, new Vector3(8f, 0.5f, 0f));
+            EnemyActor.Spawn(enemySprite, new Vector3(18f, 0.5f, 0f));
+            EnemyActor.Spawn(enemySprite, new Vector3(30f, 0.5f, 0f));
+
+            // 아이템은 직접 그릴 수 있게 빈 Items 타일맵만 만들어 둠
+            ItemTools.EnsureDefaultItems();
+            ItemTools.BuildItemTiles();
+            ItemTools.EnsureItemTilemap(grid.transform);
 
             Selection.activeGameObject = ground.gameObject;
 
             EditorSceneManager.SaveScene(scene, scenePath);
             AddSceneToBuildSettings(scenePath);
+            StageAutoGenerator.SyncAll();
 
             EditorApplication.ExecuteMenuItem("Window/2D/Tile Palette");
             Debug.Log($"[Level Builder] 씬 생성 완료: {scenePath}\n" +
@@ -163,7 +177,9 @@ namespace Gstarr.EditorTools
 
             var capsule = go.AddComponent<CapsuleCollider2D>();
             capsule.direction = CapsuleDirection2D.Vertical;
-            capsule.size = new Vector2(0.8f, 1.45f);
+            var size = sprite != null ? (Vector2)sprite.bounds.size : new Vector2(1f, 1.5f);
+            capsule.size = new Vector2(size.x * 0.8f, size.y * 0.95f);
+            capsule.offset = sprite != null ? (Vector2)sprite.bounds.center : Vector2.zero;
             capsule.sharedMaterial = material;
 
             var controller = go.AddComponent<PlayerController>();
@@ -173,7 +189,40 @@ namespace Gstarr.EditorTools
             so.FindProperty("groundLayer").intValue = LayerMask.GetMask("Ground");
             so.ApplyModifiedPropertiesWithoutUndo();
 
+            var combat = go.AddComponent<PlayerCombat>();
+            var combatSo = new SerializedObject(combat);
+            combatSo.FindProperty("inputActions").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath);
+            combatSo.ApplyModifiedPropertiesWithoutUndo();
+            combat.AssignDefaultArt();
+            EditorUtility.SetDirty(combat);
+
+            ItemTools.SetupPlayer(go);
+
             return go;
+        }
+
+        private static void CreateDummy(Sprite sprite, Vector3 position)
+        {
+            var go = new GameObject("Target Dummy");
+            go.transform.position = position;
+
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.color = new Color(0.9f, 0.35f, 0.35f);
+            sr.sortingOrder = 4;
+
+            var rb = go.AddComponent<Rigidbody2D>();
+            rb.freezeRotation = true;
+            rb.gravityScale = 4f;
+
+            var box = go.AddComponent<BoxCollider2D>();
+            box.size = new Vector2(0.85f, 1.45f);
+
+            var health = go.AddComponent<Health>();
+            var healthSo = new SerializedObject(health);
+            healthSo.FindProperty("destroyOnDeath").boolValue = true;
+            healthSo.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static void SetupCamera(Transform target)
@@ -228,6 +277,7 @@ namespace Gstarr.EditorTools
                 var dirt = new Color32(134, 90, 56, 255);
                 var grass = new Color32(86, 170, 72, 255);
                 var stone = new Color32(128, 132, 140, 255);
+                var stoneLine = new Color32(77, 79, 84, 255);
                 var brick = new Color32(168, 72, 56, 255);
                 var mortar = new Color32(90, 80, 76, 255);
                 var wood = new Color32(176, 124, 70, 255);
@@ -239,7 +289,6 @@ namespace Gstarr.EditorTools
                     ? Shade(y == 12 && x % 3 == 0 ? dirt : grass, x, y, 1, 0.08f)
                     : Shade(dirt, x, y, 2, 0.12f));
                 Paint(Dirt, (x, y) => Shade(dirt, x, y, 3, 0.12f));
-                var stoneLine = new Color32(77, 79, 84, 255);
                 Paint(Stone, (x, y) =>
                 {
                     bool line = y % 8 == 0 || (x + (y / 8 % 2) * 8) % 16 == 0;
@@ -279,6 +328,41 @@ namespace Gstarr.EditorTools
             var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesetPath);
             return TilesetImporter.Import(texture, PlaceholderTileSize, Vector2Int.zero, Vector2Int.zero,
                 skipEmpty: true, paletteName: "Placeholder");
+        }
+
+        private static readonly string[] PlayerSpritePaths =
+        {
+            "Assets/character/player.png",
+            "Assets/arts/character/player.png"
+        };
+
+        /// <summary>Assets/character/player.png 를 플레이어 이미지로 사용 (없으면 플레이스홀더).</summary>
+        private static Sprite LoadPlayerSprite()
+        {
+            foreach (var path in PlayerSpritePaths)
+            {
+                if (!File.Exists(path)) continue;
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+                var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+                if (importer != null && importer.userData != "gstarr-player")
+                {
+                    importer.GetSourceTextureWidthAndHeight(out _, out int height);
+                    importer.textureType = TextureImporterType.Sprite;
+                    importer.spriteImportMode = SpriteImportMode.Single;
+                    // 캐릭터 키가 약 1.5 유닛이 되도록
+                    importer.spritePixelsPerUnit = Mathf.Max(1f, Mathf.Round(height / 1.5f));
+                    importer.filterMode = FilterMode.Point;
+                    importer.textureCompression = TextureImporterCompression.Uncompressed;
+                    importer.mipmapEnabled = false;
+                    importer.userData = "gstarr-player";
+                    importer.SaveAndReimport();
+                }
+                var sprite = AssetDatabase.LoadAllAssetsAtPath(path).OfType<Sprite>().FirstOrDefault();
+                if (sprite != null) return sprite;
+            }
+
+            Debug.LogWarning("[Level Builder] Assets/character/player.png 가 없어 플레이스홀더 이미지를 사용합니다.");
+            return CreatePlaceholderPlayerSprite();
         }
 
         private static Sprite CreatePlaceholderPlayerSprite()

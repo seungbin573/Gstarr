@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3f1a9e07b6d4e54a2c8d1f5e9b70426, type: 3}
+  m_Name: GameAssets
+  m_EditorClassIdentifier: Assembly-CSharp::Gstarr.Items.GameAssets
+  slotSprite: {fileID: 21300000, guid: 8ca84faeb5ef1b4469809743a3d5a3c5, type: 3}
+  defaultItems:
+  - {fileID: 11400000, guid: f888e0b9c158e9e439ce1a8ebd51fa23, type: 2}
+  - {fileID: 11400000, guid: 16012a79a866dd64995870b4a78e16a9, type: 2}
+  defaultItemCount: 3
+  enableRhythm: 1
+  music: {fileID: 8300000, guid: 4d5cef3ed3d00b144856b26669a96d19, type: 3}
+  beatChart: {fileID: 4900000, guid: 0c4f7be93731d5c4f8003975ea514c39, type: 3}
+  beatNoteSprite: {fileID: 21300000, guid: e77fad0aeada406b935f573a4fa468e0, type: 3}
+  beatCenterSprite: {fileID: 21300000, guid: 63a9305d1e1248939eb22540552d0caa, type: 3}
+  rankSprites:
+  - {fileID: 21300000, guid: 86a4883f80624bb2ab3e5eddd994f99c, type: 3}
+  - {fileID: 21300000, guid: ef845078aed44b6cad9cf9d4de204ebc, type: 3}
+  - {fileID: 21300000, guid: 9e83c3364a704a5ca1862e770ae7ea32, type: 3}
+  - {fileID: 21300000, guid: ce32b26d2479469ca8d65e5de2f79c19, type: 3}
+  inputActions: {fileID: -944628639613478452, guid: 370b398e7338ffa4dacbdc6b7dcf6adc, type: 3}
+  defaultStageScene: Level_01
+  mainMenuScene: MainMenu
+  enemySprite: {fileID: 21300000, guid: 4c8e1b7a9d2f4e6ab0c31d58e7f64a02, type: 3}
+  gloryNoteSprites:
+  - {fileID: 21300000, guid: a1c4e8b27f3d4a61b9e0c5d84f17a201, type: 3}
+  - {fileID: 21300000, guid: b2d5f9c38e4e4b72c0f1d6e95a28b312, type: 3}
+  - {fileID: 21300000, guid: c3e60ad49f5f4c83d102e7fa6b39c423, type: 3}
+  - {fileID: 21300000, guid: d4f71be5a0604d94e213f80b7c4ad534, type: 3}
+  gloryRingSprite: {fileID: 21300000, guid: e5082cf6b1714ea5f324091c8d5be645, type: 3}
+  gloryNoteSound: {fileID: 8300000, guid: f1a2b3c4d5e64789a0b1c2d3e4f50617, type: 3}
+  glorySuccessSound: {fileID: 8300000, guid: a8b7c6d5e4f34210a9b8c7d6e5f40321, type: 3}
