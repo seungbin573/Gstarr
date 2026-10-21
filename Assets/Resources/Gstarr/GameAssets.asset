@@ -37,3 +37,5 @@ MonoBehaviour:
   - {fileID: 21300000, guid: c3e60ad49f5f4c83d102e7fa6b39c423, type: 3}
   - {fileID: 21300000, guid: d4f71be5a0604d94e213f80b7c4ad534, type: 3}
   gloryRingSprite: {fileID: 21300000, guid: e5082cf6b1714ea5f324091c8d5be645, type: 3}
+  gloryNoteSound: {fileID: 8300000, guid: f1a2b3c4d5e64789a0b1c2d3e4f50617, type: 3}
+  glorySuccessSound: {fileID: 8300000, guid: a8b7c6d5e4f34210a9b8c7d6e5f40321, type: 3}

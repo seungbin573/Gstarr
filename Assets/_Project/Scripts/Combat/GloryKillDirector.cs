@@ -53,6 +53,7 @@ namespace Gstarr.Combat
         private AudioSource hitSource;
         private static Sprite arrowSprite;
         private static AudioClip hitClip;
+        private static AudioClip successClip;
 
         public static void Begin(EnemyActor target)
         {
@@ -243,7 +244,7 @@ namespace Gstarr.Combat
                 return;
             }
 
-            PlayHit();
+            PlayCue(index >= order.Length - 1);
             index++;
             if (index >= order.Length) Succeed();
         }
@@ -332,10 +333,16 @@ namespace Gstarr.Combat
             enemy = null;
         }
 
-        private void PlayHit()
+        private void PlayCue(bool success)
         {
             if (hitSource == null) return;
-            hitSource.PlayOneShot(HitClip(), 0.85f);
+            var assets = GameAssets.Instance;
+            AudioClip clip = null;
+            if (assets != null)
+                clip = success ? assets.glorySuccessSound : assets.gloryNoteSound;
+            if (clip == null)
+                clip = success ? SuccessClip() : HitClip();
+            hitSource.PlayOneShot(clip, success ? 1f : 0.75f);
         }
 
         private void ApplyNoteSprite(int faceIndex)
@@ -429,6 +436,33 @@ namespace Gstarr.Combat
             hitClip = AudioClip.Create("GloryHit", n, 1, rate, false);
             hitClip.SetData(data, 0);
             return hitClip;
+        }
+
+        private static AudioClip SuccessClip()
+        {
+            if (successClip != null) return successClip;
+            const int rate = 44100;
+            int n = (int)(rate * 0.55f);
+            var data = new float[n];
+            AddTone(data, rate, 0f, 0.28f, 784f, 0.42f, 8.5f);
+            AddTone(data, rate, 0.075f, 0.28f, 988f, 0.4f, 8.5f);
+            AddTone(data, rate, 0.15f, 0.4f, 1175f, 0.5f, 5.2f);
+            AddTone(data, rate, 0.15f, 0.4f, 1568f, 0.28f, 4.6f);
+            successClip = AudioClip.Create("GlorySuccess", n, 1, rate, false);
+            successClip.SetData(data, 0);
+            return successClip;
+        }
+
+        private static void AddTone(float[] data, int rate, float start, float dur, float freq, float amp, float decay)
+        {
+            int i0 = Mathf.Clamp((int)(start * rate), 0, data.Length);
+            int i1 = Mathf.Clamp((int)((start + dur) * rate), 0, data.Length);
+            for (int i = i0; i < i1; i++)
+            {
+                float u = (i - i0) / (float)rate;
+                float attack = Mathf.Clamp01(u / 0.006f);
+                data[i] += Mathf.Sin(u * freq * Mathf.PI * 2f) * amp * attack * Mathf.Exp(-u * decay);
+            }
         }
     }
 }

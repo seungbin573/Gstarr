@@ -37,6 +37,10 @@ namespace Gstarr.Items
         public Sprite[] gloryNoteSprites = new Sprite[4];
         [Tooltip("노트 중앙 링. Assets/arts/UI/Glory/Note_Ring.png")]
         public Sprite gloryRingSprite;
+        [Tooltip("1~4번째 노트 효과음. Assets/sounds/GloryNote.wav")]
+        public AudioClip gloryNoteSound;
+        [Tooltip("마지막 노트 성공 효과음. Assets/sounds/GlorySuccess.wav")]
+        public AudioClip glorySuccessSound;
 
         private static GameAssets instance;
 
