@@ -20,6 +20,7 @@ namespace Gstarr.EditorTools
     {
         private const string MusicRoot = "Assets/Music";
         private const string StagesFolder = "Assets/Resources/Gstarr/Stages";
+        private const string StageScenesFolder = "Assets/Scenes/Stages";
         private const string MainMenuPath = "Assets/Scenes/MainMenu.unity";
 
         private static bool queued;
@@ -92,8 +93,31 @@ namespace Gstarr.EditorTools
                     stage.beatChart = chart;
                     EditorUtility.SetDirty(stage);
                 }
+
+                if (string.IsNullOrEmpty(stage.sceneName) && EnsureStageScene(folderName))
+                {
+                    stage.sceneName = folderName;
+                    EditorUtility.SetDirty(stage);
+                }
             }
             AssetDatabase.SaveAssets();
+        }
+
+        /// <summary>???? ?? ? ?. ??? ?? ???? ?(Level_01)? ???? ???.</summary>
+        private static bool EnsureStageScene(string stageName)
+        {
+            string path = $"{StageScenesFolder}/{stageName}.unity";
+            if (File.Exists(path)) return true;
+
+            var assets = Resources.Load<GameAssets>("Gstarr/GameAssets");
+            string template = assets != null ? assets.defaultStageScene : "Level_01";
+            string templatePath = AssetDatabase.FindAssets("t:Scene " + template)
+                .Select(g => AssetDatabase.GUIDToAssetPath(g))
+                .FirstOrDefault(x => Path.GetFileNameWithoutExtension(x) == template);
+            if (templatePath == null) return false;
+
+            EnsureFolder(StageScenesFolder);
+            return AssetDatabase.CopyAsset(templatePath, path);
         }
 
         public static void EnsureMainMenuScene()

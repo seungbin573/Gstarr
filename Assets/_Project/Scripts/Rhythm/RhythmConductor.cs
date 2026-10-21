@@ -71,8 +71,15 @@ namespace Gstarr.Rhythm
         private long nextBeat;
         private readonly Dictionary<BeatAction, long> lastUsedBeat = new Dictionary<BeatAction, long>();
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void Bootstrap()
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void Register()
+        {
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+
+        // 메뉴에서 스테이지 씬으로 넘어갈 때도 매번 생성되도록 씬 로드마다 실행
+        private static void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
         {
             if (FindAnyObjectByType<RhythmConductor>() != null) return;
             if (FindAnyObjectByType<Gstarr.Game.MainMenu>() != null) return;
