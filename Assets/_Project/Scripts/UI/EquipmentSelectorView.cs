@@ -37,6 +37,9 @@ namespace Gstarr.UI
             inventory = GetComponent<PlayerInventory>();
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
+            if (slotSprite == null && GameAssets.Instance != null)
+                slotSprite = GameAssets.Instance.slotSprite;
+
             root = new GameObject("ItemSelector").transform;
 
             if (inventory == null)
@@ -58,6 +61,14 @@ namespace Gstarr.UI
                 i => inventory.GetItems(category)[i].item.Icon,
                 i => inventory.GetItems(category)[i].item.DisplayName,
                 i => inventory.GetItems(category)[i].count);
+        }
+
+        private void Start()
+        {
+            if (inventory == null) return;
+            // 시작 시 보유 아이템을 잠깐 보여줌
+            combatCarousel?.Show(inventory.GetSelectedIndex(ItemCategory.Combat), 0);
+            effectCarousel?.Show(inventory.GetSelectedIndex(ItemCategory.Effect), 0);
         }
 
         private void OnEnable()

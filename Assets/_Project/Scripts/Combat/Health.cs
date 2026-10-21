@@ -12,7 +12,7 @@ namespace Gstarr.Combat
     {
         [SerializeField] private int maxHealth = 5;
         [SerializeField] private float knockbackForce = 4f;
-        [SerializeField] private bool destroyOnDeath = true;
+        [SerializeField] private bool destroyOnDeath = false;
 
         public UnityEvent<int, int> onHealthChanged;
         public UnityEvent onDeath;

@@ -25,7 +25,9 @@ namespace Gstarr.Items
 
             var circle = go.AddComponent<CircleCollider2D>();
             circle.isTrigger = true;
-            circle.radius = 0.4f;
+            // 타일 위에 그려도 그 위를 걷는 플레이어에게 닿도록 위로 올린 판정
+            circle.radius = 0.6f;
+            circle.offset = new Vector2(0f, 0.5f);
 
             var pickup = go.AddComponent<ItemPickup>();
             pickup.item = item;
@@ -43,6 +45,11 @@ namespace Gstarr.Items
             startPos = transform.position;
             if (item != null && item.Icon != null && TryGetComponent(out SpriteRenderer sr) && sr.sprite == null)
                 sr.sprite = item.Icon;
+
+            // 생성 순간 이미 겹쳐 있으면 Enter 이벤트가 없으므로 직접 확인
+            if (TryGetComponent(out Collider2D col))
+                foreach (var hit in Physics2D.OverlapBoxAll(col.bounds.center, col.bounds.size, 0f))
+                    TryCollect(hit);
         }
 
         private void Update()
@@ -51,6 +58,11 @@ namespace Gstarr.Items
         }
 
         private void OnTriggerEnter2D(Collider2D other)
+        {
+            TryCollect(other);
+        }
+
+        private void TryCollect(Collider2D other)
         {
             if (item == null) return;
             var inventory = other.GetComponentInParent<PlayerInventory>();

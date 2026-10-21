@@ -221,7 +221,10 @@ namespace Gstarr.EditorTools
             var box = go.AddComponent<BoxCollider2D>();
             box.size = new Vector2(0.85f, 1.45f);
 
-            go.AddComponent<Health>();
+            var health = go.AddComponent<Health>();
+            var healthSo = new SerializedObject(health);
+            healthSo.FindProperty("destroyOnDeath").boolValue = true;
+            healthSo.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static void SetupCamera(Transform target)

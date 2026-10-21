@@ -50,6 +50,11 @@ namespace Gstarr.Items
                 if (s != null && s.item != null && s.count > 0)
                     AddSilently(s.item, s.count);
 
+            // 지급된 아이템이 없으면 기본 아이템 (폭탄, 포션)
+            if (combatItems.Count == 0 && effectItems.Count == 0 && GameAssets.Instance != null)
+                foreach (var item in GameAssets.Instance.defaultItems)
+                    if (item != null) AddSilently(item, GameAssets.Instance.defaultItemCount);
+
             SetupInput();
         }
 

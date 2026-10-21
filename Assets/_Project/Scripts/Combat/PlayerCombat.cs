@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Gstarr.Items;
 using Gstarr.Player;
+using Gstarr.UI;
 
 namespace Gstarr.Combat
 {
@@ -94,6 +96,9 @@ namespace Gstarr.Combat
         private const float LiftHeight = 0.22f;
         private const float LiftAngle = 35f;
         private const float LiftScalePop = 0.15f;
+        private const float HolsterTime = 0.13f;
+        private const float ItemUseTime = 0.4f;
+        private const float DrawTime = 0.16f;
 
         private PlayerController controller;
         private Rigidbody2D rb;
@@ -102,12 +107,14 @@ namespace Gstarr.Combat
 
         private Transform weaponPivot;
         private SpriteRenderer weaponRenderer;
+        private SpriteRenderer heldItemRenderer;
 
         private int currentIndex;
         private float cooldownTimer;
         private float swingTimer;
         private float recoilKick;
         private float liftTimer;
+        private float itemAnimTimer;
         private Sprite fallbackSprite;
 
         private void Awake()
@@ -120,6 +127,11 @@ namespace Gstarr.Combat
 
             SetupInput();
             CreateWeaponVisual();
+
+            // 씬에 인벤토리/UI가 없어도 아이템이 동작하도록 보장
+            if (GetComponent<Health>() == null) gameObject.AddComponent<Health>();
+            if (GetComponent<PlayerInventory>() == null) gameObject.AddComponent<PlayerInventory>();
+            if (GetComponent<EquipmentSelectorView>() == null) gameObject.AddComponent<EquipmentSelectorView>();
         }
 
         private void SetupInput()
@@ -164,6 +176,12 @@ namespace Gstarr.Combat
             {
                 weaponRenderer.sortingOrder = weaponSortingOrder;
             }
+
+            var heldGo = new GameObject("HeldItem");
+            heldGo.transform.SetParent(transform, false);
+            heldItemRenderer = heldGo.AddComponent<SpriteRenderer>();
+            heldItemRenderer.sortingOrder = weaponRenderer.sortingOrder;
+            heldItemRenderer.enabled = false;
         }
 
         private void OnEnable()
@@ -171,6 +189,8 @@ namespace Gstarr.Combat
             attackAction?.Enable();
             prevAction?.Enable();
             nextAction?.Enable();
+            if (TryGetComponent(out PlayerInventory inventory))
+                inventory.ItemUsed += OnItemUsed;
         }
 
         private void OnDisable()
@@ -178,6 +198,8 @@ namespace Gstarr.Combat
             attackAction?.Disable();
             prevAction?.Disable();
             nextAction?.Disable();
+            if (TryGetComponent(out PlayerInventory inventory))
+                inventory.ItemUsed -= OnItemUsed;
         }
 
         private void OnDestroy()
@@ -224,8 +246,26 @@ namespace Gstarr.Combat
             weaponPivot.localRotation = Quaternion.identity;
         }
 
+        private void OnItemUsed(ItemData item)
+        {
+            if (heldItemRenderer != null)
+            {
+                heldItemRenderer.sprite = item.Icon;
+                heldItemRenderer.enabled = false;
+            }
+            itemAnimTimer = HolsterTime + ItemUseTime + DrawTime;
+            swingTimer = 0f;
+            liftTimer = 0f;
+        }
+
         private void AnimateWeapon(float dt)
         {
+            if (itemAnimTimer > 0f)
+            {
+                AnimateItemUse(dt);
+                return;
+            }
+
             var w = CurrentWeapon;
             float angle = 0f;
             float lift = 0f;
@@ -253,9 +293,63 @@ namespace Gstarr.Combat
             weaponPivot.localScale = Vector3.one * (1f + LiftScalePop * lift);
         }
 
+        /// <summary>무기를 집어넣고 아이템을 들어 사용한 뒤 다시 꺼내는 연출</summary>
+        private void AnimateItemUse(float dt)
+        {
+            float total = HolsterTime + ItemUseTime + DrawTime;
+            float elapsed = total - itemAnimTimer;
+            itemAnimTimer -= dt;
+
+            var w = CurrentWeapon;
+            float weaponAngle = 0f;
+            float weaponScale = 1f;
+            bool showItem = false;
+            float itemLift = 0f;
+            float itemScale = 1f;
+
+            if (elapsed < HolsterTime)
+            {
+                float t = elapsed / HolsterTime;
+                weaponAngle = -100f * t;
+                weaponScale = 1f - t;
+            }
+            else if (elapsed < HolsterTime + ItemUseTime)
+            {
+                float t = (elapsed - HolsterTime) / ItemUseTime;
+                weaponScale = 0f;
+                showItem = true;
+                itemLift = Mathf.Sin(t * Mathf.PI) * 0.7f;
+                itemScale = 1f + 0.3f * Mathf.Sin(t * Mathf.PI);
+            }
+            else
+            {
+                float t = (elapsed - HolsterTime - ItemUseTime) / DrawTime;
+                weaponAngle = -100f * (1f - t);
+                weaponScale = t;
+            }
+
+            weaponPivot.localPosition = w.holdOffset;
+            weaponPivot.localRotation = Quaternion.Euler(0f, 0f, weaponAngle);
+            weaponPivot.localScale = Vector3.one * weaponScale;
+
+            if (heldItemRenderer != null)
+            {
+                heldItemRenderer.enabled = showItem && heldItemRenderer.sprite != null;
+                heldItemRenderer.transform.localPosition = w.holdOffset + new Vector2(0.1f, 0.3f + itemLift);
+                heldItemRenderer.transform.localScale = Vector3.one * itemScale;
+            }
+
+            if (itemAnimTimer <= 0f)
+            {
+                weaponPivot.localScale = Vector3.one;
+                weaponPivot.localRotation = Quaternion.identity;
+                if (heldItemRenderer != null) heldItemRenderer.enabled = false;
+            }
+        }
+
         private void TryAttack()
         {
-            if (cooldownTimer > 0f) return;
+            if (cooldownTimer > 0f || itemAnimTimer > 0f) return;
 
             var w = CurrentWeapon;
             cooldownTimer = w.fireInterval;
