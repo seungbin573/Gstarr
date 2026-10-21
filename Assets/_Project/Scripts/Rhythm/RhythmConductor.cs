@@ -276,19 +276,26 @@ namespace Gstarr.Rhythm
         }
 
         /// <summary>지금 이 행동을 박자에 맞게 눌렀는지 판정. 같은 박자에 같은 행동은 한 번만.</summary>
-        public bool TryAct(BeatAction action)
+        public bool TryAct(BeatAction action) => TryPerform(action, reportMiss: true);
+
+        /// <summary>
+        /// 박자 창 안에서만 true. reportMiss 가 false 면 창 밖이어도 MISS 를 올리지 않는다.
+        /// 이미 이 박자를 쓴 경우는 항상 조용히 거절한다.
+        /// </summary>
+        public bool TryPerform(BeatAction action, bool reportMiss)
         {
             if (!IsReady || !enabled) return true;
-            if (IsPaused || IsFinished) return false;
+            if (IsPaused || IsFinished || Gstarr.Game.GamePause.BlocksGameplay) return false;
 
             double t = SongTime - inputOffsetMs * 0.001;
             long beat = NearestJudgePoint(t, out double error);
             double abs = Math.Abs(error);
 
             bool alreadyUsed = lastUsedBeat.TryGetValue(action, out long used) && used == beat;
-            if (abs > goodWindow || alreadyUsed)
+            if (alreadyUsed) return false;
+            if (abs > goodWindow)
             {
-                Judged?.Invoke(action, BeatJudgement.Miss, error);
+                if (reportMiss) Judged?.Invoke(action, BeatJudgement.Miss, error);
                 return false;
             }
 
@@ -301,10 +308,12 @@ namespace Gstarr.Rhythm
     /// <summary>박자 판정 진입점. 씬에 지휘자가 없으면 항상 허용.</summary>
     public static class BeatGate
     {
-        public static bool TryAct(BeatAction action)
+        public static bool TryAct(BeatAction action) => TryPerform(action, true);
+
+        public static bool TryPerform(BeatAction action, bool reportMiss)
         {
             var c = RhythmConductor.Instance;
-            return c == null || c.TryAct(action);
+            return c == null || c.TryPerform(action, reportMiss);
         }
     }
 }

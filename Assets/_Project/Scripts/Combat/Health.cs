@@ -20,6 +20,13 @@ namespace Gstarr.Combat
         public int Current { get; private set; }
         public int Max => maxHealth;
 
+        public void Configure(int max, bool destroy)
+        {
+            maxHealth = Mathf.Max(1, max);
+            Current = maxHealth;
+            destroyOnDeath = destroy;
+        }
+
         private SpriteRenderer spriteRenderer;
         private Rigidbody2D rb;
         private float flashTimer;
@@ -37,7 +44,12 @@ namespace Gstarr.Combat
         {
             if (Current <= 0) return false;
 
-            Current = Mathf.Max(0, Current - amount);
+            var enemy = GetComponent<EnemyActor>();
+            if (enemy != null && enemy.AbsorbsDamage) return false;
+
+            int next = Mathf.Max(0, Current - amount);
+            bool caught = enemy != null && enemy.CatchGlory(ref next);
+            Current = next;
             onHealthChanged?.Invoke(Current, maxHealth);
 
             if (rb != null && rb.bodyType == RigidbodyType2D.Dynamic)
@@ -46,7 +58,8 @@ namespace Gstarr.Combat
             flashTimer = 0.08f;
             if (spriteRenderer != null) spriteRenderer.color = Color.white;
 
-            if (Current == 0)
+            if (caught) enemy.EnterStagger();
+            else if (Current == 0)
             {
                 onDeath?.Invoke();
                 if (destroyOnDeath) Destroy(gameObject);

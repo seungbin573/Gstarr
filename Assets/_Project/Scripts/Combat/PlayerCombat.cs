@@ -224,7 +224,17 @@ namespace Gstarr.Combat
             if (prevAction.WasPressedThisFrame()) SwitchWeapon(-1);
             if (nextAction.WasPressedThisFrame()) SwitchWeapon(1);
 
-            // 연사 가능하도록 누르고 있는 동안 계속 공격
+            if (attackAction.WasPressedThisFrame())
+            {
+                var glory = EnemyActor.NearestStaggered(transform.position, 2.4f);
+                if (glory != null)
+                {
+                    GloryKillDirector.Begin(glory);
+                    return;
+                }
+            }
+
+            // 누르고 있어도 박자 창 안에서만 한 번씩 나간다
             if (attackAction.IsPressed()) TryAttack();
 
             AnimateWeapon(dt);
@@ -354,6 +364,7 @@ namespace Gstarr.Combat
         private void TryAttack()
         {
             if (cooldownTimer > 0f || itemAnimTimer > 0f) return;
+            if (!BeatGate.TryPerform(BeatAction.Attack, attackAction.WasPressedThisFrame())) return;
 
             var w = CurrentWeapon;
             cooldownTimer = w.fireInterval;

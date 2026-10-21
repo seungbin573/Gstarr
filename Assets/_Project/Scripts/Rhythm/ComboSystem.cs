@@ -87,6 +87,14 @@ namespace Gstarr.Rhythm
             Instance.OnEnemyHit();
         }
 
+        public void AddBonus(int points)
+        {
+            if (points <= 0) return;
+            Score += points;
+            sinceLastHit = 0f;
+            ScoreAdded?.Invoke(points, Score);
+        }
+
         private void Update()
         {
             sinceLastHit += Time.deltaTime;

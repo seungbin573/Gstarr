@@ -7,7 +7,8 @@ namespace Gstarr.Game
     {
         public static bool IsPaused { get; private set; }
         public static bool IsCountdown { get; private set; }
-        public static bool BlocksGameplay => IsPaused || IsCountdown;
+        public static bool IsGloryKill { get; private set; }
+        public static bool BlocksGameplay => IsPaused || IsCountdown || IsGloryKill;
 
         public static void SetPaused(bool paused)
         {
@@ -21,16 +22,25 @@ namespace Gstarr.Game
             ApplyTimeScale();
         }
 
+        public static void SetGloryKill(bool active)
+        {
+            IsGloryKill = active;
+            ApplyTimeScale();
+        }
+
         public static void Clear()
         {
             IsPaused = false;
             IsCountdown = false;
+            IsGloryKill = false;
             ApplyTimeScale();
         }
 
         private static void ApplyTimeScale()
         {
-            Time.timeScale = BlocksGameplay ? 0f : 1f;
+            if (IsPaused || IsCountdown) Time.timeScale = 0f;
+            else if (IsGloryKill) Time.timeScale = 0.22f;
+            else Time.timeScale = 1f;
         }
     }
 }

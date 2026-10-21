@@ -20,6 +20,10 @@ namespace Gstarr.CameraSystem
         private float lookAhead;
         private float lookAheadVelocity;
         private Camera cam;
+        private Transform focus;
+        private float focusSize = 3.2f;
+        private float baseSize = 6f;
+        private bool focusing;
 
         public Transform Target
         {
@@ -30,21 +34,43 @@ namespace Gstarr.CameraSystem
         private void Awake()
         {
             cam = GetComponent<Camera>();
+            if (cam != null) baseSize = cam.orthographicSize;
+        }
+
+        public void BeginFocus(Transform focusTarget, float orthographicSize)
+        {
+            focus = focusTarget;
+            focusSize = orthographicSize;
+            focusing = true;
+        }
+
+        public void EndFocus()
+        {
+            focusing = false;
+            focus = null;
         }
 
         private void LateUpdate()
         {
-            if (target == null) return;
+            Transform follow = focusing && focus != null ? focus : target;
+            if (follow == null) return;
 
-            float facing = Mathf.Sign(target.localScale.x);
-            lookAhead = Mathf.SmoothDamp(lookAhead, facing * lookAheadDistance, ref lookAheadVelocity, lookAheadSmoothTime);
+            float dt = focusing ? Time.unscaledDeltaTime : Time.deltaTime;
+            float facing = Mathf.Sign(follow.localScale.x);
+            float lookTarget = focusing ? 0f : facing * lookAheadDistance;
+            lookAhead = Mathf.SmoothDamp(lookAhead, lookTarget, ref lookAheadVelocity, lookAheadSmoothTime, Mathf.Infinity, dt);
 
             Vector3 desired = new Vector3(
-                target.position.x + offset.x + lookAhead,
-                target.position.y + offset.y,
+                follow.position.x + (focusing ? 0f : offset.x) + lookAhead,
+                follow.position.y + (focusing ? 0.4f : offset.y),
                 transform.position.z);
 
-            Vector3 pos = Vector3.SmoothDamp(transform.position, desired, ref velocity, smoothTime);
+            Vector3 pos = Vector3.SmoothDamp(transform.position, desired, ref velocity, focusing ? 0.08f : smoothTime, Mathf.Infinity, dt);
+            if (cam != null && cam.orthographic)
+            {
+                float sizeTarget = focusing ? focusSize : baseSize;
+                cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, sizeTarget, 1f - Mathf.Exp(-dt * (focusing ? 8f : 4f)));
+            }
 
             if (useBounds && cam != null && cam.orthographic)
             {
