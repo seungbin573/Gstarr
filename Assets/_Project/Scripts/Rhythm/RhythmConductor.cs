@@ -208,7 +208,9 @@ namespace Gstarr.Rhythm
             double dspT = AudioSettings.dspTime - dspStart;
             double realT = UnityEngine.Time.realtimeSinceStartupAsDouble - realStart;
             double drift = dspT - realT;
-            realStart -= Math.Abs(drift) > 0.05 ? drift : drift * 0.05;
+            // 한 프레임에 확 맞추면 노트와 화면이 끊겨 보인다
+            double step = Math.Abs(drift) > 0.2 ? drift * 0.15 : Math.Clamp(drift * 0.08, -0.0015, 0.0015);
+            realStart -= step;
             SongTime = UnityEngine.Time.realtimeSinceStartupAsDouble - realStart;
 
             if (Gstarr.Game.GamePause.IsCountdown && SongTime >= 0)

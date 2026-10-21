@@ -79,7 +79,7 @@ namespace Gstarr.Rhythm
             var scaler = canvasGo.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.matchWidthOrHeight = 0.5f;
+            scaler.matchWidthOrHeight = 1f;
 
             bar = CreateImage("Bar", canvasGo.transform, null, new Color(0f, 0f, 0f, 0.35f));
             bar.anchorMin = bar.anchorMax = new Vector2(0.5f, 0f);

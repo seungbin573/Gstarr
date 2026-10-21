@@ -19,6 +19,9 @@ namespace Gstarr.Combat
 
         public int Current { get; private set; }
         public int Max => maxHealth;
+        /// <summary>0보다 크면 피격 후 이 시간(초) 동안 무적. 플레이어만 켠다.</summary>
+        public float InvulnOnHit { get; set; }
+        public bool IsInvulnerable => invulnTimer > 0f;
 
         public void Configure(int max, bool destroy)
         {
@@ -28,8 +31,10 @@ namespace Gstarr.Combat
         }
 
         private SpriteRenderer spriteRenderer;
+        private SpriteRenderer[] blinkRenderers;
         private Rigidbody2D rb;
         private float flashTimer;
+        private float invulnTimer;
         private Color baseColor;
 
         private void Awake()
@@ -40,9 +45,14 @@ namespace Gstarr.Combat
             if (spriteRenderer != null) baseColor = spriteRenderer.color;
         }
 
+        private void Start()
+        {
+            blinkRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+        }
+
         public bool TakeDamage(int amount, Vector2 hitDirection)
         {
-            if (Current <= 0) return false;
+            if (Current <= 0 || invulnTimer > 0f) return false;
 
             var enemy = GetComponent<EnemyActor>();
             if (enemy != null && enemy.AbsorbsDamage) return false;
@@ -55,8 +65,17 @@ namespace Gstarr.Combat
             if (rb != null && rb.bodyType == RigidbodyType2D.Dynamic)
                 rb.AddForce(hitDirection.normalized * knockbackForce, ForceMode2D.Impulse);
 
-            flashTimer = 0.08f;
-            if (spriteRenderer != null) spriteRenderer.color = Color.white;
+            if (InvulnOnHit > 0f)
+            {
+                invulnTimer = InvulnOnHit;
+                if (blinkRenderers == null || blinkRenderers.Length == 0)
+                    blinkRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+            }
+            else
+            {
+                flashTimer = 0.08f;
+                if (spriteRenderer != null) spriteRenderer.color = Color.white;
+            }
 
             if (caught) enemy.EnterStagger();
             else if (Current == 0)
@@ -78,10 +97,28 @@ namespace Gstarr.Combat
 
         private void Update()
         {
+            if (invulnTimer > 0f)
+            {
+                invulnTimer -= Time.deltaTime;
+                bool visible = Mathf.Repeat(Time.unscaledTime * 8f, 1f) < 0.55f || invulnTimer <= 0f;
+                if (blinkRenderers != null)
+                    for (int i = 0; i < blinkRenderers.Length; i++)
+                        if (blinkRenderers[i] != null) blinkRenderers[i].enabled = visible || invulnTimer <= 0f;
+                if (invulnTimer <= 0f) SetBlinkVisible(true);
+                return;
+            }
+
             if (flashTimer <= 0f) return;
             flashTimer -= Time.deltaTime;
             if (flashTimer <= 0f && spriteRenderer != null)
                 spriteRenderer.color = baseColor;
+        }
+
+        private void SetBlinkVisible(bool visible)
+        {
+            if (blinkRenderers == null) return;
+            for (int i = 0; i < blinkRenderers.Length; i++)
+                if (blinkRenderers[i] != null) blinkRenderers[i].enabled = visible;
         }
     }
 }

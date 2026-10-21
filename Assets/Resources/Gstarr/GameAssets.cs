@@ -29,6 +29,8 @@ namespace Gstarr.Items
         [Tooltip("스테이지에 씬이 지정되지 않았을 때 쓸 기본 스테이지 씬")]
         public string defaultStageScene = "Level_01";
         public string mainMenuScene = "MainMenu";
+        [Tooltip("적 스프라이트 (Assets/arts/character/enemy1.png)")]
+        public Sprite enemySprite;
 
         private static GameAssets instance;
 

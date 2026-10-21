@@ -22,8 +22,10 @@ namespace Gstarr.CameraSystem
         private Camera cam;
         private Transform focus;
         private float focusSize = 3.2f;
-        private float baseSize = 6f;
+        private float baseSize = 6.5f;
         private bool focusing;
+        private int frameWidth;
+        private int frameHeight;
 
         public Transform Target
         {
@@ -34,7 +36,41 @@ namespace Gstarr.CameraSystem
         private void Awake()
         {
             cam = GetComponent<Camera>();
-            if (cam != null) baseSize = cam.orthographicSize;
+            if (cam != null)
+            {
+                // 물리 카메라(가로 맞춤)가 넓은 화면에서 위아래를 잘라 낸다
+                cam.usePhysicalProperties = false;
+                cam.orthographic = true;
+                cam.gateFit = Camera.GateFitMode.Vertical;
+                if (cam.orthographicSize < 6.5f) cam.orthographicSize = 6.5f;
+                baseSize = cam.orthographicSize;
+            }
+            offset = new Vector2(offset.x, 0.35f);
+            ApplyFrame();
+        }
+
+        /// <summary>16:9 가 아닌 창에서는 레터박스로 맞추고, 세로로 보이던 바닥이 잘리지 않게 한다.</summary>
+        private void ApplyFrame()
+        {
+            if (cam == null) return;
+            frameWidth = Screen.width;
+            frameHeight = Screen.height;
+            if (frameHeight <= 0) return;
+
+            cam.usePhysicalProperties = false;
+            const float target = 16f / 9f;
+            float window = (float)frameWidth / frameHeight;
+            if (window > target + 0.01f)
+            {
+                float width = target / window;
+                cam.rect = new Rect((1f - width) * 0.5f, 0f, width, 1f);
+            }
+            else if (window < target - 0.01f)
+            {
+                float height = window / target;
+                cam.rect = new Rect(0f, (1f - height) * 0.5f, 1f, height);
+            }
+            else cam.rect = new Rect(0f, 0f, 1f, 1f);
         }
 
         public void BeginFocus(Transform focusTarget, float orthographicSize)
@@ -52,6 +88,8 @@ namespace Gstarr.CameraSystem
 
         private void LateUpdate()
         {
+            if (Screen.width != frameWidth || Screen.height != frameHeight) ApplyFrame();
+
             Transform follow = focusing && focus != null ? focus : target;
             if (follow == null) return;
 

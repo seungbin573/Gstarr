@@ -66,9 +66,11 @@ namespace Gstarr.EditorTools
 
             var player = CreatePlayer(playerSprite, noFriction, new Vector3(-2f, 0.5f, 0f));
             SetupCamera(player.transform);
-            EnemyActor.Spawn(playerSprite, new Vector3(8f, 0.5f, 0f));
-            EnemyActor.Spawn(playerSprite, new Vector3(18f, 0.5f, 0f));
-            EnemyActor.Spawn(playerSprite, new Vector3(30f, 0.5f, 0f));
+            var enemySprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/arts/character/enemy1.png");
+            if (enemySprite == null) enemySprite = playerSprite;
+            EnemyActor.Spawn(enemySprite, new Vector3(8f, 0.5f, 0f));
+            EnemyActor.Spawn(enemySprite, new Vector3(18f, 0.5f, 0f));
+            EnemyActor.Spawn(enemySprite, new Vector3(30f, 0.5f, 0f));
 
             // 아이템은 직접 그릴 수 있게 빈 Items 타일맵만 만들어 둠
             ItemTools.EnsureDefaultItems();

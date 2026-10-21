@@ -130,7 +130,11 @@ namespace Gstarr.Combat
             CreateWeaponVisual();
 
             // 씬에 인벤토리/UI가 없어도 아이템이 동작하도록 보장
-            if (GetComponent<Health>() == null) gameObject.AddComponent<Health>();
+            var health = GetComponent<Health>();
+            if (health == null) health = gameObject.AddComponent<Health>();
+            health.Configure(5, false);
+            health.InvulnOnHit = 3f;
+            if (GetComponent<PlayerHealthView>() == null) gameObject.AddComponent<PlayerHealthView>();
             if (GetComponent<PlayerInventory>() == null) gameObject.AddComponent<PlayerInventory>();
             if (GetComponent<EquipmentSelectorView>() == null) gameObject.AddComponent<EquipmentSelectorView>();
         }

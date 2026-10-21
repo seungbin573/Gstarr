@@ -24,6 +24,7 @@ namespace Gstarr.Combat
         private static readonly List<EnemyActor> All = new List<EnemyActor>();
 
         [SerializeField] private float moveSpeed = 6.5f;
+        [SerializeField] private float jumpSpeed = 13f;
         [SerializeField] private float attackRange = 1.25f;
         [SerializeField] private int attackDamage = 1;
         [SerializeField] private float staggerSeconds = 4f;
@@ -41,19 +42,31 @@ namespace Gstarr.Combat
         private float staggerTimer;
         private float stepTimer;
         private Color idleColor;
+        private LayerMask groundMask;
+        private Collider2D body;
 
         public bool IsStaggered => state == State.Stagger;
         public bool AbsorbsDamage => state == State.Stagger || state == State.Glory;
         public int GloryFloor => Mathf.Max(1, Mathf.CeilToInt(health.Max * 0.2f));
 
+        public static Sprite Art
+        {
+            get
+            {
+                var assets = Gstarr.Items.GameAssets.Instance;
+                return assets != null ? assets.enemySprite : null;
+            }
+        }
+
         public static EnemyActor Spawn(Sprite spriteSource, Vector3 position, int maxHealth = 16)
         {
+            if (spriteSource == null) spriteSource = Art;
             var go = new GameObject("Enemy");
             go.transform.position = position;
 
             var sr = go.AddComponent<SpriteRenderer>();
             sr.sprite = spriteSource;
-            sr.color = new Color(0.85f, 0.22f, 0.25f);
+            sr.color = Color.white;
             sr.sortingOrder = 4;
 
             var body = go.AddComponent<Rigidbody2D>();
@@ -98,7 +111,28 @@ namespace Gstarr.Combat
             health = GetComponent<Health>();
             rb = GetComponent<Rigidbody2D>();
             sprite = GetComponent<SpriteRenderer>();
+            body = GetComponent<Collider2D>();
+            groundMask = LayerMask.GetMask("Ground");
+            if (groundMask.value == 0) groundMask = Physics2D.DefaultRaycastLayers;
+
+            var art = Art;
+            if (art != null && sprite != null)
+            {
+                sprite.sprite = art;
+                sprite.color = Color.white;
+                FitCollider(art);
+            }
             idleColor = sprite != null ? sprite.color : bodyColor;
+        }
+
+        private void FitCollider(Sprite art)
+        {
+            if (body is BoxCollider2D box && art != null)
+            {
+                var size = (Vector2)art.bounds.size;
+                box.size = new Vector2(Mathf.Max(0.4f, size.x * 0.7f), Mathf.Max(0.6f, size.y * 0.9f));
+                box.offset = art.bounds.center;
+            }
         }
 
         private void OnEnable() => All.Add(this);
@@ -216,9 +250,34 @@ namespace Gstarr.Combat
 
             if (Mathf.Abs(dx) > 0.35f && rb != null)
             {
-                rb.linearVelocity = new Vector2(Mathf.Sign(dx) * moveSpeed, rb.linearVelocity.y);
-                stepTimer = 0.16f;
+                float dir = Mathf.Sign(dx);
+                bool grounded = IsGrounded();
+                bool jump = grounded && (dy > 1.2f || GapAhead(dir) || WallAhead(dir));
+                float vy = jump ? jumpSpeed : rb.linearVelocity.y;
+                rb.linearVelocity = new Vector2(dir * moveSpeed, vy);
+                stepTimer = jump ? 0.4f : 0.16f;
             }
+        }
+
+        private bool IsGrounded()
+        {
+            if (rb != null && rb.linearVelocity.y > 0.15f) return false;
+            Vector2 origin = body != null
+                ? (Vector2)body.bounds.center + Vector2.down * (body.bounds.extents.y + 0.04f)
+                : (Vector2)transform.position + Vector2.down * 0.8f;
+            return Physics2D.OverlapCircle(origin, 0.12f, groundMask) != null;
+        }
+
+        private bool GapAhead(float dir)
+        {
+            Vector2 origin = (body != null ? (Vector2)body.bounds.center : (Vector2)transform.position) + new Vector2(dir * 0.9f, -0.2f);
+            return Physics2D.Raycast(origin, Vector2.down, 1.6f, groundMask).collider == null;
+        }
+
+        private bool WallAhead(float dir)
+        {
+            Vector2 origin = body != null ? (Vector2)body.bounds.center : (Vector2)transform.position;
+            return Physics2D.Raycast(origin, Vector2.right * dir, 0.7f, groundMask).collider != null;
         }
 
         private void Attack()

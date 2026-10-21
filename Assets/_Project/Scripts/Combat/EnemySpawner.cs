@@ -22,9 +22,7 @@ namespace Gstarr.Combat
             var player = GameObject.FindGameObjectWithTag("Player");
             if (player == null) return;
 
-            var sprite = player.GetComponent<SpriteRenderer>() != null
-                ? player.GetComponent<SpriteRenderer>().sprite
-                : null;
+            var sprite = EnemyActor.Art;
             Vector3 origin = player.transform.position;
             EnemyActor.Spawn(sprite, origin + new Vector3(9f, 0.2f, 0f));
             EnemyActor.Spawn(sprite, origin + new Vector3(18f, 0.2f, 0f));
