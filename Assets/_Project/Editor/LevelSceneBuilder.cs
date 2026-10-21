@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using Gstarr.CameraSystem;
+using Gstarr.Combat;
 using Gstarr.Player;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -63,6 +64,10 @@ namespace Gstarr.EditorTools
 
             var player = CreatePlayer(playerSprite, noFriction, new Vector3(-2f, 0.5f, 0f));
             SetupCamera(player.transform);
+
+            CreateDummy(playerSprite, new Vector3(8f, -0.25f, 0f));
+            CreateDummy(playerSprite, new Vector3(15f, -0.25f, 0f));
+            CreateDummy(playerSprite, new Vector3(24f, 4.75f, 0f));
 
             Selection.activeGameObject = ground.gameObject;
 
@@ -173,7 +178,33 @@ namespace Gstarr.EditorTools
             so.FindProperty("groundLayer").intValue = LayerMask.GetMask("Ground");
             so.ApplyModifiedPropertiesWithoutUndo();
 
+            var combat = go.AddComponent<PlayerCombat>();
+            var combatSo = new SerializedObject(combat);
+            combatSo.FindProperty("inputActions").objectReferenceValue =
+                AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath);
+            combatSo.ApplyModifiedPropertiesWithoutUndo();
+
             return go;
+        }
+
+        private static void CreateDummy(Sprite sprite, Vector3 position)
+        {
+            var go = new GameObject("Target Dummy");
+            go.transform.position = position;
+
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.color = new Color(0.9f, 0.35f, 0.35f);
+            sr.sortingOrder = 4;
+
+            var rb = go.AddComponent<Rigidbody2D>();
+            rb.freezeRotation = true;
+            rb.gravityScale = 4f;
+
+            var box = go.AddComponent<BoxCollider2D>();
+            box.size = new Vector2(0.85f, 1.45f);
+
+            go.AddComponent<Health>();
         }
 
         private static void SetupCamera(Transform target)
