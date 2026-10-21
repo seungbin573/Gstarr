@@ -12,6 +12,7 @@ namespace Gstarr.EditorTools
     public static class TilesetImporter
     {
         public const string PaletteFolder = "Assets/_Project/Tilemaps/Palettes";
+        public const string TileFolder = "Assets/_Project/Tilemaps/Tiles";
 
         public class Result
         {
@@ -57,7 +58,7 @@ namespace Gstarr.EditorTools
             var sprites = AssetDatabase.LoadAllAssetsAtPath(texPath).OfType<Sprite>()
                 .ToDictionary(s => s.name, s => s);
 
-            string tileFolder = $"{Path.GetDirectoryName(texPath).Replace('\\', '/')}/{baseName}_Tiles";
+            string tileFolder = $"{TileFolder}/{baseName}";
             EnsureFolder(tileFolder);
 
             var tiles = new Tile[rows * cols];

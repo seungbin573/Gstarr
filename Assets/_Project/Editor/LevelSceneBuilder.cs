@@ -15,7 +15,7 @@ namespace Gstarr.EditorTools
     public static class LevelSceneBuilder
     {
         private const string ProjectRoot = "Assets/_Project";
-        private const string PlaceholderFolder = ProjectRoot + "/Art/Placeholder";
+        private const string PlaceholderFolder = "Assets/arts/Placeholder";
         private const string TilesetPath = PlaceholderFolder + "/PlaceholderTileset.png";
         private const string PlayerSpritePath = PlaceholderFolder + "/PlaceholderPlayer.png";
         private const string NoFrictionPath = ProjectRoot + "/Physics/NoFriction.physicsMaterial2D";
@@ -183,6 +183,8 @@ namespace Gstarr.EditorTools
             combatSo.FindProperty("inputActions").objectReferenceValue =
                 AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath);
             combatSo.ApplyModifiedPropertiesWithoutUndo();
+            combat.AssignDefaultArt();
+            EditorUtility.SetDirty(combat);
 
             return go;
         }

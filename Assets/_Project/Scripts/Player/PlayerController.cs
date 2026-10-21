@@ -46,9 +46,13 @@ namespace Gstarr.Player
         [Tooltip("이 각도 이하의 경사면까지 바닥으로 인식")]
         [Range(0f, 89f)]
         [SerializeField] private float maxGroundAngle = 45f;
+        [SerializeField] private float groundCheckDistance = 0.08f;
 
         private Rigidbody2D rb;
+        private Collider2D col;
         private ContactFilter2D groundFilter;
+        private readonly RaycastHit2D[] groundHits = new RaycastHit2D[8];
+        private float minGroundNormalY;
 
         private InputAction moveAction;
         private InputAction jumpAction;
@@ -75,6 +79,7 @@ namespace Gstarr.Player
         private void Awake()
         {
             rb = GetComponent<Rigidbody2D>();
+            col = GetComponent<Collider2D>();
 
             rb.gravityScale = gravityScale;
             rb.freezeRotation = true;
@@ -83,10 +88,16 @@ namespace Gstarr.Player
 
             if (groundLayer.value == 0)
                 groundLayer = LayerMask.GetMask("Ground");
+            if (groundLayer.value == 0)
+            {
+                groundLayer = ~(1 << gameObject.layer);
+                Debug.LogWarning("[PlayerController] 'Ground' 레이어가 없어 자기 레이어를 제외한 모든 레이어를 바닥으로 판정합니다.", this);
+            }
 
-            groundFilter = new ContactFilter2D();
+            groundFilter = new ContactFilter2D { useTriggers = false };
             groundFilter.SetLayerMask(groundLayer);
-            groundFilter.SetNormalAngle(90f - maxGroundAngle, 90f + maxGroundAngle);
+            minGroundNormalY = Mathf.Cos(maxGroundAngle * Mathf.Deg2Rad);
+            airDashesLeft = airDashCount;
 
             SetupInput();
         }
@@ -202,10 +213,29 @@ namespace Gstarr.Player
 
         private void CheckGround()
         {
-            IsGrounded = rb.IsTouching(groundFilter) && rb.linearVelocity.y <= 0.01f;
+            IsGrounded = rb.linearVelocity.y <= 0.01f && CastForGround();
 
             if (IsGrounded)
                 isJumping = false;
+        }
+
+        private bool CastForGround()
+        {
+            Bounds b = col.bounds;
+            const float skin = 0.05f;
+            Vector2 origin = new Vector2(b.center.x, b.min.y + skin);
+            Vector2 size = new Vector2(b.size.x * 0.9f, skin);
+
+            int count = Physics2D.BoxCast(origin, size, 0f, Vector2.down, groundFilter, groundHits, groundCheckDistance + skin);
+            for (int i = 0; i < count; i++)
+            {
+                var hit = groundHits[i];
+                if (hit.rigidbody == rb) continue;
+                // 시작부터 겹친 히트(아래에서 통과 중인 원웨이 발판 등)는 바닥이 아님
+                if (hit.distance <= 0f) continue;
+                if (hit.normal.y >= minGroundNormalY) return true;
+            }
+            return false;
         }
 
         private void HandleJump()
