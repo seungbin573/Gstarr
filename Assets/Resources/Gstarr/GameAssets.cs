@@ -32,6 +32,12 @@ namespace Gstarr.Items
         [Tooltip("적 스프라이트 (Assets/arts/character/enemy1.png)")]
         public Sprite enemySprite;
 
+        [Header("Glory Kill")]
+        [Tooltip("글로리 킬 노트. 순서: 위(X), 오른쪽(A), 아래(B), 왼쪽(Y). PNG를 바꾸면 모양이 바뀐다.")]
+        public Sprite[] gloryNoteSprites = new Sprite[4];
+        [Tooltip("노트 중앙 링. Assets/arts/UI/Glory/Note_Ring.png")]
+        public Sprite gloryRingSprite;
+
         private static GameAssets instance;
 
         public static GameAssets Instance =>

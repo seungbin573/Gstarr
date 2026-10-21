@@ -31,3 +31,9 @@ MonoBehaviour:
   defaultStageScene: Level_01
   mainMenuScene: MainMenu
   enemySprite: {fileID: 21300000, guid: 4c8e1b7a9d2f4e6ab0c31d58e7f64a02, type: 3}
+  gloryNoteSprites:
+  - {fileID: 21300000, guid: a1c4e8b27f3d4a61b9e0c5d84f17a201, type: 3}
+  - {fileID: 21300000, guid: b2d5f9c38e4e4b72c0f1d6e95a28b312, type: 3}
+  - {fileID: 21300000, guid: c3e60ad49f5f4c83d102e7fa6b39c423, type: 3}
+  - {fileID: 21300000, guid: d4f71be5a0604d94e213f80b7c4ad534, type: 3}
+  gloryRingSprite: {fileID: 21300000, guid: e5082cf6b1714ea5f324091c8d5be645, type: 3}

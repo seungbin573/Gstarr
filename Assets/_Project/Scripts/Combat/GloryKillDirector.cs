@@ -11,7 +11,7 @@ namespace Gstarr.Combat
 {
     /// <summary>
     /// 글로리 킬. 카메라가 적에게 다가가고 주변은 슬로우가 된다.
-    /// 차트 노트는 곡의 정박 번호와 맞춰 지금 박자부터 5개를 친다.
+    /// 차트 노트는 곡의 정박 번호와 맞춘다. 곧 닿는 박자는 건너뛰고 그 다음 노트부터 5개를 친다.
     /// </summary>
     public class GloryKillDirector : MonoBehaviour
     {
@@ -92,14 +92,12 @@ namespace Gstarr.Combat
                 return;
             }
 
-            // 지금 정박 번호 = 차트 노트 번호. 100번째 정박이면 100번째 노트부터 5개.
+            // 곧 닿는 정박은 노트가 바로 붙어서 너무 빠르다. 항상 그 다음 정박 노트부터.
             order = new int[NotesPerKill];
             beats = new long[NotesPerKill];
             if (conductor != null && conductor.IsReady)
             {
-                long first = conductor.FirstBeatAtOrAfter(conductor.SongTime - conductor.GoodWindow);
-                if (conductor.BeatTime(first) - conductor.SongTime < -conductor.GoodWindow)
-                    first++;
+                long first = conductor.FirstBeatAtOrAfter(conductor.SongTime) + 1;
                 for (int i = 0; i < NotesPerKill; i++)
                 {
                     long beat = first + i;
@@ -152,19 +150,20 @@ namespace Gstarr.Combat
             var canvas = UIFactory.CreateCanvas(transform, "GloryCanvas", 140);
             canvasRoot = (RectTransform)canvas.transform;
 
-            ring = UIFactory.CreateImage("Ring", canvasRoot, new Color(1f, 0.9f, 0.35f, 0.85f));
-            ring.sprite = ArrowSprite();
+            ring = UIFactory.CreateImage("Ring", canvasRoot, Color.white);
+            ring.sprite = RingSprite(out bool ringFromAsset);
+            ring.preserveAspect = true;
             ring.rectTransform.anchorMin = ring.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             ring.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            ring.rectTransform.sizeDelta = new Vector2(78f, 78f);
-            ring.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+            ring.rectTransform.sizeDelta = new Vector2(96f, 96f);
+            if (!ringFromAsset) ring.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 45f);
 
             note = UIFactory.CreateRect("Note", canvasRoot);
             note.anchorMin = note.anchorMax = new Vector2(0.5f, 0.5f);
             note.pivot = new Vector2(0.5f, 0.5f);
-            note.sizeDelta = new Vector2(116f, 116f);
+            note.sizeDelta = new Vector2(132f, 132f);
             noteImage = UIFactory.CreateImage("Arrow", note, Color.white);
-            noteImage.sprite = ArrowSprite();
+            noteImage.preserveAspect = true;
             UIFactory.Stretch(noteImage.rectTransform);
 
             noteLabel = UIFactory.CreateText("Face", canvasRoot, "", 36, style: FontStyle.Bold);
@@ -206,16 +205,15 @@ namespace Gstarr.Combat
         private void PlaceNote()
         {
             if (index >= order.Length || note == null) return;
-            var face = Faces[order[index]];
+            int faceIndex = order[index];
+            var face = Faces[faceIndex];
             double remain = Remaining(index);
             float dist = Mathf.Clamp01((float)(remain / travel)) * 460f;
 
             Vector2 center = EnemyLocalPoint();
             Vector2 pos = center + face.Direction * dist;
             note.anchoredPosition = pos;
-            noteImage.color = face.Color;
-            float angle = Mathf.Atan2(face.Direction.x, face.Direction.y) * Mathf.Rad2Deg;
-            noteImage.rectTransform.localEulerAngles = new Vector3(0f, 0f, -angle);
+            ApplyNoteSprite(faceIndex);
             noteLabel.rectTransform.anchoredPosition = pos;
             noteLabel.text = face.Label;
             note.localScale = Vector3.one * Mathf.Lerp(1.45f, 0.9f, Mathf.Clamp01((float)(remain / travel)));
@@ -338,6 +336,51 @@ namespace Gstarr.Combat
         {
             if (hitSource == null) return;
             hitSource.PlayOneShot(HitClip(), 0.85f);
+        }
+
+        private void ApplyNoteSprite(int faceIndex)
+        {
+            if (noteImage == null) return;
+            noteImage.sprite = NoteSprite(faceIndex, out bool fromAsset);
+            noteImage.color = fromAsset ? Color.white : Faces[faceIndex].Color;
+            if (fromAsset)
+            {
+                noteImage.rectTransform.localRotation = Quaternion.identity;
+                return;
+            }
+
+            Vector2 dir = Faces[faceIndex].Direction;
+            float angle = Mathf.Atan2(dir.x, dir.y) * Mathf.Rad2Deg;
+            noteImage.rectTransform.localEulerAngles = new Vector3(0f, 0f, -angle);
+        }
+
+        /// <summary>위, 오른쪽, 아래, 왼쪽 순. 에셋이 있으면 그 이미지를 그대로 쓴다.</summary>
+        private static Sprite NoteSprite(int face, out bool fromAsset)
+        {
+            fromAsset = false;
+            var assets = GameAssets.Instance;
+            if (assets != null && assets.gloryNoteSprites != null
+                && face >= 0 && face < assets.gloryNoteSprites.Length
+                && assets.gloryNoteSprites[face] != null)
+            {
+                fromAsset = true;
+                return assets.gloryNoteSprites[face];
+            }
+
+            return ArrowSprite();
+        }
+
+        private static Sprite RingSprite(out bool fromAsset)
+        {
+            fromAsset = false;
+            var assets = GameAssets.Instance;
+            if (assets != null && assets.gloryRingSprite != null)
+            {
+                fromAsset = true;
+                return assets.gloryRingSprite;
+            }
+
+            return ArrowSprite();
         }
 
         private static Sprite ArrowSprite()
