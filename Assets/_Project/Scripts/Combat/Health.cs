@@ -53,6 +53,15 @@ namespace Gstarr.Combat
             }
         }
 
+        /// <summary>회복. 이미 최대 체력이면 false.</summary>
+        public bool Heal(int amount)
+        {
+            if (Current <= 0 || Current >= maxHealth) return false;
+            Current = Mathf.Min(maxHealth, Current + amount);
+            onHealthChanged?.Invoke(Current, maxHealth);
+            return true;
+        }
+
         private void Update()
         {
             if (flashTimer <= 0f) return;

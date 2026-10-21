@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Gstarr.Player;
@@ -28,10 +29,6 @@ namespace Gstarr.Combat
         [Tooltip("탄이 나가는 위치")]
         public Vector2 muzzleOffset;
 
-        [Header("탄약 (근접은 무시)")]
-        public int magazineSize = 12;
-        public float reloadTime = 1.2f;
-
         [Header("근접")]
         public Vector2 meleeSize = new Vector2(1.6f, 1.2f);
         public float meleeReach = 0.9f;
@@ -44,10 +41,6 @@ namespace Gstarr.Combat
         [Tooltip("산탄 전체 퍼짐 각도")]
         public float spreadAngle = 0f;
         public float recoil = 0f;
-
-        [NonSerialized] public int ammo;
-
-        public bool UsesAmmo => type != WeaponType.Melee;
     }
 
     [RequireComponent(typeof(PlayerController))]
@@ -62,7 +55,6 @@ namespace Gstarr.Combat
         [SerializeField] private Projectile projectilePrefab;
         [SerializeField] private Sprite slashSprite;
         [SerializeField] private int weaponSortingOrder = 6;
-        [SerializeField] private bool showDebugHud = true;
 
         [SerializeField] private Weapon[] weapons =
         {
@@ -76,23 +68,22 @@ namespace Gstarr.Combat
             {
                 name = "Pistol", type = WeaponType.Ranged, damage = 1, fireInterval = 0.18f,
                 holdOffset = new Vector2(0.55f, -0.05f), muzzleOffset = new Vector2(0.9f, 0.08f),
-                magazineSize = 12, reloadTime = 1.1f, projectileSpeed = 26f, range = 16f, pellets = 1
+                projectileSpeed = 26f, range = 16f, pellets = 1
             },
             new Weapon
             {
                 name = "Shotgun", type = WeaponType.Shotgun, damage = 1, fireInterval = 0.7f,
                 holdOffset = new Vector2(0.6f, -0.08f), muzzleOffset = new Vector2(1.15f, 0.02f),
-                magazineSize = 4, reloadTime = 1.6f, projectileSpeed = 20f, range = 7f,
-                pellets = 6, spreadAngle = 28f, recoil = 4f
+                projectileSpeed = 20f, range = 7f, pellets = 6, spreadAngle = 28f, recoil = 4f
             }
         };
 
-        public event Action<Weapon> WeaponChanged;
-        public event Action<Weapon> AmmoChanged;
+        /// <summary>(새 인덱스, 이동 방향 -1/+1)</summary>
+        public event Action<int, int> WeaponChanged;
 
+        public IReadOnlyList<Weapon> Weapons => weapons;
+        public int CurrentIndex => currentIndex;
         public Weapon CurrentWeapon => weapons[currentIndex];
-        public bool IsReloading => reloadTimer > 0f;
-        public float ReloadProgress => IsReloading ? 1f - reloadTimer / CurrentWeapon.reloadTime : 0f;
 
         private const float SwingDuration = 0.14f;
         private const float SwingStartAngle = 80f;
@@ -102,7 +93,7 @@ namespace Gstarr.Combat
 
         private PlayerController controller;
         private Rigidbody2D rb;
-        private InputAction attackAction, reloadAction, prevAction, nextAction;
+        private InputAction attackAction, prevAction, nextAction;
         private InputActionMap ownedActionMap;
 
         private Transform weaponPivot;
@@ -110,7 +101,6 @@ namespace Gstarr.Combat
 
         private int currentIndex;
         private float cooldownTimer;
-        private float reloadTimer;
         private float swingTimer;
         private float recoilKick;
         private Sprite fallbackSprite;
@@ -123,8 +113,6 @@ namespace Gstarr.Combat
             if (hitMask.value == 0)
                 hitMask = ~LayerMask.GetMask("Player", "Ignore Raycast");
 
-            foreach (var w in weapons) w.ammo = w.magazineSize;
-
             SetupInput();
             CreateWeaponVisual();
         }
@@ -135,7 +123,6 @@ namespace Gstarr.Combat
             {
                 var map = inputActions.FindActionMap("Player", throwIfNotFound: true);
                 attackAction = map.FindAction("Attack", throwIfNotFound: true);
-                reloadAction = map.FindAction("Reload", throwIfNotFound: true);
                 prevAction = map.FindAction("PrevWeapon", throwIfNotFound: true);
                 nextAction = map.FindAction("NextWeapon", throwIfNotFound: true);
                 return;
@@ -145,9 +132,6 @@ namespace Gstarr.Combat
             attackAction = ownedActionMap.AddAction("Attack", InputActionType.Button);
             attackAction.AddBinding("<Gamepad>/buttonEast");
             attackAction.AddBinding("<Keyboard>/c");
-            reloadAction = ownedActionMap.AddAction("Reload", InputActionType.Button);
-            reloadAction.AddBinding("<Gamepad>/buttonNorth");
-            reloadAction.AddBinding("<Keyboard>/r");
             prevAction = ownedActionMap.AddAction("PrevWeapon", InputActionType.Button);
             prevAction.AddBinding("<Gamepad>/dpad/left");
             prevAction.AddBinding("<Keyboard>/q");
@@ -180,7 +164,6 @@ namespace Gstarr.Combat
         private void OnEnable()
         {
             attackAction?.Enable();
-            reloadAction?.Enable();
             prevAction?.Enable();
             nextAction?.Enable();
         }
@@ -188,7 +171,6 @@ namespace Gstarr.Combat
         private void OnDisable()
         {
             attackAction?.Disable();
-            reloadAction?.Disable();
             prevAction?.Disable();
             nextAction?.Disable();
         }
@@ -201,7 +183,6 @@ namespace Gstarr.Combat
         private void Start()
         {
             ApplyWeaponVisual();
-            WeaponChanged?.Invoke(CurrentWeapon);
         }
 
         private void Update()
@@ -212,14 +193,6 @@ namespace Gstarr.Combat
             if (prevAction.WasPressedThisFrame()) SwitchWeapon(-1);
             if (nextAction.WasPressedThisFrame()) SwitchWeapon(1);
 
-            if (IsReloading)
-            {
-                reloadTimer -= dt;
-                if (reloadTimer <= 0f) FinishReload();
-            }
-
-            if (reloadAction.WasPressedThisFrame()) StartReload();
-
             // 연사 가능하도록 누르고 있는 동안 계속 공격
             if (attackAction.IsPressed()) TryAttack();
 
@@ -228,27 +201,12 @@ namespace Gstarr.Combat
 
         public void SwitchWeapon(int delta)
         {
-            reloadTimer = 0f;
             swingTimer = 0f;
             recoilKick = 0f;
             currentIndex = (currentIndex + delta + weapons.Length) % weapons.Length;
             cooldownTimer = Mathf.Min(cooldownTimer, 0.1f);
             ApplyWeaponVisual();
-            WeaponChanged?.Invoke(CurrentWeapon);
-        }
-
-        public void StartReload()
-        {
-            var w = CurrentWeapon;
-            if (!w.UsesAmmo || IsReloading || w.ammo >= w.magazineSize) return;
-            reloadTimer = w.reloadTime;
-        }
-
-        private void FinishReload()
-        {
-            reloadTimer = 0f;
-            CurrentWeapon.ammo = CurrentWeapon.magazineSize;
-            AmmoChanged?.Invoke(CurrentWeapon);
+            WeaponChanged?.Invoke(currentIndex, delta);
         }
 
         private void ApplyWeaponVisual()
@@ -271,11 +229,6 @@ namespace Gstarr.Combat
                 float t = 1f - Mathf.Clamp01(swingTimer / SwingDuration);
                 angle = Mathf.Lerp(SwingStartAngle, SwingEndAngle, 1f - (1f - t) * (1f - t));
             }
-            else if (IsReloading)
-            {
-                // 재장전 중에는 총구를 아래로 기울임
-                angle = -35f * Mathf.Sin(ReloadProgress * Mathf.PI);
-            }
 
             recoilKick = Mathf.MoveTowards(recoilKick, 0f, RecoilRecoverSpeed * dt);
 
@@ -286,27 +239,16 @@ namespace Gstarr.Combat
 
         private void TryAttack()
         {
-            if (cooldownTimer > 0f || IsReloading) return;
+            if (cooldownTimer > 0f) return;
 
             var w = CurrentWeapon;
-            if (w.UsesAmmo && w.ammo <= 0)
-            {
-                StartReload();
-                return;
-            }
-
             cooldownTimer = w.fireInterval;
             int facing = controller.FacingDirection;
 
             if (w.type == WeaponType.Melee)
-            {
                 DoMelee(w, facing);
-                return;
-            }
-
-            Fire(w, facing);
-            w.ammo--;
-            AmmoChanged?.Invoke(w);
+            else
+                Fire(w, facing);
         }
 
         private void DoMelee(Weapon w, int facing)
@@ -382,15 +324,6 @@ namespace Gstarr.Combat
             tex.Apply();
             fallbackSprite = Sprite.Create(tex, new Rect(0, 0, 4, 2), new Vector2(0.5f, 0.5f), 16f);
             return fallbackSprite;
-        }
-
-        private void OnGUI()
-        {
-            if (!showDebugHud) return;
-            var w = CurrentWeapon;
-            string ammo = w.UsesAmmo ? $"{w.ammo} / {w.magazineSize}" : "-";
-            string state = IsReloading ? $"  재장전 중 {ReloadProgress * 100f:0}%" : "";
-            GUI.Label(new Rect(12, 12, 400, 24), $"[{currentIndex + 1}/{weapons.Length}] {w.name}   탄약: {ammo}{state}");
         }
 
 #if UNITY_EDITOR
