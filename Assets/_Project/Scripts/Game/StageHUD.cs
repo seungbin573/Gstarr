@@ -48,7 +48,47 @@ namespace Gstarr.Game
             timeText = UIFactory.CreateText("SongTime", root, "", 24, TextAnchor.UpperRight, FontStyle.Normal);
             UIFactory.Place(timeText.rectTransform, new Vector2(0.5f, 1f), new Vector2(barSize.x * 0.5f - 150f, -48f), new Vector2(300f, 30f));
 
+            countdownText = UIFactory.CreateText("Countdown", root, "", 220, style: FontStyle.BoldAndItalic);
+            UIFactory.Place(countdownText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 60f), new Vector2(900f, 300f));
+            countdownText.GetComponent<Outline>().effectDistance = new Vector2(5f, -5f);
+
             BuildGameOver(root);
+        }
+
+        private Text countdownText;
+        private string lastCount;
+        private float countPop;
+
+        // 음악 시작 전 박자에 맞춰 3, 2, 1, 음악 시작 순간 GO!
+        private void UpdateCountdown(float dt)
+        {
+            string label = "";
+            double t = conductor.SongTime;
+            float beat = conductor.CountdownInterval;
+            if (t < 0)
+            {
+                int k = Mathf.CeilToInt((float)(-t / beat));
+                if (k <= conductor.CountdownBeats) label = Mathf.Max(1, k).ToString();
+            }
+            else if (t < 0.6)
+            {
+                label = "GO!";
+            }
+
+            if (label != lastCount)
+            {
+                lastCount = label;
+                countPop = 1f;
+                countdownText.text = label;
+                countdownText.color = label == "GO!" ? new Color(1f, 0.6f, 0.2f) : Color.white;
+            }
+
+            countPop = Mathf.MoveTowards(countPop, 0f, dt * 4f);
+            float s = 1f + 0.6f * countPop * countPop;
+            countdownText.rectTransform.localScale = new Vector3(s, s, 1f);
+            var c = countdownText.color;
+            c.a = label == "GO!" ? Mathf.Clamp01((float)(0.6 - t) / 0.25f) : 1f;
+            countdownText.color = c;
         }
 
         private void OnEnable() => conductor.Finished += OnFinished;
@@ -110,6 +150,7 @@ namespace Gstarr.Game
             gameOverGroup.alpha = 0f;
             gameOverFade = 0f;
             Time.timeScale = 0f;
+            GamePause.IsPaused = true;
             UIFactory.Select(retryButton);
         }
 
@@ -117,6 +158,7 @@ namespace Gstarr.Game
         {
             if (conductor.IsReady)
             {
+                UpdateCountdown(Time.unscaledDeltaTime);
                 fill.fillAmount = conductor.Progress;
                 timeText.text = Format(Mathf.Max(0f, (float)conductor.SongTime)) + " / " + Format((float)conductor.Length);
             }

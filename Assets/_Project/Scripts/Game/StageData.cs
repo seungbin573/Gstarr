@@ -17,8 +17,18 @@ namespace Gstarr.Game
         public int order;
         public string displayName = "STAGE";
         public AudioClip music;
-        [Tooltip("박자 정보 JSON (kickforge-chart)")]
+        [Tooltip("(선택) 박자 JSON. 음악 파일 이름 끝에 -118 처럼 BPM 이 있으면 무시됨")]
         public TextAsset beatChart;
+        [Tooltip("BPM 으로 박자를 만들 때 첫 박자 위치 (초). 노래 앞에 무음이 있으면 조정")]
+        public float firstBeatOffset;
+
+        public bool HasBpm(out float bpm)
+        {
+            bpm = 0f;
+            return music != null && Gstarr.Rhythm.BeatChart.TryParseBpm(music.name, out bpm);
+        }
+
+        public bool IsPlayable => music != null && (HasBpm(out _) || beatChart != null);
         [Tooltip("비우면 GameAssets.defaultStageScene 사용")]
         public string sceneName;
 

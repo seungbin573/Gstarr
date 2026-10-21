@@ -26,6 +26,7 @@ namespace Gstarr.Game
         private static void Load(string scene)
         {
             Time.timeScale = 1f;
+            GamePause.IsPaused = false;
             SceneManager.LoadScene(scene);
         }
     }

@@ -217,6 +217,7 @@ namespace Gstarr.Combat
 
         private void Update()
         {
+            if (Gstarr.Game.GamePause.IsPaused) return;
             float dt = Time.deltaTime;
             cooldownTimer -= dt;
 

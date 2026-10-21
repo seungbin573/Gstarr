@@ -61,6 +61,54 @@ namespace Gstarr.Rhythm
             };
         }
 
+        private static readonly System.Text.RegularExpressions.Regex BpmSuffix =
+            new System.Text.RegularExpressions.Regex(@"[-_]\s*(\d+(?:\.\d+)?)\s*(?:bpm)?\s*$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        /// <summary>"곡 이름-118" 처럼 이름 끝의 BPM 을 읽는다.</summary>
+        public static bool TryParseBpm(string name, out float bpm)
+        {
+            bpm = 0f;
+            if (string.IsNullOrEmpty(name)) return false;
+            var m = BpmSuffix.Match(name);
+            return m.Success
+                   && float.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Float,
+                       System.Globalization.CultureInfo.InvariantCulture, out bpm)
+                   && bpm >= 20f && bpm <= 400f;
+        }
+
+        /// <summary>BPM 만으로 박자/반박 생성. 박자 = offset + n * (60/bpm), 반박 = 그 정확히 중간.</summary>
+        public static BeatChart FromBpm(float bpm, double duration, double firstBeatOffset = 0.0)
+        {
+            double interval = 60.0 / bpm;
+            int count = (int)Math.Floor((duration - firstBeatOffset) / interval) + 1;
+            var beats = new List<double>(count);
+            var halves = new List<double>(count);
+            var judge = new List<double>(count * 2);
+            for (int i = 0; i < count; i++)
+            {
+                double t = firstBeatOffset + i * interval;
+                if (t < 0 || t > duration) continue;
+                beats.Add(t);
+                judge.Add(t);
+                double h = t + interval * 0.5;
+                if (h <= duration)
+                {
+                    halves.Add(h);
+                    judge.Add(h);
+                }
+            }
+
+            return new BeatChart
+            {
+                Beats = beats.ToArray(),
+                HalfBeats = halves.ToArray(),
+                JudgeTimes = judge.ToArray(),
+                Bpm = bpm,
+                Duration = duration
+            };
+        }
+
         /// <summary>t 이상인 첫 박자의 인덱스 (없으면 Beats.Length)</summary>
         public int LowerBound(double t) => LowerBound(Beats, t);
 

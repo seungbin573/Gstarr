@@ -155,6 +155,7 @@ namespace Gstarr.Player
 
         private void Update()
         {
+            if (Gstarr.Game.GamePause.IsPaused) return;
             moveInput = moveAction.ReadValue<Vector2>();
             if (Mathf.Abs(moveInput.x) < stickDeadZone) moveInput.x = 0f;
             if (Mathf.Abs(moveInput.y) < stickDeadZone) moveInput.y = 0f;

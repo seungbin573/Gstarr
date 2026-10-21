@@ -38,10 +38,11 @@ namespace Gstarr.EditorTools
             EnsureLayer("Player");
 
             var tileset = CreatePlaceholderTileset();
-            var playerSprite = CreatePlaceholderPlayerSprite();
+            var playerSprite = LoadPlayerSprite();
             var noFriction = CreateNoFrictionMaterial();
 
-            string scenePath = AssetDatabase.GenerateUniqueAssetPath($"{ScenesFolder}/Level_01.unity");
+            int stageNumber = StageAutoGenerator.NextStageNumber();
+            string scenePath = $"{ScenesFolder}/{StageAutoGenerator.StageScenePrefix}{stageNumber}.unity";
             Scene scene;
             if (File.Exists(TemplateScenePath) && AssetDatabase.CopyAsset(TemplateScenePath, scenePath))
             {
@@ -66,26 +67,16 @@ namespace Gstarr.EditorTools
             var player = CreatePlayer(playerSprite, noFriction, new Vector3(-2f, 0.5f, 0f));
             SetupCamera(player.transform);
 
-            CreateDummy(playerSprite, new Vector3(8f, -0.25f, 0f));
-            CreateDummy(playerSprite, new Vector3(15f, -0.25f, 0f));
-            CreateDummy(playerSprite, new Vector3(24f, 4.75f, 0f));
-
+            // 아이템은 직접 그릴 수 있게 빈 Items 타일맵만 만들어 둠
             ItemTools.EnsureDefaultItems();
             ItemTools.BuildItemTiles();
-            var itemTilemap = ItemTools.EnsureItemTilemap(grid.transform);
-            foreach (var item in AssetDatabase.FindAssets("t:ItemData")
-                         .Select(g => AssetDatabase.LoadAssetAtPath<ItemData>(AssetDatabase.GUIDToAssetPath(g)))
-                         .Where(i => i != null))
-            {
-                // 발판 위에 전투 아이템, 그 옆에 효과 아이템
-                int x = item.Category == ItemCategory.Combat ? 5 : 6;
-                itemTilemap.SetTile(new Vector3Int(x, 2, 0), ItemTools.GetOrCreateTile(item));
-            }
+            ItemTools.EnsureItemTilemap(grid.transform);
 
             Selection.activeGameObject = ground.gameObject;
 
             EditorSceneManager.SaveScene(scene, scenePath);
             AddSceneToBuildSettings(scenePath);
+            StageAutoGenerator.SyncAll();
 
             EditorApplication.ExecuteMenuItem("Window/2D/Tile Palette");
             Debug.Log($"[Level Builder] 씬 생성 완료: {scenePath}\n" +
@@ -181,7 +172,9 @@ namespace Gstarr.EditorTools
 
             var capsule = go.AddComponent<CapsuleCollider2D>();
             capsule.direction = CapsuleDirection2D.Vertical;
-            capsule.size = new Vector2(0.8f, 1.45f);
+            var size = sprite != null ? (Vector2)sprite.bounds.size : new Vector2(1f, 1.5f);
+            capsule.size = new Vector2(size.x * 0.8f, size.y * 0.95f);
+            capsule.offset = sprite != null ? (Vector2)sprite.bounds.center : Vector2.zero;
             capsule.sharedMaterial = material;
 
             var controller = go.AddComponent<PlayerController>();
@@ -330,6 +323,41 @@ namespace Gstarr.EditorTools
             var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesetPath);
             return TilesetImporter.Import(texture, PlaceholderTileSize, Vector2Int.zero, Vector2Int.zero,
                 skipEmpty: true, paletteName: "Placeholder");
+        }
+
+        private static readonly string[] PlayerSpritePaths =
+        {
+            "Assets/character/player.png",
+            "Assets/arts/character/player.png"
+        };
+
+        /// <summary>Assets/character/player.png 를 플레이어 이미지로 사용 (없으면 플레이스홀더).</summary>
+        private static Sprite LoadPlayerSprite()
+        {
+            foreach (var path in PlayerSpritePaths)
+            {
+                if (!File.Exists(path)) continue;
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+                var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+                if (importer != null && importer.userData != "gstarr-player")
+                {
+                    importer.GetSourceTextureWidthAndHeight(out _, out int height);
+                    importer.textureType = TextureImporterType.Sprite;
+                    importer.spriteImportMode = SpriteImportMode.Single;
+                    // 캐릭터 키가 약 1.5 유닛이 되도록
+                    importer.spritePixelsPerUnit = Mathf.Max(1f, Mathf.Round(height / 1.5f));
+                    importer.filterMode = FilterMode.Point;
+                    importer.textureCompression = TextureImporterCompression.Uncompressed;
+                    importer.mipmapEnabled = false;
+                    importer.userData = "gstarr-player";
+                    importer.SaveAndReimport();
+                }
+                var sprite = AssetDatabase.LoadAllAssetsAtPath(path).OfType<Sprite>().FirstOrDefault();
+                if (sprite != null) return sprite;
+            }
+
+            Debug.LogWarning("[Level Builder] Assets/character/player.png 가 없어 플레이스홀더 이미지를 사용합니다.");
+            return CreatePlaceholderPlayerSprite();
         }
 
         private static Sprite CreatePlaceholderPlayerSprite()

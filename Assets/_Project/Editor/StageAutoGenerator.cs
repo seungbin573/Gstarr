@@ -12,16 +12,17 @@ using UnityEngine.SceneManagement;
 namespace Gstarr.EditorTools
 {
     /// <summary>
-    /// Assets/Music/(?´ë”) ë§ˆë‹¤ wav + json ??ì°¾ì•„ StageData ë¥??ë™ ?ì„±/ê°±ì‹ ?˜ê³ ,
-    /// MainMenu ?¬ê³¼ ë¹Œë“œ ?¤ì •??ë§ì¶˜?? ì½”ë“œ ?˜ì • ?†ì´ ?´ë”ë§?ì¶”ê??˜ë©´ ?¤í…Œ?´ì?ê°€ ?˜ì–´?œë‹¤.
+    /// Assets/Music/(??) ?? ?? ??? ?? StageData ? ?? ??/????,
+    /// stageN ??? Stage_N ?? ????. ?? ?? ?? ?? ??? ???.
+    /// ?? ?? ?? ?? -118 ?? BPM ? ??? JSON ?? ??? ?????.
     /// </summary>
     [InitializeOnLoad]
     public class StageAutoGenerator : AssetPostprocessor
     {
         private const string MusicRoot = "Assets/Music";
         private const string StagesFolder = "Assets/Resources/Gstarr/Stages";
-        private const string StageScenesFolder = "Assets/Scenes/Stages";
         private const string MainMenuPath = "Assets/Scenes/MainMenu.unity";
+        public const string StageScenePrefix = "Stage_";
 
         private static bool queued;
 
@@ -32,7 +33,8 @@ namespace Gstarr.EditorTools
 
         private static void OnPostprocessAllAssets(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
         {
-            if (imported.Concat(deleted).Concat(moved).Concat(movedFrom).Any(p => p.StartsWith(MusicRoot + "/")))
+            if (imported.Concat(deleted).Concat(moved).Concat(movedFrom)
+                .Any(p => p.StartsWith(MusicRoot + "/") || p.EndsWith(".unity")))
                 Queue();
         }
 
@@ -56,7 +58,7 @@ namespace Gstarr.EditorTools
             SyncStages();
             EnsureMainMenuScene();
             SyncBuildSettings();
-            Debug.Log("[Gstarr] ?¤í…Œ?´ì?/ë©”ì¸ ë©”ë‰´/ë¹Œë“œ ?¤ì • ?™ê¸°???„ë£Œ");
+            Debug.Log("[Gstarr] ???? / ?? ?? / ?? ?? ??? ??");
         }
 
         public static void SyncStages()
@@ -80,7 +82,7 @@ namespace Gstarr.EditorTools
                 var stage = AssetDatabase.LoadAssetAtPath<StageData>(path);
                 if (stage == null)
                 {
-                    if (clip == null && chart == null) continue;
+                    if (clip == null) continue;
                     stage = ScriptableObject.CreateInstance<StageData>();
                     stage.order = ParseNumber(folderName);
                     stage.displayName = PrettyName(folderName);
@@ -94,30 +96,44 @@ namespace Gstarr.EditorTools
                     EditorUtility.SetDirty(stage);
                 }
 
-                if (string.IsNullOrEmpty(stage.sceneName) && EnsureStageScene(folderName))
+                // stageN ?? ? Stage_N ? ?? ?? (?? ?? ?? ??? ??? ??)
+                string autoScene = StageScenePrefix + stage.order;
+                bool autoExists = FindScenePath(autoScene) != null;
+                bool currentMissing = string.IsNullOrEmpty(stage.sceneName) || FindScenePath(stage.sceneName) == null;
+                if (autoExists && (currentMissing || stage.sceneName == folderName) && stage.sceneName != autoScene)
                 {
-                    stage.sceneName = folderName;
+                    stage.sceneName = autoScene;
+                    EditorUtility.SetDirty(stage);
+                }
+                else if (!autoExists && !string.IsNullOrEmpty(stage.sceneName) && FindScenePath(stage.sceneName) == null)
+                {
+                    stage.sceneName = "";
                     EditorUtility.SetDirty(stage);
                 }
             }
             AssetDatabase.SaveAssets();
         }
 
-        /// <summary>???? ?? ? ?. ??? ?? ???? ?(Level_01)? ???? ???.</summary>
-        private static bool EnsureStageScene(string stageName)
+        public static string FindScenePath(string sceneName)
         {
-            string path = $"{StageScenesFolder}/{stageName}.unity";
-            if (File.Exists(path)) return true;
-
-            var assets = Resources.Load<GameAssets>("Gstarr/GameAssets");
-            string template = assets != null ? assets.defaultStageScene : "Level_01";
-            string templatePath = AssetDatabase.FindAssets("t:Scene " + template)
+            if (string.IsNullOrEmpty(sceneName)) return null;
+            return AssetDatabase.FindAssets("t:Scene " + sceneName)
                 .Select(g => AssetDatabase.GUIDToAssetPath(g))
-                .FirstOrDefault(x => Path.GetFileNameWithoutExtension(x) == template);
-            if (templatePath == null) return false;
+                .FirstOrDefault(x => Path.GetFileNameWithoutExtension(x) == sceneName);
+        }
 
-            EnsureFolder(StageScenesFolder);
-            return AssetDatabase.CopyAsset(templatePath, path);
+        /// <summary>Assets ??? ?? ??? ?? ?? ?? Stage_N ??</summary>
+        public static int NextStageNumber()
+        {
+            var used = new HashSet<int>();
+            foreach (var g in AssetDatabase.FindAssets("t:Scene " + StageScenePrefix))
+            {
+                var m = Regex.Match(Path.GetFileNameWithoutExtension(AssetDatabase.GUIDToAssetPath(g)), @"^Stage_(\d+)$");
+                if (m.Success) used.Add(int.Parse(m.Groups[1].Value));
+            }
+            int n = 1;
+            while (used.Contains(n)) n++;
+            return n;
         }
 
         public static void EnsureMainMenuScene()
@@ -157,9 +173,7 @@ namespace Gstarr.EditorTools
             }
             foreach (var n in sceneNames)
             {
-                var p = AssetDatabase.FindAssets("t:Scene " + n)
-                    .Select(g => AssetDatabase.GUIDToAssetPath(g))
-                    .FirstOrDefault(x => Path.GetFileNameWithoutExtension(x) == n);
+                var p = FindScenePath(n);
                 if (p != null) wanted.Add(p);
             }
 

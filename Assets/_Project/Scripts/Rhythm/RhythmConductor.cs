@@ -33,8 +33,14 @@ namespace Gstarr.Rhythm
         [SerializeField] private TextAsset chartJson;
         [Range(0f, 1f)]
         [SerializeField] private float volume = 0.8f;
-        [Tooltip("씬 시작 후 음악이 시작되기까지의 대기 시간 (초)")]
-        [SerializeField] private float startDelay = 1f;
+        [Tooltip("BPM 으로 박자를 만들 때 첫 박자 위치 (초)")]
+        [SerializeField] private float firstBeatOffset = 0f;
+        [Tooltip("음악 시작 전 3, 2, 1 카운트 (박자 단위)")]
+        [SerializeField] private int countdownBeats = 3;
+        [Tooltip("카운트다운 시작 전 여유 시간 (초)")]
+        [SerializeField] private float countdownLead = 0.5f;
+
+        private float startDelay = 1f;
         [Tooltip("끄면 음악이 끝날 때 Finished 이벤트 (게임 오버)")]
         [SerializeField] private bool loop = false;
 
@@ -56,6 +62,33 @@ namespace Gstarr.Rhythm
         public float Progress => loopLength > 0 ? Mathf.Clamp01((float)(SongTime / loopLength)) : 0f;
         public double Length => loopLength;
         public AudioClip Music => music;
+        public int CountdownBeats => countdownBeats;
+        public float CountdownInterval { get; private set; } = 0.5f;
+        public bool IsPaused { get; private set; }
+
+        private double pauseReal, pauseDsp;
+        private bool pausedBeforeStart;
+
+        public void Pause()
+        {
+            if (IsPaused || !IsReady || IsFinished) return;
+            IsPaused = true;
+            pauseReal = UnityEngine.Time.realtimeSinceStartupAsDouble;
+            pauseDsp = AudioSettings.dspTime;
+            pausedBeforeStart = SongTime < 0;
+            if (pausedBeforeStart) source.Stop();
+            else source.Pause();
+        }
+
+        public void Resume()
+        {
+            if (!IsPaused) return;
+            IsPaused = false;
+            realStart += UnityEngine.Time.realtimeSinceStartupAsDouble - pauseReal;
+            dspStart += AudioSettings.dspTime - pauseDsp;
+            if (pausedBeforeStart) source.PlayScheduled(dspStart);
+            else source.UnPause();
+        }
 
         public BeatChart Chart { get; private set; }
         /// <summary>음악 시작 기준 누적 시간 (루프해도 계속 증가). 시작 전에는 음수.</summary>
@@ -89,14 +122,17 @@ namespace Gstarr.Rhythm
             // 메뉴에서 고른 스테이지가 있으면 그 곡, 없으면 GameAssets 기본 곡
             var stage = Gstarr.Game.StageSession.Current;
             var clip = stage != null && stage.music != null ? stage.music : assets.music;
-            var chart = stage != null && stage.beatChart != null ? stage.beatChart : assets.beatChart;
-            if (clip == null || chart == null) return;
+            var chart = stage != null ? stage.beatChart : assets.beatChart;
+            if (clip == null) return;
+            if (chart == null && !BeatChart.TryParseBpm(clip.name, out _)) return;
 
+            Gstarr.Game.GamePause.IsPaused = false;
             var go = new GameObject("RhythmConductor");
             go.SetActive(false);
             var conductor = go.AddComponent<RhythmConductor>();
             conductor.music = clip;
             conductor.chartJson = chart;
+            if (stage != null) conductor.firstBeatOffset = stage.firstBeatOffset;
             go.SetActive(true);
         }
 
@@ -117,6 +153,7 @@ namespace Gstarr.Rhythm
             if (GetComponent<ComboSystem>() == null) gameObject.AddComponent<ComboSystem>();
             if (GetComponent<ComboUI>() == null) gameObject.AddComponent<ComboUI>();
             if (GetComponent<Gstarr.Game.StageHUD>() == null) gameObject.AddComponent<Gstarr.Game.StageHUD>();
+            if (GetComponent<Gstarr.Game.PauseMenu>() == null) gameObject.AddComponent<Gstarr.Game.PauseMenu>();
         }
 
         private void OnDestroy()
@@ -126,15 +163,29 @@ namespace Gstarr.Rhythm
 
         private void Start()
         {
-            if (chartJson == null || music == null)
+            if (music == null)
             {
-                Debug.LogWarning("[RhythmConductor] 음악 또는 박자 JSON 이 없어 박자 판정을 끕니다.", this);
+                Debug.LogWarning("[RhythmConductor] 음악이 없어 박자 판정을 끕니다.", this);
                 enabled = false;
                 return;
             }
 
-            Chart = BeatChart.Parse(chartJson.text);
+            // 파일 이름 끝의 BPM (예: "Song-118") 우선, 없으면 JSON
+            if (BeatChart.TryParseBpm(music.name, out float bpm))
+                Chart = BeatChart.FromBpm(bpm, music.length, firstBeatOffset);
+            else if (chartJson != null)
+                Chart = BeatChart.Parse(chartJson.text);
+            else
+            {
+                Debug.LogWarning($"[RhythmConductor] '{music.name}' 이름 끝에 BPM(예: -118)이 없고 JSON 도 없어 박자 판정을 끕니다.", this);
+                enabled = false;
+                return;
+            }
             loopLength = music.length;
+
+            float beatLen = Chart.Bpm > 0f ? 60f / Chart.Bpm : 0.5f;
+            CountdownInterval = beatLen;
+            startDelay = countdownLead + countdownBeats * beatLen;
 
             source.clip = music;
             source.loop = loop;
@@ -147,7 +198,7 @@ namespace Gstarr.Rhythm
 
         private void Update()
         {
-            if (!IsReady || IsFinished) return;
+            if (!IsReady || IsFinished || IsPaused) return;
             source.volume = volume * Gstarr.Game.GameSettings.MusicVolume;
 
             // dspTime 은 오디오 버퍼 단위로만 갱신되므로 실시간 시계로 부드럽게 진행하고 dsp 에 천천히 맞춤
@@ -222,6 +273,7 @@ namespace Gstarr.Rhythm
         public bool TryAct(BeatAction action)
         {
             if (!IsReady || !enabled) return true;
+            if (IsPaused || IsFinished) return false;
 
             double t = SongTime - inputOffsetMs * 0.001;
             long beat = NearestJudgePoint(t, out double error);

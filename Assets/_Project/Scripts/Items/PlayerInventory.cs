@@ -115,6 +115,7 @@ namespace Gstarr.Items
 
         private void Update()
         {
+            if (Gstarr.Game.GamePause.IsPaused) return;
             cooldownTimer -= Time.deltaTime;
 
             if (prevCombat.WasPressedThisFrame()) Select(ItemCategory.Combat, -1);
