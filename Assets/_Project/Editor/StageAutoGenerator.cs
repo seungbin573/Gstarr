@@ -72,11 +72,18 @@ namespace Gstarr.EditorTools
                 var clip = AssetDatabase.FindAssets("t:AudioClip", new[] { folder })
                     .Select(g => AssetDatabase.LoadAssetAtPath<AudioClip>(AssetDatabase.GUIDToAssetPath(g)))
                     .FirstOrDefault(c => c != null);
-                var chart = AssetDatabase.FindAssets("t:TextAsset", new[] { folder })
-                    .Select(g => AssetDatabase.GUIDToAssetPath(g))
-                    .Where(p => p.EndsWith(".json"))
-                    .Select(p => AssetDatabase.LoadAssetAtPath<TextAsset>(p))
-                    .FirstOrDefault(t => t != null);
+                TextAsset beat = null;
+                TextAsset glory = null;
+                foreach (var jsonPath in AssetDatabase.FindAssets("t:TextAsset", new[] { folder })
+                             .Select(g => AssetDatabase.GUIDToAssetPath(g))
+                             .Where(p => p.EndsWith(".json")))
+                {
+                    var text = AssetDatabase.LoadAssetAtPath<TextAsset>(jsonPath);
+                    if (text == null) continue;
+                    string body = text.text ?? "";
+                    if (body.Contains("\"noteforge-chart\"")) glory = text;
+                    else if (beat == null) beat = text;
+                }
 
                 string path = $"{StagesFolder}/{folderName}.asset";
                 var stage = AssetDatabase.LoadAssetAtPath<StageData>(path);
@@ -89,10 +96,11 @@ namespace Gstarr.EditorTools
                     AssetDatabase.CreateAsset(stage, path);
                 }
 
-                if (stage.music != clip || stage.beatChart != chart)
+                if (stage.music != clip || stage.beatChart != beat || stage.gloryChart != glory)
                 {
                     stage.music = clip;
-                    stage.beatChart = chart;
+                    stage.beatChart = beat;
+                    stage.gloryChart = glory;
                     EditorUtility.SetDirty(stage);
                 }
 

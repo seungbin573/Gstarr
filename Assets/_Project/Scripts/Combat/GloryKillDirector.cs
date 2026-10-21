@@ -38,7 +38,6 @@ namespace Gstarr.Combat
         private CameraFollow2D cameraFollow;
         private int[] order;
         private long[] beats;
-        private bool[] hit;
         private int index;
         private float travel = 1.05f;
         private float endTimer = -1f;
@@ -82,30 +81,47 @@ namespace Gstarr.Combat
             sequenceStart = Time.unscaledTimeAsDouble;
             IsRunning = true;
 
-            order = new[] { 0, 1, 2, 3 };
-            for (int i = 0; i < order.Length; i++)
+            order = LoadOrder();
+            if (order == null || order.Length == 0)
             {
-                int j = Random.Range(i, order.Length);
-                (order[i], order[j]) = (order[j], order[i]);
+                IsRunning = false;
+                return;
             }
 
-            beats = new long[4];
-            hit = new bool[4];
+            beats = new long[order.Length];
             if (conductor != null && conductor.IsReady)
             {
-                long first = conductor.FirstBeatAtOrAfter(conductor.SongTime + 0.45);
-                for (int i = 0; i < 4; i++) beats[i] = first + i;
-                travel = Mathf.Max(0.55f, conductor.CountdownInterval * 1.6f);
+                // 정박만. 반박은 건너뛰고, JSON 시각은 쓰지 않는다.
+                long first = conductor.FirstBeatAtOrAfter(conductor.SongTime + 0.3);
+                for (int i = 0; i < order.Length; i++) beats[i] = first + i;
+                travel = Mathf.Max(0.35f, conductor.CountdownInterval);
             }
             else
             {
-                for (int i = 0; i < 4; i++) beats[i] = i;
+                for (int i = 0; i < order.Length; i++) beats[i] = i;
+                travel = 0.6f;
             }
 
             enemy.BeginGlory();
             GamePause.SetGloryKill(true);
             if (cameraFollow != null) cameraFollow.BeginFocus(enemy.transform, 3.1f);
             BuildUi();
+        }
+
+        /// <summary>스테이지의 noteforge 차트를 순서대로. 없으면 네 방향 한 번씩.</summary>
+        private static int[] LoadOrder()
+        {
+            var stage = StageSession.Current;
+            var parsed = stage != null ? GloryChart.Load(stage.gloryChart) : null;
+            if (parsed != null && parsed.Length > 0) return parsed;
+
+            var fallback = new[] { 0, 1, 2, 3 };
+            for (int i = 0; i < fallback.Length; i++)
+            {
+                int j = Random.Range(i, fallback.Length);
+                (fallback[i], fallback[j]) = (fallback[j], fallback[i]);
+            }
+            return fallback;
         }
 
         private void BuildUi()
@@ -153,7 +169,7 @@ namespace Gstarr.Combat
 
         private void PlaceNote()
         {
-            if (index >= 4 || note == null) return;
+            if (index >= order.Length || note == null) return;
             var face = Faces[order[index]];
             double remain = Remaining(index);
             float dist = Mathf.Clamp01((float)(remain / travel)) * 460f;
@@ -171,12 +187,12 @@ namespace Gstarr.Combat
                 ring.rectTransform.localScale = new Vector3(pulse, pulse, 1f);
             }
 
-            if (remain < -Window()) Fail();
+            if (double.IsInfinity(remain) || remain < -Window()) Fail();
         }
 
         private void ReadButton()
         {
-            if (index >= 4) return;
+            if (order == null || index >= order.Length) return;
             int pressed = PressedFace();
             if (pressed < 0) return;
 
@@ -189,14 +205,13 @@ namespace Gstarr.Combat
                 return;
             }
 
-            hit[index] = true;
             index++;
-            if (index >= 4) Succeed();
+            if (index >= order.Length) Succeed();
         }
 
         private double Remaining(int cue)
         {
-            if (conductor != null && conductor.IsReady)
+            if (conductor != null && conductor.IsReady && cue >= 0 && cue < beats.Length)
                 return conductor.BeatTime(beats[cue]) - conductor.SongTime;
             return sequenceStart + 0.6 + cue * 0.65 - Time.unscaledTimeAsDouble;
         }

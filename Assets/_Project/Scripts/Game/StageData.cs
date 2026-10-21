@@ -19,6 +19,8 @@ namespace Gstarr.Game
         public AudioClip music;
         [Tooltip("(선택) 박자 JSON. 음악 파일 이름 끝에 -118 처럼 BPM 이 있으면 무시됨")]
         public TextAsset beatChart;
+        [Tooltip("글로리 킬 노트 순서 (noteforge-chart). 시간은 무시하고 적힌 순서만 쓴다")]
+        public TextAsset gloryChart;
         [Tooltip("BPM 으로 박자를 만들 때 첫 박자 위치 (초). 노래 앞에 무음이 있으면 조정")]
         public float firstBeatOffset;
 
