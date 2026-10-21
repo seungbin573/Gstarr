@@ -1,21 +1,22 @@
 using System;
-using Gstarr.Combat;
 using Gstarr.Items;
 using UnityEngine;
 
 namespace Gstarr.UI
 {
     /// <summary>
-    /// 무기/아이템을 바꿀 때 플레이어 옆에 슬롯 캐러셀을 띄움 (야숨 화살 교체 UI 스타일).
-    /// 무기는 머리 위 가로, 아이템은 옆쪽 세로로 슬라이드.
+    /// 아이템을 바꿀 때 플레이어 옆에 슬롯 캐러셀을 띄움 (야숨 화살 교체 UI 스타일).
+    /// 전투 아이템은 옆쪽 세로, 효과 아이템은 머리 위 가로로 슬라이드.
     /// </summary>
     public class EquipmentSelectorView : MonoBehaviour
     {
         public const string ArtFolder = "Assets/arts";
 
         [SerializeField] private Sprite slotSprite;
-        [SerializeField] private Vector2 weaponOffset = new Vector2(0f, 1.9f);
-        [SerializeField] private Vector2 itemOffset = new Vector2(1.5f, 0.2f);
+        [Tooltip("전투 아이템 (위/아래) 세로 슬롯 위치")]
+        [SerializeField] private Vector2 combatOffset = new Vector2(1.5f, 0.2f);
+        [Tooltip("효과 아이템 (좌/우) 가로 슬롯 위치")]
+        [SerializeField] private Vector2 effectOffset = new Vector2(0f, 1.9f);
         [SerializeField] private float slotSpacing = 1.35f;
         [SerializeField] private float iconSize = 0.9f;
         [Tooltip("마지막 교체 후 UI가 떠 있는 시간")]
@@ -25,49 +26,47 @@ namespace Gstarr.UI
         [SerializeField] private int sortingOrder = 50;
         [SerializeField] private Color selectedTint = new Color(1f, 0.92f, 0.55f);
 
-        private PlayerCombat combat;
         private PlayerInventory inventory;
         private Transform root;
-        private Carousel weaponCarousel;
-        private Carousel itemCarousel;
+        private Carousel combatCarousel;
+        private Carousel effectCarousel;
         private Font font;
 
         private void Awake()
         {
-            combat = GetComponent<PlayerCombat>();
             inventory = GetComponent<PlayerInventory>();
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
-            root = new GameObject("EquipmentSelector").transform;
+            root = new GameObject("ItemSelector").transform;
 
-            if (combat != null)
+            if (inventory == null)
             {
-                weaponCarousel = new Carousel(this, "Weapons", weaponOffset, Vector2.right,
-                    () => combat.Weapons.Count,
-                    i => combat.Weapons[i].sprite,
-                    i => combat.Weapons[i].name,
-                    _ => 0);
+                Debug.LogWarning("[EquipmentSelectorView] PlayerInventory 가 없어 아이템 UI를 표시할 수 없습니다.", this);
+                return;
             }
+            if (slotSprite == null)
+                Debug.LogWarning("[EquipmentSelectorView] Slot Sprite 가 비어있습니다 (Assets/arts/UI/Slot.png).", this);
 
-            if (inventory != null)
-            {
-                itemCarousel = new Carousel(this, "Items", itemOffset, Vector2.down,
-                    () => inventory.Items.Count,
-                    i => inventory.Items[i].item.Icon,
-                    i => inventory.Items[i].item.DisplayName,
-                    i => inventory.Items[i].count);
-            }
+            combatCarousel = CreateCarousel(ItemCategory.Combat, "CombatItems", combatOffset, Vector2.down);
+            effectCarousel = CreateCarousel(ItemCategory.Effect, "EffectItems", effectOffset, Vector2.right);
+        }
+
+        private Carousel CreateCarousel(ItemCategory category, string name, Vector2 offset, Vector2 axis)
+        {
+            return new Carousel(this, name, offset, axis,
+                () => inventory.GetItems(category).Count,
+                i => inventory.GetItems(category)[i].item.Icon,
+                i => inventory.GetItems(category)[i].item.DisplayName,
+                i => inventory.GetItems(category)[i].count);
         }
 
         private void OnEnable()
         {
-            if (combat != null) combat.WeaponChanged += OnWeaponChanged;
             if (inventory != null) inventory.SelectionChanged += OnItemChanged;
         }
 
         private void OnDisable()
         {
-            if (combat != null) combat.WeaponChanged -= OnWeaponChanged;
             if (inventory != null) inventory.SelectionChanged -= OnItemChanged;
         }
 
@@ -76,32 +75,29 @@ namespace Gstarr.UI
             if (root != null) Destroy(root.gameObject);
         }
 
-        private void OnWeaponChanged(int index, int delta)
+        private void OnItemChanged(ItemCategory category, int index, int delta)
         {
-            weaponCarousel?.Show(index, delta);
-            itemCarousel?.HideImmediate();
-        }
+            var shown = category == ItemCategory.Combat ? combatCarousel : effectCarousel;
+            var other = category == ItemCategory.Combat ? effectCarousel : combatCarousel;
+            if (shown == null) return;
 
-        private void OnItemChanged(int index, int delta)
-        {
-            if (itemCarousel == null) return;
-            if (delta == 0)
+            // 획득 등 목록만 바뀐 경우: 이미 떠 있을 때만 갱신
+            if (delta == 0 && inventory.ActiveCategory != category)
             {
-                itemCarousel.SetCenter(index);
+                shown.SetCenter(index);
                 return;
             }
-            itemCarousel.Show(index, delta);
-            weaponCarousel?.HideImmediate();
+            shown.Show(index, delta);
+            other?.HideImmediate();
         }
 
         private void LateUpdate()
         {
             root.position = transform.position;
             float dt = Time.deltaTime;
-            weaponCarousel?.Tick(dt);
-            itemCarousel?.Tick(dt);
+            combatCarousel?.Tick(dt);
+            effectCarousel?.Tick(dt);
         }
-
         private class Slot
         {
             public Transform transform;

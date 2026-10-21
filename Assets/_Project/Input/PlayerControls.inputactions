@@ -69,7 +69,7 @@
                     "initialStateCheck": false
                 },
                 {
-                    "name": "PrevItem",
+                    "name": "PrevCombatItem",
                     "type": "Button",
                     "id": "8f1d3a52-6c1e-4b7a-9d3e-2a5b7c9e1f09",
                     "expectedControlType": "Button",
@@ -78,9 +78,27 @@
                     "initialStateCheck": false
                 },
                 {
-                    "name": "NextItem",
+                    "name": "NextCombatItem",
                     "type": "Button",
                     "id": "8f1d3a52-6c1e-4b7a-9d3e-2a5b7c9e1f0a",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "PrevEffectItem",
+                    "type": "Button",
+                    "id": "8f1d3a52-6c1e-4b7a-9d3e-2a5b7c9e1f0b",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "NextEffectItem",
+                    "type": "Button",
+                    "id": "8f1d3a52-6c1e-4b7a-9d3e-2a5b7c9e1f0c",
                     "expectedControlType": "Button",
                     "processors": "",
                     "interactions": "",
@@ -245,7 +263,7 @@
                 {
                     "name": "",
                     "id": "8f1d3a52-6c1e-4b7a-9d3e-2a5b7c9e1f60",
-                    "path": "<Gamepad>/dpad/left",
+                    "path": "<Gamepad>/leftShoulder",
                     "interactions": "",
                     "processors": "",
                     "groups": "Gamepad",
@@ -267,7 +285,7 @@
                 {
                     "name": "",
                     "id": "8f1d3a52-6c1e-4b7a-9d3e-2a5b7c9e1f70",
-                    "path": "<Gamepad>/dpad/right",
+                    "path": "<Gamepad>/rightShoulder",
                     "interactions": "",
                     "processors": "",
                     "groups": "Gamepad",
@@ -293,7 +311,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Gamepad",
-                    "action": "PrevItem",
+                    "action": "PrevCombatItem",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -304,7 +322,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard",
-                    "action": "PrevItem",
+                    "action": "PrevCombatItem",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -315,7 +333,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Gamepad",
-                    "action": "NextItem",
+                    "action": "NextCombatItem",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -326,7 +344,51 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard",
-                    "action": "NextItem",
+                    "action": "NextCombatItem",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "8f1d3a52-6c1e-4b7a-9d3e-2a5b7c9e1fa0",
+                    "path": "<Gamepad>/dpad/left",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "PrevEffectItem",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "8f1d3a52-6c1e-4b7a-9d3e-2a5b7c9e1fa1",
+                    "path": "<Keyboard>/t",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard",
+                    "action": "PrevEffectItem",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "8f1d3a52-6c1e-4b7a-9d3e-2a5b7c9e1fb0",
+                    "path": "<Gamepad>/dpad/right",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "NextEffectItem",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "8f1d3a52-6c1e-4b7a-9d3e-2a5b7c9e1fb1",
+                    "path": "<Keyboard>/g",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard",
+                    "action": "NextEffectItem",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

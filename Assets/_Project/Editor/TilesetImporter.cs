@@ -150,7 +150,7 @@ namespace Gstarr.EditorTools
             importer.SaveAndReimport();
         }
 
-        private static string BuildPalette(string paletteName, Tile[] tiles, int cols)
+        public static string BuildPalette(string paletteName, TileBase[] tiles, int cols)
         {
             EnsureFolder(PaletteFolder);
             string palettePath = $"{PaletteFolder}/{paletteName}.prefab";

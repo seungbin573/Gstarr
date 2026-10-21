@@ -90,6 +90,10 @@ namespace Gstarr.Combat
         private const float SwingEndAngle = -70f;
         private const float RecoilKickDistance = 0.12f;
         private const float RecoilRecoverSpeed = 1.2f;
+        private const float LiftDuration = 0.28f;
+        private const float LiftHeight = 0.22f;
+        private const float LiftAngle = 35f;
+        private const float LiftScalePop = 0.15f;
 
         private PlayerController controller;
         private Rigidbody2D rb;
@@ -103,6 +107,7 @@ namespace Gstarr.Combat
         private float cooldownTimer;
         private float swingTimer;
         private float recoilKick;
+        private float liftTimer;
         private Sprite fallbackSprite;
 
         private void Awake()
@@ -133,10 +138,10 @@ namespace Gstarr.Combat
             attackAction.AddBinding("<Gamepad>/buttonEast");
             attackAction.AddBinding("<Keyboard>/c");
             prevAction = ownedActionMap.AddAction("PrevWeapon", InputActionType.Button);
-            prevAction.AddBinding("<Gamepad>/dpad/left");
+            prevAction.AddBinding("<Gamepad>/leftShoulder");
             prevAction.AddBinding("<Keyboard>/q");
             nextAction = ownedActionMap.AddAction("NextWeapon", InputActionType.Button);
-            nextAction.AddBinding("<Gamepad>/dpad/right");
+            nextAction.AddBinding("<Gamepad>/rightShoulder");
             nextAction.AddBinding("<Keyboard>/e");
         }
 
@@ -204,7 +209,8 @@ namespace Gstarr.Combat
             swingTimer = 0f;
             recoilKick = 0f;
             currentIndex = (currentIndex + delta + weapons.Length) % weapons.Length;
-            cooldownTimer = Mathf.Min(cooldownTimer, 0.1f);
+            cooldownTimer = Mathf.Max(cooldownTimer, LiftDuration * 0.5f);
+            liftTimer = LiftDuration;
             ApplyWeaponVisual();
             WeaponChanged?.Invoke(currentIndex, delta);
         }
@@ -222,6 +228,7 @@ namespace Gstarr.Combat
         {
             var w = CurrentWeapon;
             float angle = 0f;
+            float lift = 0f;
 
             if (swingTimer > 0f)
             {
@@ -229,12 +236,21 @@ namespace Gstarr.Combat
                 float t = 1f - Mathf.Clamp01(swingTimer / SwingDuration);
                 angle = Mathf.Lerp(SwingStartAngle, SwingEndAngle, 1f - (1f - t) * (1f - t));
             }
+            else if (liftTimer > 0f)
+            {
+                // 교체한 무기를 살짝 들어올렸다가 제자리로
+                liftTimer -= dt;
+                float t = 1f - Mathf.Clamp01(liftTimer / LiftDuration);
+                lift = Mathf.Sin(t * Mathf.PI) * (1f - t * 0.3f);
+                angle = LiftAngle * lift;
+            }
 
             recoilKick = Mathf.MoveTowards(recoilKick, 0f, RecoilRecoverSpeed * dt);
 
             // 부모(플레이어)의 localScale.x 반전으로 좌우가 자동으로 뒤집히므로 오른쪽 기준으로만 계산
-            weaponPivot.localPosition = w.holdOffset + new Vector2(-recoilKick, 0f);
+            weaponPivot.localPosition = w.holdOffset + new Vector2(-recoilKick, LiftHeight * lift);
             weaponPivot.localRotation = Quaternion.Euler(0f, 0f, angle);
+            weaponPivot.localScale = Vector3.one * (1f + LiftScalePop * lift);
         }
 
         private void TryAttack()

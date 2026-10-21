@@ -4,7 +4,6 @@ using Gstarr.CameraSystem;
 using Gstarr.Combat;
 using Gstarr.Items;
 using Gstarr.Player;
-using Gstarr.UI;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -22,9 +21,6 @@ namespace Gstarr.EditorTools
         private const string PlayerSpritePath = PlaceholderFolder + "/PlaceholderPlayer.png";
         private const string NoFrictionPath = ProjectRoot + "/Physics/NoFriction.physicsMaterial2D";
         private const string InputActionsPath = ProjectRoot + "/Input/PlayerControls.inputactions";
-        private const string PotionItemPath = ProjectRoot + "/Items/Potion.asset";
-        private const string PotionIconPath = "Assets/arts/Items/Potion.png";
-        private const string SlotSpritePath = "Assets/arts/UI/Slot.png";
         private const string TemplateScenePath = "Assets/Settings/Scenes/URP2DSceneTemplate.unity";
         private const string ScenesFolder = "Assets/Scenes";
 
@@ -74,7 +70,17 @@ namespace Gstarr.EditorTools
             CreateDummy(playerSprite, new Vector3(15f, -0.25f, 0f));
             CreateDummy(playerSprite, new Vector3(24f, 4.75f, 0f));
 
-            CreatePickup(GetOrCreatePotion(), new Vector3(5.5f, 2.6f, 0f));
+            ItemTools.EnsureDefaultItems();
+            ItemTools.BuildItemTiles();
+            var itemTilemap = ItemTools.EnsureItemTilemap(grid.transform);
+            foreach (var item in AssetDatabase.FindAssets("t:ItemData")
+                         .Select(g => AssetDatabase.LoadAssetAtPath<ItemData>(AssetDatabase.GUIDToAssetPath(g)))
+                         .Where(i => i != null))
+            {
+                // 발판 위에 전투 아이템, 그 옆에 효과 아이템
+                int x = item.Category == ItemCategory.Combat ? 5 : 6;
+                itemTilemap.SetTile(new Vector3Int(x, 2, 0), ItemTools.GetOrCreateTile(item));
+            }
 
             Selection.activeGameObject = ground.gameObject;
 
@@ -193,64 +199,9 @@ namespace Gstarr.EditorTools
             combat.AssignDefaultArt();
             EditorUtility.SetDirty(combat);
 
-            var health = go.AddComponent<Health>();
-            var healthSo = new SerializedObject(health);
-            healthSo.FindProperty("destroyOnDeath").boolValue = false;
-            healthSo.ApplyModifiedPropertiesWithoutUndo();
-
-            var inventory = go.AddComponent<PlayerInventory>();
-            var invSo = new SerializedObject(inventory);
-            invSo.FindProperty("inputActions").objectReferenceValue =
-                AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath);
-            var items = invSo.FindProperty("items");
-            items.arraySize = 1;
-            items.GetArrayElementAtIndex(0).FindPropertyRelative("item").objectReferenceValue = GetOrCreatePotion();
-            items.GetArrayElementAtIndex(0).FindPropertyRelative("count").intValue = 3;
-            invSo.ApplyModifiedPropertiesWithoutUndo();
-
-            var selector = go.AddComponent<EquipmentSelectorView>();
-            var selectorSo = new SerializedObject(selector);
-            selectorSo.FindProperty("slotSprite").objectReferenceValue =
-                AssetDatabase.LoadAssetAtPath<Sprite>(SlotSpritePath);
-            selectorSo.ApplyModifiedPropertiesWithoutUndo();
+            ItemTools.SetupPlayer(go);
 
             return go;
-        }
-
-        private static ItemData GetOrCreatePotion()
-        {
-            var potion = AssetDatabase.LoadAssetAtPath<HealItem>(PotionItemPath);
-            if (potion != null) return potion;
-
-            TilesetImporter.EnsureFolder(Path.GetDirectoryName(PotionItemPath).Replace('\\', '/'));
-            potion = ScriptableObject.CreateInstance<HealItem>();
-            AssetDatabase.CreateAsset(potion, PotionItemPath);
-
-            var so = new SerializedObject(potion);
-            so.FindProperty("displayName").stringValue = "Potion";
-            so.FindProperty("icon").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Sprite>(PotionIconPath);
-            so.ApplyModifiedPropertiesWithoutUndo();
-            AssetDatabase.SaveAssets();
-            return potion;
-        }
-
-        private static void CreatePickup(ItemData item, Vector3 position)
-        {
-            var go = new GameObject($"Pickup ({item.name})");
-            go.transform.position = position;
-
-            var sr = go.AddComponent<SpriteRenderer>();
-            sr.sprite = item.Icon;
-            sr.sortingOrder = 4;
-
-            var circle = go.AddComponent<CircleCollider2D>();
-            circle.isTrigger = true;
-            circle.radius = 0.4f;
-
-            var pickup = go.AddComponent<ItemPickup>();
-            var so = new SerializedObject(pickup);
-            so.FindProperty("item").objectReferenceValue = item;
-            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static void CreateDummy(Sprite sprite, Vector3 position)

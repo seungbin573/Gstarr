@@ -13,6 +13,26 @@ namespace Gstarr.Items
 
         private Vector3 startPos;
 
+        /// <summary>런타임에 픽업 오브젝트 생성 (타일 배치 등에서 사용)</summary>
+        public static ItemPickup Spawn(ItemData item, int count, Vector3 position, int sortingOrder = 4)
+        {
+            var go = new GameObject($"Pickup ({item.name})");
+            go.transform.position = position;
+
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = item.Icon;
+            sr.sortingOrder = sortingOrder;
+
+            var circle = go.AddComponent<CircleCollider2D>();
+            circle.isTrigger = true;
+            circle.radius = 0.4f;
+
+            var pickup = go.AddComponent<ItemPickup>();
+            pickup.item = item;
+            pickup.count = count;
+            return pickup;
+        }
+
         private void Reset()
         {
             GetComponent<Collider2D>().isTrigger = true;
