@@ -11,6 +11,15 @@ namespace Gstarr.Items
         public ItemData[] defaultItems;
         public int defaultItemCount = 3;
 
+        [Header("Rhythm")]
+        [Tooltip("끄면 박자 판정 없이 점프/대쉬/아이템을 자유롭게 사용")]
+        public bool enableRhythm = true;
+        public AudioClip music;
+        [Tooltip("박자 정보 JSON (kickforge-chart)")]
+        public TextAsset beatChart;
+        public Sprite beatNoteSprite;
+        public Sprite beatCenterSprite;
+
         private static GameAssets instance;
 
         public static GameAssets Instance =>

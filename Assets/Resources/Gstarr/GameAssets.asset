@@ -17,3 +17,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: f888e0b9c158e9e439ce1a8ebd51fa23, type: 2}
   - {fileID: 11400000, guid: 16012a79a866dd64995870b4a78e16a9, type: 2}
   defaultItemCount: 3
+  enableRhythm: 1
+  music: {fileID: 8300000, guid: 4d5cef3ed3d00b144856b26669a96d19, type: 3}
+  beatChart: {fileID: 4900000, guid: 0c4f7be93731d5c4f8003975ea514c39, type: 3}
+  beatNoteSprite: {fileID: 21300000, guid: e77fad0aeada406b935f573a4fa468e0, type: 3}
+  beatCenterSprite: {fileID: 21300000, guid: 63a9305d1e1248939eb22540552d0caa, type: 3}

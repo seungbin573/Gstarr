@@ -1,0 +1,89 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Gstarr.Rhythm
+{
+    /// <summary>kickforge-chart JSON 에서 박자 시각(초)만 뽑아낸 정렬된 목록.</summary>
+    public class BeatChart
+    {
+        public double[] Beats { get; private set; }
+        public float Bpm { get; private set; }
+        public double Duration { get; private set; }
+
+        public static BeatChart Parse(string json)
+        {
+            var raw = JsonUtility.FromJson<ChartJson>(json);
+            var times = new List<double>();
+
+            if (raw.tracks != null)
+            {
+                if (raw.tracks.kicks != null)
+                    foreach (var b in raw.tracks.kicks) times.Add(b.timeSeconds);
+                if (raw.tracks.nonKickBeats != null)
+                    foreach (var b in raw.tracks.nonKickBeats) times.Add(b.timeSeconds);
+            }
+
+            // 비트 목록이 비어 있으면 BPM 으로 그리드 생성
+            if (times.Count == 0 && raw.timing != null && raw.timing.bpm > 0f && raw.audio != null)
+            {
+                double interval = 60.0 / raw.timing.bpm;
+                for (double t = raw.timing.firstBeatSeconds; t < raw.audio.duration; t += interval)
+                    times.Add(t);
+            }
+
+            times.Sort();
+            for (int i = times.Count - 1; i > 0; i--)
+                if (times[i] - times[i - 1] < 0.001) times.RemoveAt(i);
+
+            return new BeatChart
+            {
+                Beats = times.ToArray(),
+                Bpm = raw.timing != null ? raw.timing.bpm : 0f,
+                Duration = raw.audio != null ? raw.audio.duration : 0.0
+            };
+        }
+
+        /// <summary>t 이상인 첫 박자의 인덱스 (없으면 Beats.Length)</summary>
+        public int LowerBound(double t)
+        {
+            int lo = 0, hi = Beats.Length;
+            while (lo < hi)
+            {
+                int mid = (lo + hi) >> 1;
+                if (Beats[mid] < t) lo = mid + 1;
+                else hi = mid;
+            }
+            return lo;
+        }
+
+        [Serializable] private class ChartJson
+        {
+            public AudioJson audio;
+            public TimingJson timing;
+            public TracksJson tracks;
+        }
+
+        [Serializable] private class AudioJson
+        {
+            public double duration;
+        }
+
+        [Serializable] private class TimingJson
+        {
+            public float bpm;
+            public double firstBeatSeconds;
+        }
+
+        [Serializable] private class TracksJson
+        {
+            public BeatJson[] kicks;
+            public BeatJson[] nonKickBeats;
+        }
+
+        [Serializable] private class BeatJson
+        {
+            public double timeSeconds;
+        }
+    }
+}

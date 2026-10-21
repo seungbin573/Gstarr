@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Gstarr.Rhythm;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -118,7 +119,10 @@ namespace Gstarr.Items
             if (nextCombat.WasPressedThisFrame()) Select(ItemCategory.Combat, 1);
             if (prevEffect.WasPressedThisFrame()) Select(ItemCategory.Effect, -1);
             if (nextEffect.WasPressedThisFrame()) Select(ItemCategory.Effect, 1);
-            if (useAction.WasPressedThisFrame()) UseSelected();
+            // 쓸 아이템이 있을 때만 박자 판정 (빈 손으로 누른 건 미스 처리하지 않음)
+            if (useAction.WasPressedThisFrame() && GetSelected(ActiveCategory) != null && cooldownTimer <= 0f
+                && BeatGate.TryAct(BeatAction.UseItem))
+                UseSelected();
         }
 
         public void Select(ItemCategory category, int delta)

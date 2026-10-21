@@ -1,3 +1,4 @@
+using Gstarr.Rhythm;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -159,7 +160,7 @@ namespace Gstarr.Player
             if (moveInput.x != 0f && !IsDashing)
                 FacingDirection = moveInput.x > 0f ? 1 : -1;
 
-            if (jumpAction.WasPressedThisFrame())
+            if (jumpAction.WasPressedThisFrame() && BeatGate.TryAct(BeatAction.Jump))
                 jumpBufferTimer = jumpBufferTime;
             else
                 jumpBufferTimer -= Time.deltaTime;
@@ -167,7 +168,7 @@ namespace Gstarr.Player
             if (jumpAction.WasReleasedThisFrame())
                 jumpCutRequested = true;
 
-            if (dashAction.WasPressedThisFrame())
+            if (dashAction.WasPressedThisFrame() && BeatGate.TryAct(BeatAction.Dash))
                 dashRequested = true;
 
             UpdateFacingVisual();
