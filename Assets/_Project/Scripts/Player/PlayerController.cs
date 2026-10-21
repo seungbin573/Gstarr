@@ -105,6 +105,8 @@ namespace Gstarr.Player
 
         private void SetupInput()
         {
+            if (inputActions == null && Gstarr.Items.GameAssets.Instance != null)
+                inputActions = Gstarr.Items.GameAssets.Instance.inputActions;
             if (inputActions != null)
             {
                 var map = inputActions.FindActionMap("Player", throwIfNotFound: true);

@@ -8,8 +8,10 @@ namespace Gstarr.Rhythm
     public class BeatChart
     {
         public double[] Beats { get; private set; }
-        /// <summary>박자 사이 반박 (표시용)</summary>
+        /// <summary>박자 사이 반박</summary>
         public double[] HalfBeats { get; private set; }
+        /// <summary>판정에 쓰는 박자 + 반박 합친 목록</summary>
+        public double[] JudgeTimes { get; private set; }
         public float Bpm { get; private set; }
         public double Duration { get; private set; }
 
@@ -43,9 +45,16 @@ namespace Gstarr.Rhythm
                 foreach (var b in raw.tracks.halfBeats) halves.Add(b.timeSeconds);
             halves.Sort();
 
+            var judge = new List<double>(times);
+            judge.AddRange(halves);
+            judge.Sort();
+            for (int i = judge.Count - 1; i > 0; i--)
+                if (judge[i] - judge[i - 1] < 0.001) judge.RemoveAt(i);
+
             return new BeatChart
             {
                 Beats = times.ToArray(),
+                JudgeTimes = judge.ToArray(),
                 HalfBeats = halves.ToArray(),
                 Bpm = raw.timing != null ? raw.timing.bpm : 0f,
                 Duration = raw.audio != null ? raw.audio.duration : 0.0

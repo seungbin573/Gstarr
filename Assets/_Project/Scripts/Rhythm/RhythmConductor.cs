@@ -35,7 +35,8 @@ namespace Gstarr.Rhythm
         [SerializeField] private float volume = 0.8f;
         [Tooltip("씬 시작 후 음악이 시작되기까지의 대기 시간 (초)")]
         [SerializeField] private float startDelay = 1f;
-        [SerializeField] private bool loop = true;
+        [Tooltip("끄면 음악이 끝날 때 Finished 이벤트 (게임 오버)")]
+        [SerializeField] private bool loop = false;
 
         [Header("판정")]
         [Tooltip("입력/출력 지연 보정 (ms). 판정이 늦게 느껴지면 +, 빠르게 느껴지면 -")]
@@ -47,6 +48,14 @@ namespace Gstarr.Rhythm
         public event Action<long> Beat;
         /// <summary>입력 판정 (행동, 판정, 오차 초: 음수 = 빠름)</summary>
         public event Action<BeatAction, BeatJudgement, double> Judged;
+        /// <summary>루프하지 않는 곡이 끝났을 때</summary>
+        public event Action Finished;
+
+        public bool IsFinished { get; private set; }
+        /// <summary>곡 진행도 0~1</summary>
+        public float Progress => loopLength > 0 ? Mathf.Clamp01((float)(SongTime / loopLength)) : 0f;
+        public double Length => loopLength;
+        public AudioClip Music => music;
 
         public BeatChart Chart { get; private set; }
         /// <summary>음악 시작 기준 누적 시간 (루프해도 계속 증가). 시작 전에는 음수.</summary>
@@ -66,14 +75,21 @@ namespace Gstarr.Rhythm
         private static void Bootstrap()
         {
             if (FindAnyObjectByType<RhythmConductor>() != null) return;
+            if (FindAnyObjectByType<Gstarr.Game.MainMenu>() != null) return;
             var assets = GameAssets.Instance;
-            if (assets == null || !assets.enableRhythm || assets.music == null || assets.beatChart == null) return;
+            if (assets == null || !assets.enableRhythm) return;
+
+            // 메뉴에서 고른 스테이지가 있으면 그 곡, 없으면 GameAssets 기본 곡
+            var stage = Gstarr.Game.StageSession.Current;
+            var clip = stage != null && stage.music != null ? stage.music : assets.music;
+            var chart = stage != null && stage.beatChart != null ? stage.beatChart : assets.beatChart;
+            if (clip == null || chart == null) return;
 
             var go = new GameObject("RhythmConductor");
             go.SetActive(false);
             var conductor = go.AddComponent<RhythmConductor>();
-            conductor.music = assets.music;
-            conductor.chartJson = assets.beatChart;
+            conductor.music = clip;
+            conductor.chartJson = chart;
             go.SetActive(true);
         }
 
@@ -93,6 +109,7 @@ namespace Gstarr.Rhythm
             if (GetComponent<BeatBarUI>() == null) gameObject.AddComponent<BeatBarUI>();
             if (GetComponent<ComboSystem>() == null) gameObject.AddComponent<ComboSystem>();
             if (GetComponent<ComboUI>() == null) gameObject.AddComponent<ComboUI>();
+            if (GetComponent<Gstarr.Game.StageHUD>() == null) gameObject.AddComponent<Gstarr.Game.StageHUD>();
         }
 
         private void OnDestroy()
@@ -123,7 +140,8 @@ namespace Gstarr.Rhythm
 
         private void Update()
         {
-            if (!IsReady) return;
+            if (!IsReady || IsFinished) return;
+            source.volume = volume * Gstarr.Game.GameSettings.MusicVolume;
 
             // dspTime 은 오디오 버퍼 단위로만 갱신되므로 실시간 시계로 부드럽게 진행하고 dsp 에 천천히 맞춤
             double dspT = AudioSettings.dspTime - dspStart;
@@ -137,54 +155,53 @@ namespace Gstarr.Rhythm
                 Beat?.Invoke(nextBeat);
                 nextBeat++;
             }
+
+            if (!loop && SongTime >= loopLength)
+            {
+                IsFinished = true;
+                source.Stop();
+                Finished?.Invoke();
+            }
         }
 
         /// <summary>절대 박자 번호의 시각. 루프하지 않고 곡이 끝났으면 무한대.</summary>
-        public double BeatTime(long absBeat)
-        {
-            if (!IsReady || absBeat < 0) return double.NegativeInfinity;
-            int n = Chart.Beats.Length;
-            long lap = absBeat / n;
-            if (lap > 0 && !loop) return double.PositiveInfinity;
-            return lap * loopLength + Chart.Beats[absBeat % n];
-        }
+        public double BeatTime(long absBeat) => TimeAt(Chart?.Beats, absBeat);
 
         /// <summary>t 이상인 첫 박자 번호</summary>
-        public long FirstBeatAtOrAfter(double t)
-        {
-            if (!IsReady) return 0;
-            int n = Chart.Beats.Length;
-            long lap = t <= 0 ? 0 : (long)(t / loopLength);
-            int i = Chart.LowerBound(t - lap * loopLength);
-            return lap * n + i;
-        }
+        public long FirstBeatAtOrAfter(double t) => FirstAtOrAfter(Chart?.Beats, t);
 
         /// <summary>반박 절대 번호의 시각</summary>
-        public double HalfBeatTime(long absIndex)
-        {
-            if (!IsReady || absIndex < 0 || Chart.HalfBeats.Length == 0) return double.NegativeInfinity;
-            int n = Chart.HalfBeats.Length;
-            long lap = absIndex / n;
-            if (lap > 0 && !loop) return double.PositiveInfinity;
-            return lap * loopLength + Chart.HalfBeats[absIndex % n];
-        }
+        public double HalfBeatTime(long absIndex) => TimeAt(Chart?.HalfBeats, absIndex);
 
         /// <summary>t 이상인 첫 반박 번호</summary>
-        public long FirstHalfBeatAtOrAfter(double t)
+        public long FirstHalfBeatAtOrAfter(double t) => FirstAtOrAfter(Chart?.HalfBeats, t);
+
+        private double TimeAt(double[] arr, long absIndex)
         {
-            if (!IsReady || Chart.HalfBeats.Length == 0) return 0;
-            int n = Chart.HalfBeats.Length;
+            if (!IsReady || arr == null || arr.Length == 0 || absIndex < 0) return double.NegativeInfinity;
+            int n = arr.Length;
+            long lap = absIndex / n;
+            if (lap > 0 && !loop) return double.PositiveInfinity;
+            return lap * loopLength + arr[absIndex % n];
+        }
+
+        private long FirstAtOrAfter(double[] arr, double t)
+        {
+            if (!IsReady || arr == null || arr.Length == 0) return 0;
+            int n = arr.Length;
             long lap = t <= 0 ? 0 : (long)(t / loopLength);
-            int i = BeatChart.LowerBound(Chart.HalfBeats, t - lap * loopLength);
+            int i = BeatChart.LowerBound(arr, t - lap * loopLength);
             return lap * n + i;
         }
 
-        public long NearestBeat(double t, out double error)
+        /// <summary>박자 + 반박 중 가장 가까운 판정 지점</summary>
+        public long NearestJudgePoint(double t, out double error)
         {
-            long after = FirstBeatAtOrAfter(t);
+            var arr = Chart.JudgeTimes;
+            long after = FirstAtOrAfter(arr, t);
             long before = after - 1;
-            double ea = t - BeatTime(after);
-            double eb = before >= 0 ? t - BeatTime(before) : double.PositiveInfinity;
+            double ea = t - TimeAt(arr, after);
+            double eb = before >= 0 ? t - TimeAt(arr, before) : double.PositiveInfinity;
             if (Math.Abs(eb) < Math.Abs(ea))
             {
                 error = eb;
@@ -200,7 +217,7 @@ namespace Gstarr.Rhythm
             if (!IsReady || !enabled) return true;
 
             double t = SongTime - inputOffsetMs * 0.001;
-            long beat = NearestBeat(t, out double error);
+            long beat = NearestJudgePoint(t, out double error);
             double abs = Math.Abs(error);
 
             bool alreadyUsed = lastUsedBeat.TryGetValue(action, out long used) && used == beat;

@@ -137,6 +137,8 @@ namespace Gstarr.Combat
 
         private void SetupInput()
         {
+            if (inputActions == null && GameAssets.Instance != null)
+                inputActions = GameAssets.Instance.inputActions;
             if (inputActions != null)
             {
                 var map = inputActions.FindActionMap("Player", throwIfNotFound: true);

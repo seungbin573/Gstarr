@@ -23,6 +23,13 @@ namespace Gstarr.Items
         [Tooltip("스타일 랭크 이미지 (C, B, A, S 순서)")]
         public Sprite[] rankSprites = new Sprite[4];
 
+        [Header("Game")]
+        [Tooltip("키 설정이 적용되는 공용 입력 에셋")]
+        public UnityEngine.InputSystem.InputActionAsset inputActions;
+        [Tooltip("스테이지에 씬이 지정되지 않았을 때 쓸 기본 스테이지 씬")]
+        public string defaultStageScene = "Level_01";
+        public string mainMenuScene = "MainMenu";
+
         private static GameAssets instance;
 
         public static GameAssets Instance =>

@@ -27,3 +27,6 @@ MonoBehaviour:
   - {fileID: 21300000, guid: ef845078aed44b6cad9cf9d4de204ebc, type: 3}
   - {fileID: 21300000, guid: 9e83c3364a704a5ca1862e770ae7ea32, type: 3}
   - {fileID: 21300000, guid: ce32b26d2479469ca8d65e5de2f79c19, type: 3}
+  inputActions: {fileID: -944628639613478452, guid: 370b398e7338ffa4dacbdc6b7dcf6adc, type: 3}
+  defaultStageScene: Level_01
+  mainMenuScene: MainMenu
