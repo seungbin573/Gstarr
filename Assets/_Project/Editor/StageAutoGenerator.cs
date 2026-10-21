@@ -12,8 +12,8 @@ using UnityEngine.SceneManagement;
 namespace Gstarr.EditorTools
 {
     /// <summary>
-    /// Assets/Music/(폴더) 마다 wav + json 을 찾아 StageData 를 자동 생성/갱신하고,
-    /// MainMenu 씬과 빌드 설정을 맞춘다. 코드 수정 없이 폴더만 추가하면 스테이지가 늘어난다.
+    /// Assets/Music/(?�더) 마다 wav + json ??찾아 StageData �??�동 ?�성/갱신?�고,
+    /// MainMenu ?�과 빌드 ?�정??맞춘?? 코드 ?�정 ?�이 ?�더�?추�??�면 ?�테?��?가 ?�어?�다.
     /// </summary>
     [InitializeOnLoad]
     public class StageAutoGenerator : AssetPostprocessor
@@ -55,7 +55,7 @@ namespace Gstarr.EditorTools
             SyncStages();
             EnsureMainMenuScene();
             SyncBuildSettings();
-            Debug.Log("[Gstarr] 스테이지/메인 메뉴/빌드 설정 동기화 완료");
+            Debug.Log("[Gstarr] ?�테?��?/메인 메뉴/빌드 ?�정 ?�기???�료");
         }
 
         public static void SyncStages()
@@ -70,9 +70,9 @@ namespace Gstarr.EditorTools
                     .Select(g => AssetDatabase.LoadAssetAtPath<AudioClip>(AssetDatabase.GUIDToAssetPath(g)))
                     .FirstOrDefault(c => c != null);
                 var chart = AssetDatabase.FindAssets("t:TextAsset", new[] { folder })
-                    .Select(AssetDatabase.GUIDToAssetPath)
+                    .Select(g => AssetDatabase.GUIDToAssetPath(g))
                     .Where(p => p.EndsWith(".json"))
-                    .Select(AssetDatabase.LoadAssetAtPath<TextAsset>)
+                    .Select(p => AssetDatabase.LoadAssetAtPath<TextAsset>(p))
                     .FirstOrDefault(t => t != null);
 
                 string path = $"{StagesFolder}/{folderName}.asset";
@@ -134,7 +134,7 @@ namespace Gstarr.EditorTools
             foreach (var n in sceneNames)
             {
                 var p = AssetDatabase.FindAssets("t:Scene " + n)
-                    .Select(AssetDatabase.GUIDToAssetPath)
+                    .Select(g => AssetDatabase.GUIDToAssetPath(g))
                     .FirstOrDefault(x => Path.GetFileNameWithoutExtension(x) == n);
                 if (p != null) wanted.Add(p);
             }
