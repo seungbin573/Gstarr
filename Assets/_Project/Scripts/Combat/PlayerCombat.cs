@@ -217,7 +217,7 @@ namespace Gstarr.Combat
 
         private void Update()
         {
-            if (Gstarr.Game.GamePause.IsPaused) return;
+            if (Gstarr.Game.GamePause.BlocksGameplay) return;
             float dt = Time.deltaTime;
             cooldownTimer -= dt;
 
@@ -357,8 +357,6 @@ namespace Gstarr.Combat
 
             var w = CurrentWeapon;
             cooldownTimer = w.fireInterval;
-            // 공격은 박자와 상관없이 나가지만, 새로 누른 순간만 콤보 판정에 들어간다
-            if (attackAction.WasPressedThisFrame()) BeatGate.TryAct(BeatAction.Attack);
             int facing = controller.FacingDirection;
 
             if (w.type == WeaponType.Melee)
@@ -373,8 +371,9 @@ namespace Gstarr.Combat
             var hits = Physics2D.OverlapBoxAll(center, w.meleeSize, 0f, hitMask);
             foreach (var hit in hits)
             {
-                if (hit.TryGetComponent(out IDamageable target))
-                    target.TakeDamage(w.damage, new Vector2(facing, 0.3f));
+                if (hit.transform == transform || hit.transform.IsChildOf(transform)) continue;
+                if (hit.TryGetComponent(out IDamageable target) && target.TakeDamage(w.damage, new Vector2(facing, 0.3f)))
+                    ComboSystem.RegisterHit(hit.gameObject);
             }
 
             swingTimer = SwingDuration;
@@ -404,7 +403,7 @@ namespace Gstarr.Combat
                 float speed = w.projectileSpeed * (w.pellets > 1 ? UnityEngine.Random.Range(0.9f, 1.1f) : 1f);
                 Vector2 dir = new Vector2(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad));
 
-                SpawnProjectile(w, origin).Launch(dir * speed, w.damage, w.range, hitMask);
+                SpawnProjectile(w, origin).Launch(dir * speed, w.damage, w.range, hitMask, gameObject);
             }
 
             recoilKick = RecoilKickDistance;

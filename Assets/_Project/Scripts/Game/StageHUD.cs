@@ -99,7 +99,11 @@ namespace Gstarr.Game
             var stage = StageSession.Current;
             string name = stage != null ? stage.displayName : "";
             var song = conductor.Music;
-            if (song != null) name = string.IsNullOrEmpty(name) ? song.name : name + "  -  " + song.name;
+            if (song != null)
+            {
+                string title = BeatChart.StripBpmSuffix(song.name);
+                name = string.IsNullOrEmpty(name) ? title : name + "  -  " + title;
+            }
             titleText.text = name;
         }
 
@@ -149,8 +153,8 @@ namespace Gstarr.Game
             gameOverPanel.gameObject.SetActive(true);
             gameOverGroup.alpha = 0f;
             gameOverFade = 0f;
-            Time.timeScale = 0f;
-            GamePause.IsPaused = true;
+            GamePause.SetPaused(true);
+            UIFactory.EnsureEventSystem();
             UIFactory.Select(retryButton);
         }
 

@@ -96,6 +96,18 @@ namespace Gstarr.EditorTools
                     EditorUtility.SetDirty(stage);
                 }
 
+                if (clip != null && Gstarr.Rhythm.BeatChart.TryParseBpm(clip.name, out float bpm)
+                    && BeatAnalyzer.TryAnalyze(AssetDatabase.GetAssetPath(clip), bpm, out var analyzed))
+                {
+                    float offset = (float)analyzed.firstBeat;
+                    if (!Mathf.Approximately(stage.firstBeatOffset, offset))
+                    {
+                        stage.firstBeatOffset = offset;
+                        EditorUtility.SetDirty(stage);
+                        Debug.Log($"[Gstarr] {folderName}: ?? ?? {analyzed.songStart:0.000}s, ? ?? {offset:0.000}s ({bpm} BPM)");
+                    }
+                }
+
                 // stageN ?? ? Stage_N ? ?? ?? (?? ?? ?? ??? ??? ??)
                 string autoScene = StageScenePrefix + stage.order;
                 bool autoExists = FindScenePath(autoScene) != null;

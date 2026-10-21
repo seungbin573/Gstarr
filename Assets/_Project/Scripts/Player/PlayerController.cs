@@ -155,7 +155,14 @@ namespace Gstarr.Player
 
         private void Update()
         {
-            if (Gstarr.Game.GamePause.IsPaused) return;
+            if (Gstarr.Game.GamePause.BlocksGameplay)
+            {
+                moveInput = Vector2.zero;
+                jumpBufferTimer = 0f;
+                dashRequested = false;
+                rb.linearVelocity = Vector2.zero;
+                return;
+            }
             moveInput = moveAction.ReadValue<Vector2>();
             if (Mathf.Abs(moveInput.x) < stickDeadZone) moveInput.x = 0f;
             if (Mathf.Abs(moveInput.y) < stickDeadZone) moveInput.y = 0f;
@@ -179,6 +186,14 @@ namespace Gstarr.Player
 
         private void FixedUpdate()
         {
+            if (Gstarr.Game.GamePause.BlocksGameplay)
+            {
+                moveInput = Vector2.zero;
+                jumpBufferTimer = 0f;
+                dashRequested = false;
+                rb.linearVelocity = Vector2.zero;
+                return;
+            }
             float dt = Time.fixedDeltaTime;
 
             CheckGround();

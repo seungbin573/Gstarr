@@ -51,6 +51,7 @@ namespace Gstarr.Game
             settings = SettingsView.Create(panel, CloseSettings, withBackground: true);
             settings.Panel.gameObject.SetActive(false);
             panel.gameObject.SetActive(false);
+            UIFactory.EnsureEventSystem();
         }
 
         private void OnEnable() => menuAction.Enable();
@@ -85,8 +86,7 @@ namespace Gstarr.Game
         {
             IsOpen = true;
             openedFrame = Time.frameCount;
-            GamePause.IsPaused = true;
-            Time.timeScale = 0f;
+            GamePause.SetPaused(true);
             conductor.Pause();
             UIFactory.EnsureEventSystem();
             panel.gameObject.SetActive(true);
@@ -101,8 +101,7 @@ namespace Gstarr.Game
             IsOpen = false;
             GameSettings.Save();
             panel.gameObject.SetActive(false);
-            Time.timeScale = 1f;
-            GamePause.IsPaused = false;
+            GamePause.SetPaused(false);
             conductor.Resume();
         }
 

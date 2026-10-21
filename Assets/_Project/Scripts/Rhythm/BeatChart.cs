@@ -77,6 +77,14 @@ namespace Gstarr.Rhythm
                    && bpm >= 20f && bpm <= 400f;
         }
 
+        /// <summary>표시용 제목에서 끝의 -118 / -118bpm 을 뺀다.</summary>
+        public static string StripBpmSuffix(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+            var m = BpmSuffix.Match(name);
+            return m.Success ? name.Substring(0, m.Index).TrimEnd(' ', '-', '_') : name;
+        }
+
         /// <summary>BPM 만으로 박자/반박 생성. 박자 = offset + n * (60/bpm), 반박 = 그 정확히 중간.</summary>
         public static BeatChart FromBpm(float bpm, double duration, double firstBeatOffset = 0.0)
         {

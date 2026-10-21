@@ -8,12 +8,14 @@ namespace Gstarr.Combat
         private int damage;
         private LayerMask hitMask;
         private float lifeTimer;
+        private GameObject owner;
 
-        public void Launch(Vector2 velocity, int damage, float range, LayerMask hitMask)
+        public void Launch(Vector2 velocity, int damage, float range, LayerMask hitMask, GameObject owner = null)
         {
             this.velocity = velocity;
             this.damage = damage;
             this.hitMask = hitMask;
+            this.owner = owner;
             lifeTimer = range / Mathf.Max(0.01f, velocity.magnitude);
 
             float angle = Mathf.Atan2(velocity.y, velocity.x) * Mathf.Rad2Deg;
@@ -30,8 +32,11 @@ namespace Gstarr.Combat
             RaycastHit2D hit = Physics2D.Raycast(pos, step.normalized, step.magnitude, hitMask);
             if (hit.collider != null)
             {
-                if (hit.collider.TryGetComponent(out IDamageable target))
-                    target.TakeDamage(damage, velocity);
+                if (owner == null || (hit.collider.transform != owner.transform && !hit.collider.transform.IsChildOf(owner.transform)))
+                {
+                    if (hit.collider.TryGetComponent(out IDamageable target) && target.TakeDamage(damage, velocity))
+                        Gstarr.Rhythm.ComboSystem.RegisterHit(hit.collider.gameObject);
+                }
                 Destroy(gameObject);
                 return;
             }

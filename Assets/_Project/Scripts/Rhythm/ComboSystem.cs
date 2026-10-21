@@ -25,12 +25,9 @@ namespace Gstarr.Rhythm
 
         [Header("게이지")]
         [SerializeField] private float gaugePerRank = 100f;
-        [SerializeField] private float perfectGain = 24f;
-        [SerializeField] private float goodGain = 13f;
+        [SerializeField] private float hitGain = 24f;
         [Tooltip("랭크가 높을수록 게이지가 덜 오름 (랭크당 감소 비율)")]
         [SerializeField] private float gainFalloffPerRank = 0.2f;
-        [Tooltip("미스 시 잃는 게이지 (100 = 한 랭크)")]
-        [SerializeField] private float missPenalty = 100f;
         [Tooltip("마지막 성공 후 이 시간이 지나면 게이지가 줄기 시작")]
         [SerializeField] private float decayDelay = 1.5f;
         [SerializeField] private float decayPerSecond = 15f;
@@ -38,12 +35,8 @@ namespace Gstarr.Rhythm
         [SerializeField] private float decayGrowthPerRank = 0.75f;
         [Tooltip("랭크당 감소 시작 대기시간 단축 비율")]
         [SerializeField] private float delayShrinkPerRank = 0.4f;
-        [Tooltip("랭크당 미스 패널티 증가 비율")]
-        [SerializeField] private float missGrowthPerRank = 0.25f;
-
         [Header("점수")]
-        [SerializeField] private int perfectScore = 100;
-        [SerializeField] private int goodScore = 50;
+        [SerializeField] private int hitScore = 100;
         [Tooltip("콤보 1당 추가 배율")]
         [SerializeField] private float comboBonusPerHit = 0.1f;
         [SerializeField] private float maxComboMultiplier = 5f;
@@ -75,13 +68,11 @@ namespace Gstarr.Rhythm
         public float ComboMultiplier => Mathf.Min(maxComboMultiplier, 1f + Combo * comboBonusPerHit);
         public float RankMultiplier => Rank == StyleRank.None ? 1f : rankMultipliers[Mathf.Min((int)Rank, rankMultipliers.Length - 1)];
 
-        private RhythmConductor conductor;
         private float sinceLastHit;
 
         private void Awake()
         {
             Instance = this;
-            conductor = GetComponent<RhythmConductor>();
         }
 
         private void OnDestroy()
@@ -89,8 +80,12 @@ namespace Gstarr.Rhythm
             if (Instance == this) Instance = null;
         }
 
-        private void OnEnable() => conductor.Judged += OnJudged;
-        private void OnDisable() => conductor.Judged -= OnJudged;
+        /// <summary>적이 플레이어 공격/아이템에 맞았을 때만 호출. 점프/대시/키 입력은 콤보에 넣지 않는다.</summary>
+        public static void RegisterHit(GameObject victim)
+        {
+            if (Instance == null || victim == null || victim.CompareTag("Player")) return;
+            Instance.OnEnemyHit();
+        }
 
         private void Update()
         {
@@ -110,27 +105,17 @@ namespace Gstarr.Rhythm
             }
         }
 
-        private void OnJudged(BeatAction action, BeatJudgement judgement, double error)
+        private void OnEnemyHit()
         {
-            if (judgement == BeatJudgement.Miss)
-            {
-                Combo = 0;
-                ComboChanged?.Invoke(Combo);
-                SetGauge(Gauge - missPenalty * (1f + ((int)Rank + 1) * missGrowthPerRank));
-                return;
-            }
-
             Combo++;
             MaxCombo = Mathf.Max(MaxCombo, Combo);
             sinceLastHit = 0f;
             ComboChanged?.Invoke(Combo);
 
-            float gain = judgement == BeatJudgement.Perfect ? perfectGain : goodGain;
             int rankIndex = Mathf.Max(0, (int)Rank + 1);
-            SetGauge(Gauge + gain / (1f + rankIndex * gainFalloffPerRank));
+            SetGauge(Gauge + hitGain / (1f + rankIndex * gainFalloffPerRank));
 
-            int baseScore = judgement == BeatJudgement.Perfect ? perfectScore : goodScore;
-            int points = Mathf.RoundToInt(baseScore * ComboMultiplier * RankMultiplier);
+            int points = Mathf.RoundToInt(hitScore * ComboMultiplier * RankMultiplier);
             Score += points;
             ScoreAdded?.Invoke(points, Score);
         }

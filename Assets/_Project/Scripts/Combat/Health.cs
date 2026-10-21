@@ -5,7 +5,7 @@ namespace Gstarr.Combat
 {
     public interface IDamageable
     {
-        void TakeDamage(int amount, Vector2 hitDirection);
+        bool TakeDamage(int amount, Vector2 hitDirection);
     }
 
     public class Health : MonoBehaviour, IDamageable
@@ -33,9 +33,9 @@ namespace Gstarr.Combat
             if (spriteRenderer != null) baseColor = spriteRenderer.color;
         }
 
-        public void TakeDamage(int amount, Vector2 hitDirection)
+        public bool TakeDamage(int amount, Vector2 hitDirection)
         {
-            if (Current <= 0) return;
+            if (Current <= 0) return false;
 
             Current = Mathf.Max(0, Current - amount);
             onHealthChanged?.Invoke(Current, maxHealth);
@@ -51,6 +51,7 @@ namespace Gstarr.Combat
                 onDeath?.Invoke();
                 if (destroyOnDeath) Destroy(gameObject);
             }
+            return true;
         }
 
         /// <summary>회복. 이미 최대 체력이면 false.</summary>

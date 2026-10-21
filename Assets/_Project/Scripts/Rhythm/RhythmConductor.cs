@@ -126,7 +126,7 @@ namespace Gstarr.Rhythm
             if (clip == null) return;
             if (chart == null && !BeatChart.TryParseBpm(clip.name, out _)) return;
 
-            Gstarr.Game.GamePause.IsPaused = false;
+            Gstarr.Game.GamePause.Clear();
             var go = new GameObject("RhythmConductor");
             go.SetActive(false);
             var conductor = go.AddComponent<RhythmConductor>();
@@ -154,6 +154,7 @@ namespace Gstarr.Rhythm
             if (GetComponent<ComboUI>() == null) gameObject.AddComponent<ComboUI>();
             if (GetComponent<Gstarr.Game.StageHUD>() == null) gameObject.AddComponent<Gstarr.Game.StageHUD>();
             if (GetComponent<Gstarr.Game.PauseMenu>() == null) gameObject.AddComponent<Gstarr.Game.PauseMenu>();
+            Gstarr.Game.GamePause.SetCountdown(true);
         }
 
         private void OnDestroy()
@@ -166,6 +167,7 @@ namespace Gstarr.Rhythm
             if (music == null)
             {
                 Debug.LogWarning("[RhythmConductor] 음악이 없어 박자 판정을 끕니다.", this);
+                Gstarr.Game.GamePause.SetCountdown(false);
                 enabled = false;
                 return;
             }
@@ -178,6 +180,7 @@ namespace Gstarr.Rhythm
             else
             {
                 Debug.LogWarning($"[RhythmConductor] '{music.name}' 이름 끝에 BPM(예: -118)이 없고 JSON 도 없어 박자 판정을 끕니다.", this);
+                Gstarr.Game.GamePause.SetCountdown(false);
                 enabled = false;
                 return;
             }
@@ -207,6 +210,9 @@ namespace Gstarr.Rhythm
             double drift = dspT - realT;
             realStart -= Math.Abs(drift) > 0.05 ? drift : drift * 0.05;
             SongTime = UnityEngine.Time.realtimeSinceStartupAsDouble - realStart;
+
+            if (Gstarr.Game.GamePause.IsCountdown && SongTime >= 0)
+                Gstarr.Game.GamePause.SetCountdown(false);
 
             while (BeatTime(nextBeat) <= SongTime)
             {

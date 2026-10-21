@@ -17,6 +17,8 @@ namespace Gstarr.Game
         private static Font font;
         public static Font Font => font != null ? font : font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
+        private static EventSystem persistentEventSystem;
+        private static InputActionAsset uiActions;
         private static InputAction cancelAction;
 
         /// <summary>뒤로가기 (B / Esc)</summary>
@@ -51,24 +53,91 @@ namespace Gstarr.Game
         }
 
         /// <summary>
-        /// 컨트롤러로 UI 를 조작할 수 있게 EventSystem 생성.
-        /// 프로콘 기준 A(오른쪽) = 확인, B(아래) = 뒤로.
+        /// 컨트롤러로 UI 를 조작할 수 있게 EventSystem 을 하나만 유지한다.
+        /// 프로콘 기준 A(오른쪽) = 확인, B(아래) = 뒤로. 스틱/십자키로 이동.
         /// </summary>
         public static void EnsureEventSystem()
         {
-            if (EventSystem.current != null) return;
-            var go = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
-            var module = go.GetComponent<InputSystemUIInputModule>();
-            module.AssignDefaultActions();
+            if (uiActions == null) uiActions = BuildUiActions();
+            if (!uiActions.enabled) uiActions.Enable();
 
+            if (persistentEventSystem == null)
+            {
+                var go = new GameObject("EventSystem");
+                UnityEngine.Object.DontDestroyOnLoad(go);
+                persistentEventSystem = go.AddComponent<EventSystem>();
+                go.AddComponent<InputSystemUIInputModule>();
+            }
+
+            foreach (var extra in UnityEngine.Object.FindObjectsByType<EventSystem>(FindObjectsInactive.Include))
+            {
+                if (extra != persistentEventSystem) UnityEngine.Object.Destroy(extra.gameObject);
+            }
+
+            var module = persistentEventSystem.GetComponent<InputSystemUIInputModule>();
+            if (module == null) module = persistentEventSystem.gameObject.AddComponent<InputSystemUIInputModule>();
+            BindUiModule(module);
+            persistentEventSystem.sendNavigationEvents = true;
+        }
+
+        private static InputActionAsset BuildUiActions()
+        {
             var asset = ScriptableObject.CreateInstance<InputActionAsset>();
-            var map = asset.AddActionMap("MenuOverride");
-            var submit = map.AddAction("Submit", InputActionType.Button, "<Gamepad>/buttonEast");
+            var map = asset.AddActionMap("UI");
+
+            var navigate = map.AddAction("Navigate", InputActionType.PassThrough);
+            navigate.expectedControlType = "Vector2";
+            navigate.AddBinding("<Gamepad>/leftStick");
+            navigate.AddBinding("<Gamepad>/dpad");
+            navigate.AddCompositeBinding("2DVector")
+                .With("Up", "<Keyboard>/upArrow")
+                .With("Down", "<Keyboard>/downArrow")
+                .With("Left", "<Keyboard>/leftArrow")
+                .With("Right", "<Keyboard>/rightArrow");
+
+            var submit = map.AddAction("Submit", InputActionType.Button);
+            submit.AddBinding("<Gamepad>/buttonEast");
             submit.AddBinding("<Keyboard>/enter");
             submit.AddBinding("<Keyboard>/space");
             submit.AddBinding("<Keyboard>/z");
-            module.submit = InputActionReference.Create(submit);
-            map.Enable();
+
+            var cancel = map.AddAction("Cancel", InputActionType.Button);
+            cancel.AddBinding("<Gamepad>/buttonSouth");
+            cancel.AddBinding("<Keyboard>/escape");
+
+            var point = map.AddAction("Point", InputActionType.PassThrough);
+            point.expectedControlType = "Vector2";
+            point.AddBinding("<Mouse>/position");
+
+            var click = map.AddAction("Click", InputActionType.PassThrough);
+            click.expectedControlType = "Button";
+            click.AddBinding("<Mouse>/leftButton");
+
+            var scroll = map.AddAction("ScrollWheel", InputActionType.PassThrough);
+            scroll.expectedControlType = "Vector2";
+            scroll.AddBinding("<Mouse>/scroll");
+
+            var middle = map.AddAction("MiddleClick", InputActionType.PassThrough);
+            middle.AddBinding("<Mouse>/middleButton");
+            var right = map.AddAction("RightClick", InputActionType.PassThrough);
+            right.AddBinding("<Mouse>/rightButton");
+
+            asset.Enable();
+            return asset;
+        }
+
+        private static void BindUiModule(InputSystemUIInputModule module)
+        {
+            module.actionsAsset = uiActions;
+            module.move = InputActionReference.Create(uiActions.FindAction("UI/Navigate"));
+            module.submit = InputActionReference.Create(uiActions.FindAction("UI/Submit"));
+            module.cancel = InputActionReference.Create(uiActions.FindAction("UI/Cancel"));
+            module.point = InputActionReference.Create(uiActions.FindAction("UI/Point"));
+            module.leftClick = InputActionReference.Create(uiActions.FindAction("UI/Click"));
+            module.scrollWheel = InputActionReference.Create(uiActions.FindAction("UI/ScrollWheel"));
+            module.middleClick = InputActionReference.Create(uiActions.FindAction("UI/MiddleClick"));
+            module.rightClick = InputActionReference.Create(uiActions.FindAction("UI/RightClick"));
+            module.deselectOnBackgroundClick = false;
         }
 
         public static RectTransform CreateRect(string name, Transform parent)
@@ -141,6 +210,9 @@ namespace Gstarr.Game
             colors.fadeDuration = 0.06f;
             button.colors = colors;
             if (onClick != null) button.onClick.AddListener(() => onClick());
+            var nav = button.navigation;
+            nav.mode = Navigation.Mode.Automatic;
+            button.navigation = nav;
 
             var text = CreateText("Label", rt, label, fontSize);
             Stretch(text.rectTransform);

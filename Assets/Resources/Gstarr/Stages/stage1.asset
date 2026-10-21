@@ -16,5 +16,5 @@ MonoBehaviour:
   displayName: STAGE 1
   music: {fileID: 8300000, guid: d315ebe4c7709eb40944ff4281aa714c, type: 3}
   beatChart: {fileID: 0}
-  firstBeatOffset: 0
+  firstBeatOffset: 0.479
   sceneName: Stage_1

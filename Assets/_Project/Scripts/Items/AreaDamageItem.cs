@@ -18,8 +18,10 @@ namespace Gstarr.Items
             foreach (var hit in Physics2D.OverlapCircleAll(center, radius, hitMask))
             {
                 if (hit.attachedRigidbody != null && hit.attachedRigidbody.gameObject == user) continue;
-                if (hit.TryGetComponent(out IDamageable target))
-                    target.TakeDamage(damage, (Vector2)hit.transform.position - center + Vector2.up * 0.5f);
+                if (hit.transform == user.transform || hit.transform.IsChildOf(user.transform)) continue;
+                if (hit.TryGetComponent(out IDamageable target)
+                    && target.TakeDamage(damage, (Vector2)hit.transform.position - center + Vector2.up * 0.5f))
+                    Gstarr.Rhythm.ComboSystem.RegisterHit(hit.gameObject);
             }
 
             if (effectSprite != null)

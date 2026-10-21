@@ -24,7 +24,7 @@ namespace Gstarr.Game
 
         private void Awake()
         {
-            Time.timeScale = 1f;
+            GamePause.Clear();
             UIFactory.EnsureEventSystem();
             var canvas = UIFactory.CreateCanvas(transform, "MenuCanvas", 10);
             root = (RectTransform)canvas.transform;
@@ -119,7 +119,7 @@ namespace Gstarr.Game
                 label.rectTransform.offsetMax = new Vector2(0f, -24f);
                 label.text = s.displayName;
 
-                string song = s.music != null ? s.music.name : "(no music)";
+                string song = s.music != null ? Gstarr.Rhythm.BeatChart.StripBpmSuffix(s.music.name) : "(no music)";
                 if (song.Length > 26) song = song.Substring(0, 24) + "...";
                 string bpmText = s.HasBpm(out float bpm) ? "  " + bpm + " BPM" : "";
                 var info = UIFactory.CreateText("Info", b.transform, song + "\n" + bpmText.Trim() + "\nBEST  " + s.BestScore.ToString("N0"), 22,

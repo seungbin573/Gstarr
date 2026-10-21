@@ -22,7 +22,8 @@ namespace Gstarr.Game
 
         public RectTransform Panel => settingsPanel;
         public bool IsRebinding => rebinding;
-        public Selectable FirstSelectable => settingsTabs[currentTab];
+        public Selectable FirstSelectable =>
+            currentTab >= 0 && currentTab < settingsTabs.Count ? settingsTabs[currentTab] : null;
 
         public static SettingsView Create(Transform parent, Action onBack, bool withBackground = false)
         {
