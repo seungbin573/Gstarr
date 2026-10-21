@@ -347,134 +347,137 @@ Tilemap:
   - first: {x: -7, y: -3, z: 0}
     second:
       serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 1
+      m_TileIndex: 1
+      m_TileSpriteIndex: 0
       m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
+      m_TileColorIndex: 0
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
-      m_AllTileFlags: 1073741827
+      m_AllTileFlags: 2147483649
   - first: {x: -6, y: -3, z: 0}
     second:
       serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 1
+      m_TileIndex: 1
+      m_TileSpriteIndex: 0
       m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
+      m_TileColorIndex: 0
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
-      m_AllTileFlags: 1073741827
+      m_AllTileFlags: 2147483649
   - first: {x: -5, y: -3, z: 0}
     second:
       serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 1
+      m_TileIndex: 1
+      m_TileSpriteIndex: 0
       m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
+      m_TileColorIndex: 0
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
-      m_AllTileFlags: 1073741827
+      m_AllTileFlags: 2147483649
   - first: {x: -4, y: -3, z: 0}
     second:
       serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 1
+      m_TileIndex: 1
+      m_TileSpriteIndex: 0
       m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
+      m_TileColorIndex: 0
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
-      m_AllTileFlags: 1073741827
+      m_AllTileFlags: 2147483649
   - first: {x: -3, y: -3, z: 0}
     second:
       serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 1
+      m_TileIndex: 1
+      m_TileSpriteIndex: 0
       m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
+      m_TileColorIndex: 0
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
-      m_AllTileFlags: 1073741827
+      m_AllTileFlags: 2147483649
   - first: {x: -2, y: -3, z: 0}
     second:
       serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 1
+      m_TileIndex: 1
+      m_TileSpriteIndex: 0
       m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
+      m_TileColorIndex: 0
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
-      m_AllTileFlags: 1073741827
+      m_AllTileFlags: 2147483649
   - first: {x: -1, y: -3, z: 0}
     second:
       serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 1
+      m_TileIndex: 1
+      m_TileSpriteIndex: 0
       m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
+      m_TileColorIndex: 0
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
-      m_AllTileFlags: 1073741827
+      m_AllTileFlags: 2147483649
   - first: {x: 0, y: -3, z: 0}
     second:
       serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 1
+      m_TileIndex: 1
+      m_TileSpriteIndex: 0
       m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
+      m_TileColorIndex: 0
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
-      m_AllTileFlags: 1073741827
+      m_AllTileFlags: 2147483649
   - first: {x: 1, y: -3, z: 0}
     second:
       serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 1
+      m_TileIndex: 1
+      m_TileSpriteIndex: 0
       m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
+      m_TileColorIndex: 0
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
-      m_AllTileFlags: 1073741827
+      m_AllTileFlags: 2147483649
   - first: {x: 2, y: -3, z: 0}
     second:
       serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 1
+      m_TileIndex: 1
+      m_TileSpriteIndex: 0
       m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
+      m_TileColorIndex: 0
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
-      m_AllTileFlags: 1073741827
+      m_AllTileFlags: 2147483649
   - first: {x: 3, y: -3, z: 0}
     second:
       serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 1
+      m_TileIndex: 1
+      m_TileSpriteIndex: 0
       m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
+      m_TileColorIndex: 0
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
-      m_AllTileFlags: 1073741827
+      m_AllTileFlags: 2147483649
   - first: {x: 4, y: -3, z: 0}
     second:
       serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 1
+      m_TileIndex: 1
+      m_TileSpriteIndex: 0
       m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
+      m_TileColorIndex: 0
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
-      m_AllTileFlags: 1073741827
+      m_AllTileFlags: 2147483649
   m_AnimatedTiles: {}
   m_TileAssetArray:
   - serializedVersion: 2
-    m_RefCount: 12
+    m_RefCount: 0
     m_Data: {fileID: 404685929}
+  - serializedVersion: 2
+    m_RefCount: 12
+    m_Data: {fileID: 11400000, guid: d726d196e3ab9d44fa1d5d3581447973, type: 2}
   m_TileSpriteArray:
   - serializedVersion: 2
-    m_RefCount: 0
-    m_Data: {fileID: -717311214189699753, guid: ca4bdf575bbf914489efdaa7c6311ab5, type: 3}
-  - serializedVersion: 2
     m_RefCount: 12
+    m_Data: {fileID: -7383382961532566217, guid: 5538e0244f7c38c48859c7769d5b5ffc, type: 3}
+  - serializedVersion: 2
+    m_RefCount: 0
     m_Data: {fileID: 1886320648}
   m_TileMatrixArray:
   - serializedVersion: 2
@@ -498,10 +501,10 @@ Tilemap:
       e33: 1
   m_TileColorArray:
   - serializedVersion: 2
-    m_RefCount: 0
+    m_RefCount: 12
     m_Data: {r: 1, g: 1, b: 1, a: 1}
   - serializedVersion: 2
-    m_RefCount: 12
+    m_RefCount: 0
     m_Data: {r: 0.7218012, g: 0.46885756, b: 0.47459388, a: 1}
   m_TileObjectToInstantiateArray: []
   m_AnimationFrameRate: 1
@@ -741,19 +744,16 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   projectilePrefab: {fileID: 0}
-  slashSprite: {fileID: 4176362632249098406, guid: f619d063a2adfa44eb344a2123a5797b, type: 3}
+  slashSprite: {fileID: 21300000, guid: f619d063a2adfa44eb344a2123a5797b, type: 3}
   weaponSortingOrder: 6
-  showDebugHud: 1
   weapons:
   - name: Sword
     type: 0
     damage: 2
     fireInterval: 0.3
-    sprite: {fileID: 712035800519618848, guid: 1c86e7ca40b1aff43b80c248f9aca78d, type: 3}
+    sprite: {fileID: 21300000, guid: 1c86e7ca40b1aff43b80c248f9aca78d, type: 3}
     holdOffset: {x: 0.7, y: -0.1}
     muzzleOffset: {x: 0, y: 0}
-    magazineSize: 12
-    reloadTime: 1.2
     meleeSize: {x: 1.6, y: 1.2}
     meleeReach: 0.9
     projectileSprite: {fileID: 0}
@@ -766,14 +766,12 @@ MonoBehaviour:
     type: 1
     damage: 1
     fireInterval: 0.18
-    sprite: {fileID: 4319395737909131107, guid: 57d2676a0c1f7394aa51cc2bc8c511e6, type: 3}
+    sprite: {fileID: 21300000, guid: 57d2676a0c1f7394aa51cc2bc8c511e6, type: 3}
     holdOffset: {x: 0.55, y: -0.05}
     muzzleOffset: {x: 0.9, y: 0.08}
-    magazineSize: 12
-    reloadTime: 1.1
     meleeSize: {x: 1.6, y: 1.2}
     meleeReach: 0.9
-    projectileSprite: {fileID: 2208703988740019828, guid: a50131348c326f74ebe5637e52cedfab, type: 3}
+    projectileSprite: {fileID: 21300000, guid: a50131348c326f74ebe5637e52cedfab, type: 3}
     projectileSpeed: 26
     range: 16
     pellets: 1
@@ -783,14 +781,12 @@ MonoBehaviour:
     type: 2
     damage: 1
     fireInterval: 0.7
-    sprite: {fileID: -2408530018317867212, guid: 6a1e5b4fb3a80ea41a5fd9e6635665be, type: 3}
+    sprite: {fileID: 21300000, guid: 6a1e5b4fb3a80ea41a5fd9e6635665be, type: 3}
     holdOffset: {x: 0.6, y: -0.08}
     muzzleOffset: {x: 1.15, y: 0.02}
-    magazineSize: 4
-    reloadTime: 1.6
     meleeSize: {x: 1.6, y: 1.2}
     meleeReach: 0.9
-    projectileSprite: {fileID: -8357494700477734146, guid: 2684cff080227a341b793ba4c3543b8f, type: 3}
+    projectileSprite: {fileID: 21300000, guid: 2684cff080227a341b793ba4c3543b8f, type: 3}
     projectileSpeed: 20
     range: 7
     pellets: 6
@@ -1203,7 +1199,11 @@ MonoBehaviour:
         m_SelectedSource:
           rid: -2
         m_Provider2DCache:
-          rid: -2
+          rid: 8533840196223369296
+    - rid: 8533840196223369296
+      type: {class: 'Provider2DCache`1[[UnityEngine.Rendering.Universal.Light2DProvider, Unity.RenderPipelines.Universal.2D.Runtime]]', ns: UnityEngine.Rendering.Universal, asm: Unity.RenderPipelines.Universal.2D.Runtime}
+      data:
+        m_Cache: []
 --- !u!4 &619394802
 Transform:
   m_ObjectHideFlags: 0
