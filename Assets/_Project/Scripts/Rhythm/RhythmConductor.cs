@@ -90,6 +90,8 @@ namespace Gstarr.Rhythm
             source.spatialBlend = 0f;
 
             if (GetComponent<BeatBarUI>() == null) gameObject.AddComponent<BeatBarUI>();
+            if (GetComponent<ComboSystem>() == null) gameObject.AddComponent<ComboSystem>();
+            if (GetComponent<ComboUI>() == null) gameObject.AddComponent<ComboUI>();
         }
 
         private void OnDestroy()

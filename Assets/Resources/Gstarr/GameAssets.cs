@@ -20,6 +20,9 @@ namespace Gstarr.Items
         public Sprite beatNoteSprite;
         public Sprite beatCenterSprite;
 
+        [Tooltip("스타일 랭크 이미지 (C, B, A, S 순서)")]
+        public Sprite[] rankSprites = new Sprite[4];
+
         private static GameAssets instance;
 
         public static GameAssets Instance =>
