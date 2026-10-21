@@ -8,6 +8,8 @@ namespace Gstarr.Rhythm
     public class BeatChart
     {
         public double[] Beats { get; private set; }
+        /// <summary>박자 사이 반박 (표시용)</summary>
+        public double[] HalfBeats { get; private set; }
         public float Bpm { get; private set; }
         public double Duration { get; private set; }
 
@@ -36,22 +38,30 @@ namespace Gstarr.Rhythm
             for (int i = times.Count - 1; i > 0; i--)
                 if (times[i] - times[i - 1] < 0.001) times.RemoveAt(i);
 
+            var halves = new List<double>();
+            if (raw.tracks != null && raw.tracks.halfBeats != null)
+                foreach (var b in raw.tracks.halfBeats) halves.Add(b.timeSeconds);
+            halves.Sort();
+
             return new BeatChart
             {
                 Beats = times.ToArray(),
+                HalfBeats = halves.ToArray(),
                 Bpm = raw.timing != null ? raw.timing.bpm : 0f,
                 Duration = raw.audio != null ? raw.audio.duration : 0.0
             };
         }
 
         /// <summary>t 이상인 첫 박자의 인덱스 (없으면 Beats.Length)</summary>
-        public int LowerBound(double t)
+        public int LowerBound(double t) => LowerBound(Beats, t);
+
+        public static int LowerBound(double[] arr, double t)
         {
-            int lo = 0, hi = Beats.Length;
+            int lo = 0, hi = arr.Length;
             while (lo < hi)
             {
                 int mid = (lo + hi) >> 1;
-                if (Beats[mid] < t) lo = mid + 1;
+                if (arr[mid] < t) lo = mid + 1;
                 else hi = mid;
             }
             return lo;
@@ -79,6 +89,7 @@ namespace Gstarr.Rhythm
         {
             public BeatJson[] kicks;
             public BeatJson[] nonKickBeats;
+            public BeatJson[] halfBeats;
         }
 
         [Serializable] private class BeatJson

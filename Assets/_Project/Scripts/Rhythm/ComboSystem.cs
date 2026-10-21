@@ -34,6 +34,12 @@ namespace Gstarr.Rhythm
         [Tooltip("마지막 성공 후 이 시간이 지나면 게이지가 줄기 시작")]
         [SerializeField] private float decayDelay = 1.5f;
         [SerializeField] private float decayPerSecond = 15f;
+        [Tooltip("랭크당 감소 속도 증가 비율 (S 랭크 = 기본의 1 + 4 * 값 배)")]
+        [SerializeField] private float decayGrowthPerRank = 0.75f;
+        [Tooltip("랭크당 감소 시작 대기시간 단축 비율")]
+        [SerializeField] private float delayShrinkPerRank = 0.4f;
+        [Tooltip("랭크당 미스 패널티 증가 비율")]
+        [SerializeField] private float missGrowthPerRank = 0.25f;
 
         [Header("점수")]
         [SerializeField] private int perfectScore = 100;
@@ -89,8 +95,19 @@ namespace Gstarr.Rhythm
         private void Update()
         {
             sinceLastHit += Time.deltaTime;
-            if (sinceLastHit > decayDelay && Gauge > 0f)
-                SetGauge(Gauge - decayPerSecond * Time.deltaTime);
+            // 랭크가 높을수록 빨리, 더 많이 떨어짐
+            int rankIndex = (int)Rank + 1;
+            float delay = decayDelay / (1f + rankIndex * delayShrinkPerRank);
+            if (sinceLastHit > delay && Gauge > 0f)
+            {
+                float rate = decayPerSecond * (1f + rankIndex * decayGrowthPerRank);
+                SetGauge(Gauge - rate * Time.deltaTime);
+                if (Gauge <= 0f && Combo > 0)
+                {
+                    Combo = 0;
+                    ComboChanged?.Invoke(Combo);
+                }
+            }
         }
 
         private void OnJudged(BeatAction action, BeatJudgement judgement, double error)
@@ -99,7 +116,7 @@ namespace Gstarr.Rhythm
             {
                 Combo = 0;
                 ComboChanged?.Invoke(Combo);
-                SetGauge(Gauge - missPenalty);
+                SetGauge(Gauge - missPenalty * (1f + ((int)Rank + 1) * missGrowthPerRank));
                 return;
             }
 

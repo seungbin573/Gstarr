@@ -9,7 +9,8 @@ namespace Gstarr.Rhythm
     {
         Jump,
         Dash,
-        UseItem
+        UseItem,
+        Attack
     }
 
     public enum BeatJudgement
@@ -155,6 +156,26 @@ namespace Gstarr.Rhythm
             int n = Chart.Beats.Length;
             long lap = t <= 0 ? 0 : (long)(t / loopLength);
             int i = Chart.LowerBound(t - lap * loopLength);
+            return lap * n + i;
+        }
+
+        /// <summary>반박 절대 번호의 시각</summary>
+        public double HalfBeatTime(long absIndex)
+        {
+            if (!IsReady || absIndex < 0 || Chart.HalfBeats.Length == 0) return double.NegativeInfinity;
+            int n = Chart.HalfBeats.Length;
+            long lap = absIndex / n;
+            if (lap > 0 && !loop) return double.PositiveInfinity;
+            return lap * loopLength + Chart.HalfBeats[absIndex % n];
+        }
+
+        /// <summary>t 이상인 첫 반박 번호</summary>
+        public long FirstHalfBeatAtOrAfter(double t)
+        {
+            if (!IsReady || Chart.HalfBeats.Length == 0) return 0;
+            int n = Chart.HalfBeats.Length;
+            long lap = t <= 0 ? 0 : (long)(t / loopLength);
+            int i = BeatChart.LowerBound(Chart.HalfBeats, t - lap * loopLength);
             return lap * n + i;
         }
 

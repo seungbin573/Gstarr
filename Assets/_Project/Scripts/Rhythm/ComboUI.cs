@@ -31,6 +31,7 @@ namespace Gstarr.Rhythm
 
         private RectTransform rankRt;
         private Image rankImage;
+        private CanvasGroup panelGroup;
         private Image gaugeFill;
         private Text comboText;
         private Text comboLabel;
@@ -100,7 +101,9 @@ namespace Gstarr.Rhythm
             gainText.text = "";
 
             // 오른쪽 랭크 패널
-            var panel = new GameObject("RankPanel", typeof(RectTransform)).GetComponent<RectTransform>();
+            var panel = new GameObject("RankPanel", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<RectTransform>();
+            panelGroup = panel.GetComponent<CanvasGroup>();
+            panelGroup.alpha = 0f;
             panel.SetParent(canvasGo.transform, false);
             Anchor(panel, new Vector2(1f, 0.5f), panelPosition, new Vector2(rankImageSize.x, rankImageSize.y + 120f));
 
@@ -217,6 +220,10 @@ namespace Gstarr.Rhythm
         private void Update()
         {
             float dt = Time.unscaledDeltaTime;
+
+            bool active = combo.Combo > 0;
+            panelGroup.alpha = Mathf.MoveTowards(panelGroup.alpha, active ? 1f : 0f, dt * (active ? 12f : 4f));
+            if (!active && panelGroup.alpha <= 0f) gaugeFill.fillAmount = 0f;
 
             // 랭크 등장: 크게 튀어나오며 기울었다가 제자리
             float scale = 1f;

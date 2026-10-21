@@ -20,6 +20,8 @@ namespace Gstarr.Rhythm
         [SerializeField] private float bottomMargin = 36f;
         [SerializeField] private Vector2 noteSize = new Vector2(16f, 56f);
         [SerializeField] private float centerSize = 92f;
+        [SerializeField] private Vector2 halfBeatSize = new Vector2(5f, 32f);
+        [SerializeField] private Color halfBeatColor = new Color(0.6f, 0.6f, 0.6f, 0.7f);
 
         [Header("색")]
         [SerializeField] private Color noteColor = new Color(1f, 1f, 1f, 0.95f);
@@ -34,6 +36,7 @@ namespace Gstarr.Rhythm
         private Image center;
         private Text judgeText;
         private readonly List<Image> notePool = new List<Image>();
+        private readonly List<Image> halfPool = new List<Image>();
 
         private float pulse;
         private float flash;
@@ -134,6 +137,18 @@ namespace Gstarr.Rhythm
             return notePool[index];
         }
 
+        private Image GetHalfNote(int index)
+        {
+            while (halfPool.Count <= index)
+            {
+                var rt = CreateImage("HalfBeat", bar, null, halfBeatColor);
+                rt.sizeDelta = halfBeatSize;
+                rt.SetSiblingIndex(hitZone.GetSiblingIndex() + 1);
+                halfPool.Add(rt.GetComponent<Image>());
+            }
+            return halfPool[index];
+        }
+
         private void OnBeat(long beat)
         {
             pulse = 1f;
@@ -187,6 +202,33 @@ namespace Gstarr.Rhythm
                 }
             }
             for (int i = used; i < notePool.Count; i++) notePool[i].enabled = false;
+
+            int halfUsed = 0;
+            if (conductor.IsReady && conductor.Chart.HalfBeats.Length > 0)
+            {
+                double now = conductor.SongTime;
+                for (long h = conductor.FirstHalfBeatAtOrAfter(now - 0.1); ; h++)
+                {
+                    double until = conductor.HalfBeatTime(h) - now;
+                    if (double.IsInfinity(until) || until > lookahead) break;
+
+                    float x = (float)(until / lookahead) * half;
+                    float alpha = until >= 0
+                        ? Mathf.Clamp01((float)(1.0 - until / lookahead) * 1.6f)
+                        : Mathf.Clamp01(1f + (float)until / 0.1f);
+
+                    for (int side = -1; side <= 1; side += 2)
+                    {
+                        var line = GetHalfNote(halfUsed++);
+                        line.enabled = true;
+                        line.rectTransform.anchoredPosition = new Vector2(side * x, 0f);
+                        var c = halfBeatColor;
+                        c.a *= alpha;
+                        line.color = c;
+                    }
+                }
+            }
+            for (int i = halfUsed; i < halfPool.Count; i++) halfPool[i].enabled = false;
 
             pulse = Mathf.MoveTowards(pulse, 0f, dt * 6f);
             flash = Mathf.MoveTowards(flash, 0f, dt * 3f);

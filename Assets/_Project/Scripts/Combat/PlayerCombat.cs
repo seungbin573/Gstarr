@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using Gstarr.Items;
 using Gstarr.Player;
+using Gstarr.Rhythm;
 using Gstarr.UI;
 
 namespace Gstarr.Combat
@@ -353,6 +354,8 @@ namespace Gstarr.Combat
 
             var w = CurrentWeapon;
             cooldownTimer = w.fireInterval;
+            // 공격은 박자와 상관없이 나가지만, 새로 누른 순간만 콤보 판정에 들어간다
+            if (attackAction.WasPressedThisFrame()) BeatGate.TryAct(BeatAction.Attack);
             int facing = controller.FacingDirection;
 
             if (w.type == WeaponType.Melee)
