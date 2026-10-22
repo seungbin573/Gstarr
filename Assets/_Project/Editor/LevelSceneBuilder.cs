@@ -66,11 +66,10 @@ namespace Gstarr.EditorTools
 
             var player = CreatePlayer(playerSprite, noFriction, new Vector3(-2f, 0.5f, 0f));
             SetupCamera(player.transform);
-            var enemySprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/arts/character/enemy1.png");
-            if (enemySprite == null) enemySprite = playerSprite;
-            EnemyActor.Spawn(enemySprite, new Vector3(8f, 0.5f, 0f));
-            EnemyActor.Spawn(enemySprite, new Vector3(18f, 0.5f, 0f));
-            EnemyActor.Spawn(enemySprite, new Vector3(30f, 0.5f, 0f));
+            CreateParallaxBackground(new Vector3(-2f, 2f, 0f));
+            EnemyActor.Spawn(null, new Vector3(8f, 0.5f, 0f), EnemyKind.BeatChaser);
+            EnemyActor.Spawn(null, new Vector3(18f, 0.5f, 0f), EnemyKind.RangedBeat);
+            EnemyActor.Spawn(null, new Vector3(30f, 0.5f, 0f), EnemyKind.RangedHalfBeat);
 
             // 아이템은 직접 그릴 수 있게 빈 Items 타일맵만 만들어 둠
             ItemTools.EnsureDefaultItems();
@@ -243,6 +242,33 @@ namespace Gstarr.EditorTools
                 follow = cam.gameObject.AddComponent<CameraFollow2D>();
             follow.Target = target;
             EditorUtility.SetDirty(follow);
+        }
+
+        private const string BackgroundSpritePath = "Assets/arts/picture/background.png";
+
+        private static void CreateParallaxBackground(Vector3 viewCenter)
+        {
+            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(BackgroundSpritePath);
+            if (sprite == null)
+            {
+                Debug.LogWarning("[Level Builder] Assets/arts/picture/background.png 스프라이트를 찾지 못했습니다.");
+                return;
+            }
+
+            var go = new GameObject("Parallax Background");
+            go.transform.position = viewCenter;
+            var renderer = go.AddComponent<SpriteRenderer>();
+            renderer.sprite = sprite;
+            renderer.sortingOrder = -100;
+
+            float height = sprite.bounds.size.y;
+            if (height > 0.001f)
+            {
+                float scale = 6f * 2f * 1.2f / height;
+                go.transform.localScale = new Vector3(scale, scale, 1f);
+            }
+
+            go.AddComponent<ParallaxBackground>();
         }
 
         private static TilesetImporter.Result CreatePlaceholderTileset()

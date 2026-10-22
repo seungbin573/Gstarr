@@ -52,6 +52,8 @@ namespace Gstarr.Rhythm
 
         /// <summary>박자를 지날 때 (절대 박자 번호)</summary>
         public event Action<long> Beat;
+        /// <summary>반박을 지날 때 (절대 반박 번호)</summary>
+        public event Action<long> HalfBeat;
         /// <summary>입력 판정 (행동, 판정, 오차 초: 음수 = 빠름)</summary>
         public event Action<BeatAction, BeatJudgement, double> Judged;
         /// <summary>루프하지 않는 곡이 끝났을 때</summary>
@@ -103,6 +105,7 @@ namespace Gstarr.Rhythm
         private double realStart;
         private double loopLength;
         private long nextBeat;
+        private long nextHalfBeat;
         private readonly Dictionary<BeatAction, long> lastUsedBeat = new Dictionary<BeatAction, long>();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -228,6 +231,13 @@ namespace Gstarr.Rhythm
             {
                 Beat?.Invoke(nextBeat);
                 nextBeat++;
+            }
+
+            while (Chart.HalfBeats != null && Chart.HalfBeats.Length > 0
+                   && HalfBeatTime(nextHalfBeat) <= SongTime)
+            {
+                HalfBeat?.Invoke(nextHalfBeat);
+                nextHalfBeat++;
             }
 
             if (!loop && SongTime >= loopLength)

@@ -4,7 +4,7 @@ using UnityEngine.SceneManagement;
 
 namespace Gstarr.Combat
 {
-    /// <summary>씬에 적이 하나도 없으면 플레이어 앞쪽에 셋을 둔다. 직접 배치한 적이 있으면 추가하지 않는다.</summary>
+    /// <summary>씬에 적을 직접 배치하지 않았으면 다섯 종류를 플레이어 앞쪽에 배치한다.</summary>
     public static class EnemySpawner
     {
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -22,11 +22,12 @@ namespace Gstarr.Combat
             var player = GameObject.FindGameObjectWithTag("Player");
             if (player == null) return;
 
-            var sprite = EnemyActor.Art;
             Vector3 origin = player.transform.position;
-            EnemyActor.Spawn(sprite, origin + new Vector3(9f, 0.2f, 0f));
-            EnemyActor.Spawn(sprite, origin + new Vector3(18f, 0.2f, 0f));
-            EnemyActor.Spawn(sprite, origin + new Vector3(28f, 0.2f, 0f));
+            EnemyActor.Spawn(null, origin + new Vector3(9f, 0.2f, 0f), EnemyKind.BeatChaser);
+            EnemyActor.Spawn(null, origin + new Vector3(19f, 0.2f, 0f), EnemyKind.RangedBeat);
+            EnemyActor.Spawn(null, origin + new Vector3(25f, 0.2f, 0f), EnemyKind.RangedHalfBeat);
+            EnemyActor.Spawn(null, origin + new Vector3(31f, 3f, 0f), EnemyKind.Flyer);
+            EnemyActor.Spawn(null, origin + new Vector3(38f, 0.2f, 0f), EnemyKind.Mole);
         }
     }
 }

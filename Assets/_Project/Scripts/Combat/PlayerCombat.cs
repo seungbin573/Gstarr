@@ -116,6 +116,7 @@ namespace Gstarr.Combat
         private float recoilKick;
         private float liftTimer;
         private float itemAnimTimer;
+        private float aimAngle;
         private Sprite fallbackSprite;
 
         private void Awake()
@@ -237,6 +238,8 @@ namespace Gstarr.Combat
             if (prevAction != null && prevAction.WasPressedThisFrame()) SwitchWeapon(-1);
             if (nextAction != null && nextAction.WasPressedThisFrame()) SwitchWeapon(1);
 
+            UpdateAim(dt);
+
             if (attackAction != null && attackAction.WasPressedThisFrame())
             {
                 var glory = EnemyActor.NearestStaggered(transform.position, 2.4f);
@@ -315,7 +318,7 @@ namespace Gstarr.Combat
 
             // 부모(플레이어)의 localScale.x 반전으로 좌우가 자동으로 뒤집히므로 오른쪽 기준으로만 계산
             weaponPivot.localPosition = w.holdOffset + new Vector2(-recoilKick, LiftHeight * lift);
-            weaponPivot.localRotation = Quaternion.Euler(0f, 0f, angle);
+            weaponPivot.localRotation = Quaternion.Euler(0f, 0f, angle + aimAngle);
             weaponPivot.localScale = Vector3.one * (1f + LiftScalePop * lift);
         }
 
@@ -384,21 +387,53 @@ namespace Gstarr.Combat
 
             cooldownTimer = w.fireInterval;
             int facing = controller.FacingDirection;
+            float range = w.type == WeaponType.Melee ? w.meleeReach + w.meleeSize.x : w.range;
+            Vector2 aim = AimVector(facing, range);
 
             if (w.type == WeaponType.Melee)
-                DoMelee(w, facing);
+                DoMelee(w, aim);
             else
-                Fire(w, facing);
+                Fire(w, facing, aim);
         }
 
-        private void DoMelee(Weapon w, int facing)
+        private void UpdateAim(float dt)
         {
-            Vector2 center = (Vector2)transform.position + new Vector2(w.meleeReach * facing, 0f);
-            var hits = Physics2D.OverlapBoxAll(center, w.meleeSize, 0f, hitMask);
+            var w = CurrentWeapon;
+            int facing = controller.FacingDirection;
+            float range = w.type == WeaponType.Melee ? w.meleeReach + w.meleeSize.x : w.range;
+            var target = EnemyActor.NearestInFront(transform.position, facing, range);
+            float desired = 0f;
+            if (target != null)
+            {
+                Vector2 delta = target.AimPoint - (Vector2)transform.position;
+                desired = Mathf.Atan2(delta.y, Mathf.Abs(delta.x)) * Mathf.Rad2Deg;
+                desired = Mathf.Clamp(desired, -55f, 70f);
+            }
+
+            float t = 1f - Mathf.Exp(-14f * dt);
+            aimAngle = Mathf.LerpAngle(aimAngle, desired, t);
+        }
+
+        /// <summary>바라보는 방향의 가장 가까운 적. 없으면 정면.</summary>
+        private Vector2 AimVector(int facing, float range)
+        {
+            Vector2 forward = new Vector2(facing, 0f);
+            var target = EnemyActor.NearestInFront(transform.position, facing, range);
+            if (target == null) return forward;
+            Vector2 delta = target.AimPoint - (Vector2)transform.position;
+            if (delta.x * facing <= 0.05f || delta.sqrMagnitude < 0.0001f) return forward;
+            return delta.normalized;
+        }
+
+        private void DoMelee(Weapon w, Vector2 aim)
+        {
+            Vector2 center = (Vector2)transform.position + aim * w.meleeReach;
+            float angle = Mathf.Atan2(aim.y, aim.x) * Mathf.Rad2Deg;
+            var hits = Physics2D.OverlapBoxAll(center, w.meleeSize, angle, hitMask);
             foreach (var hit in hits)
             {
                 if (hit.transform == transform || hit.transform.IsChildOf(transform)) continue;
-                if (hit.TryGetComponent(out IDamageable target) && target.TakeDamage(w.damage, new Vector2(facing, 0.3f)))
+                if (hit.TryGetComponent(out IDamageable target) && target.TakeDamage(w.damage, aim))
                     ComboSystem.RegisterHit(hit.gameObject);
             }
 
@@ -408,7 +443,7 @@ namespace Gstarr.Combat
             {
                 var slash = new GameObject("MeleeSlash");
                 slash.transform.position = center;
-                slash.transform.localScale = new Vector3(facing, 1f, 1f);
+                slash.transform.rotation = Quaternion.Euler(0f, 0f, angle);
                 var sr = slash.AddComponent<SpriteRenderer>();
                 sr.sprite = slashSprite;
                 sr.sortingOrder = weaponRenderer.sortingOrder + 1;
@@ -416,10 +451,13 @@ namespace Gstarr.Combat
             }
         }
 
-        private void Fire(Weapon w, int facing)
+        private void Fire(Weapon w, int facing, Vector2 aim)
         {
-            Vector2 origin = (Vector2)transform.position + new Vector2(w.muzzleOffset.x * facing, w.muzzleOffset.y);
-            float baseAngle = facing > 0 ? 0f : 180f;
+            float baseAngle = Mathf.Atan2(aim.y, aim.x) * Mathf.Rad2Deg;
+            float rad = baseAngle * Mathf.Deg2Rad;
+            Vector2 origin = (Vector2)transform.position + new Vector2(
+                w.muzzleOffset.x * Mathf.Cos(rad) - w.muzzleOffset.y * Mathf.Sin(rad),
+                w.muzzleOffset.x * Mathf.Sin(rad) + w.muzzleOffset.y * Mathf.Cos(rad));
 
             for (int i = 0; i < w.pellets; i++)
             {

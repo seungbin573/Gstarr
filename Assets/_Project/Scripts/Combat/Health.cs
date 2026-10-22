@@ -100,6 +100,11 @@ namespace Gstarr.Combat
             if (invulnTimer > 0f)
             {
                 invulnTimer -= Time.deltaTime;
+                if (Gstarr.Game.GamePause.IsGloryKill)
+                {
+                    SetBlinkVisible(true);
+                    return;
+                }
                 bool visible = Mathf.Repeat(Time.unscaledTime * 8f, 1f) < 0.55f || invulnTimer <= 0f;
                 if (blinkRenderers != null)
                     for (int i = 0; i < blinkRenderers.Length; i++)

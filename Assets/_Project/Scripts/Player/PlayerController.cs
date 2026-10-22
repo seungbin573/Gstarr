@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Gstarr.Game;
 
 namespace Gstarr.Player
 {
@@ -141,6 +142,15 @@ namespace Gstarr.Player
 
         private void Update()
         {
+            if (GamePause.IsGloryKill)
+            {
+                moveInput = Vector2.zero;
+                jumpBufferTimer = 0f;
+                jumpCutRequested = false;
+                dashRequested = false;
+                return;
+            }
+
             moveInput = moveAction.ReadValue<Vector2>();
             if (Mathf.Abs(moveInput.x) < stickDeadZone) moveInput.x = 0f;
             if (Mathf.Abs(moveInput.y) < stickDeadZone) moveInput.y = 0f;
