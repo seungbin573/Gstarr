@@ -268,14 +268,24 @@ namespace Gstarr.Rhythm
             return lap * n + i;
         }
 
-        /// <summary>박자 + 반박 중 가장 가까운 판정 지점</summary>
-        public long NearestJudgePoint(double t, out double error)
+        /// <summary>가장 가까운 정박 인덱스</summary>
+        public long NearestBeatPoint(double t, out double error) => NearestPoint(Chart?.Beats, t, out error);
+
+        /// <summary>정박 + 반박 중 가장 가까운 판정 지점</summary>
+        public long NearestJudgePoint(double t, out double error) => NearestPoint(Chart?.JudgeTimes, t, out error);
+
+        private long NearestPoint(double[] times, double t, out double error)
         {
-            var arr = Chart.JudgeTimes;
-            long after = FirstAtOrAfter(arr, t);
+            if (!IsReady || times == null || times.Length == 0)
+            {
+                error = double.PositiveInfinity;
+                return 0;
+            }
+
+            long after = FirstAtOrAfter(times, t);
             long before = after - 1;
-            double ea = t - TimeAt(arr, after);
-            double eb = before >= 0 ? t - TimeAt(arr, before) : double.PositiveInfinity;
+            double ea = t - TimeAt(times, after);
+            double eb = before >= 0 ? t - TimeAt(times, before) : double.PositiveInfinity;
             if (Math.Abs(eb) < Math.Abs(ea))
             {
                 error = eb;
@@ -292,18 +302,31 @@ namespace Gstarr.Rhythm
         /// 박자 창 안에서만 true. reportMiss 가 false 면 창 밖이어도 MISS 를 올리지 않는다.
         /// 이미 이 박자를 쓴 경우는 항상 조용히 거절한다.
         /// </summary>
-        public bool TryPerform(BeatAction action, bool reportMiss)
+        public bool TryPerform(BeatAction action, bool reportMiss, bool allowHalfBeats = false)
         {
             if (!IsReady || !enabled) return true;
             if (IsPaused || IsFinished || Gstarr.Game.GamePause.BlocksGameplay) return false;
 
             double t = SongTime - inputOffsetMs * 0.001;
-            long beat = NearestJudgePoint(t, out double error);
+            bool judgeHalfBeats = action != BeatAction.Attack || allowHalfBeats;
+            long beat = judgeHalfBeats
+                ? NearestJudgePoint(t, out double error)
+                : NearestBeatPoint(t, out error);
             double abs = Math.Abs(error);
+            double allowedWindow = goodWindow;
+            if (action == BeatAction.Attack && !allowHalfBeats)
+            {
+                double beatTime = TimeAt(Chart.Beats, beat);
+                double previousGap = beatTime - TimeAt(Chart.Beats, beat - 1);
+                double nextGap = TimeAt(Chart.Beats, beat + 1) - beatTime;
+                double nearestGap = Math.Min(previousGap, nextGap);
+                if (nearestGap > 0 && !double.IsInfinity(nearestGap))
+                    allowedWindow = Math.Min(allowedWindow, Math.Max(0, nearestGap * 0.5 - 0.001));
+            }
 
             bool alreadyUsed = lastUsedBeat.TryGetValue(action, out long used) && used == beat;
             if (alreadyUsed) return false;
-            if (abs > goodWindow)
+            if (abs > allowedWindow)
             {
                 if (reportMiss) Judged?.Invoke(action, BeatJudgement.Miss, error);
                 return false;
@@ -320,10 +343,10 @@ namespace Gstarr.Rhythm
     {
         public static bool TryAct(BeatAction action) => TryPerform(action, true);
 
-        public static bool TryPerform(BeatAction action, bool reportMiss)
+        public static bool TryPerform(BeatAction action, bool reportMiss, bool allowHalfBeats = false)
         {
             var c = RhythmConductor.Instance;
-            return c == null || c.TryPerform(action, reportMiss);
+            return c == null || c.TryPerform(action, reportMiss, allowHalfBeats);
         }
     }
 }

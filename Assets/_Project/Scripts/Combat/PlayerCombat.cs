@@ -247,8 +247,7 @@ namespace Gstarr.Combat
                 }
             }
 
-            // 누르고 있어도 박자 창 안에서만 한 번씩 나간다
-            if (attackAction != null && attackAction.IsPressed()) TryAttack();
+            if (attackAction != null && attackAction.WasPressedThisFrame()) TryAttack();
 
             AnimateWeapon(dt);
         }
@@ -377,9 +376,12 @@ namespace Gstarr.Combat
         private void TryAttack()
         {
             if (cooldownTimer > 0f || itemAnimTimer > 0f) return;
-            if (!BeatGate.TryPerform(BeatAction.Attack, attackAction.WasPressedThisFrame())) return;
-
             var w = CurrentWeapon;
+            if (!BeatGate.TryPerform(
+                BeatAction.Attack,
+                attackAction.WasPressedThisFrame(),
+                allowHalfBeats: w.type == WeaponType.Ranged)) return;
+
             cooldownTimer = w.fireInterval;
             int facing = controller.FacingDirection;
 
