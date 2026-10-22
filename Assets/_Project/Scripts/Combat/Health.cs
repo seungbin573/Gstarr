@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.Events;
+using Gstarr.Game;
+using Gstarr.Player;
 
 namespace Gstarr.Combat
 {
@@ -89,6 +91,8 @@ namespace Gstarr.Combat
             else if (Current == 0)
             {
                 onDeath?.Invoke();
+                if (enemy != null && enemy.IsBoss) StageHUD.ShowGameClear();
+                else if (GetComponent<PlayerController>() != null) StageHUD.ShowGameOver();
                 if (destroyOnDeath) Destroy(gameObject);
             }
             return true;

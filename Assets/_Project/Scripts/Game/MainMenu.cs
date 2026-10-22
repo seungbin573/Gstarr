@@ -21,6 +21,9 @@ namespace Gstarr.Game
         private Selectable mainFirst, stageFirst;
         private RectTransform current;
         private SettingsView settingsView;
+        private readonly Text[] leaderboardRows = new Text[5];
+        private Text leaderboardStatus;
+        private float resetStatusTimer;
 
         private void Awake()
         {
@@ -41,6 +44,22 @@ namespace Gstarr.Game
 
         private void Update()
         {
+            if (current == mainPanel && IsResetShortcutPressed())
+            {
+                RunLeaderboard.Clear();
+                RefreshLeaderboard();
+                leaderboardStatus.text = "LEADERBOARD CLEARED";
+                resetStatusTimer = 2.5f;
+                if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
+                return;
+            }
+
+            if (resetStatusTimer > 0f)
+            {
+                resetStatusTimer -= Time.unscaledDeltaTime;
+                if (resetStatusTimer <= 0f) leaderboardStatus.text = "SHIFT + ENTER: RESET SCORES";
+            }
+
             if (settingsView.IsRebinding) return;
             if (UIFactory.Cancel.WasPressedThisFrame()) Back();
 
@@ -79,17 +98,66 @@ namespace Gstarr.Game
             mainPanel = UIFactory.Stretch(UIFactory.CreateRect("Main", root));
 
             var titleText = UIFactory.CreateText("Title", mainPanel, title, 150, style: FontStyle.BoldAndItalic);
-            UIFactory.Place(titleText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 220f), new Vector2(1200f, 200f));
+            UIFactory.Place(titleText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(-330f, 220f), new Vector2(1000f, 200f));
             titleText.color = new Color(1f, 0.6f, 0.25f);
 
-            var list = UIFactory.Place(UIFactory.CreateRect("Buttons", mainPanel), new Vector2(0.5f, 0.5f), new Vector2(0f, -100f), new Vector2(420f, 220f));
+            var list = UIFactory.Place(UIFactory.CreateRect("Buttons", mainPanel), new Vector2(0.5f, 0.5f), new Vector2(-330f, -100f), new Vector2(420f, 220f));
             UIFactory.AddVerticalLayout(list, 24f);
 
-            var start = UIFactory.CreateButton("Start", list, "START", 44, () => Show(stagePanel, stageFirst));
+            var start = UIFactory.CreateButton("Start", list, "START", 44, () =>
+            {
+                if (!IsResetShortcutPressed()) Show(stagePanel, stageFirst);
+            });
             UIFactory.SetHeight(start, 90f);
-            var settings = UIFactory.CreateButton("Settings", list, "SETTINGS", 44, () => Show(settingsPanel, settingsView.FirstSelectable));
+            var settings = UIFactory.CreateButton("Settings", list, "SETTINGS", 44, () =>
+            {
+                if (!IsResetShortcutPressed()) Show(settingsPanel, settingsView.FirstSelectable);
+            });
             UIFactory.SetHeight(settings, 90f);
             mainFirst = start;
+
+            BuildLeaderboard(mainPanel);
+        }
+
+        private void BuildLeaderboard(RectTransform parent)
+        {
+            var panel = UIFactory.CreateImage("Leaderboard", parent, UIFactory.PanelColor);
+            UIFactory.Place(panel.rectTransform, new Vector2(1f, 0.5f), new Vector2(-290f, 0f), new Vector2(500f, 650f));
+
+            var heading = UIFactory.CreateText("Heading", panel.transform, "LEADERBOARD", 48, style: FontStyle.BoldAndItalic);
+            UIFactory.Place(heading.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -55f), new Vector2(460f, 70f));
+            heading.color = new Color(1f, 0.6f, 0.25f);
+
+            for (int i = 0; i < 5; i++)
+            {
+                leaderboardRows[i] = UIFactory.CreateText("Rank" + (i + 1), panel.transform, "", 28, TextAnchor.MiddleLeft, FontStyle.Normal);
+                UIFactory.Place(leaderboardRows[i].rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -145f - i * 88f), new Vector2(420f, 76f));
+            }
+
+            leaderboardStatus = UIFactory.CreateText("ResetHint", panel.transform, "SHIFT + ENTER: RESET SCORES", 18, TextAnchor.MiddleCenter, FontStyle.Normal);
+            UIFactory.Place(leaderboardStatus.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 22f), new Vector2(460f, 34f));
+            leaderboardStatus.color = new Color(1f, 1f, 1f, 0.55f);
+            RefreshLeaderboard();
+        }
+
+        private void RefreshLeaderboard()
+        {
+            var entries = RunLeaderboard.GetTopScores();
+            for (int i = 0; i < leaderboardRows.Length; i++)
+            {
+                bool hasEntry = i < entries.Count;
+                leaderboardRows[i].text = hasEntry
+                    ? $"{i + 1}.  {entries[i].nickname}  {entries[i].score:N0}\n      {entries[i].stage}"
+                    : $"{i + 1}.  ---";
+                leaderboardRows[i].color = new Color(1f, 1f, 1f, hasEntry ? 1f : 0.4f);
+            }
+            leaderboardStatus.text = "SHIFT + ENTER: RESET SCORES";
+        }
+
+        private static bool IsResetShortcutPressed()
+        {
+            var keyboard = Keyboard.current;
+            return keyboard != null && keyboard.shiftKey.isPressed && keyboard.enterKey.wasPressedThisFrame;
         }
 
         // ─── 스테이지 ───────────────────────────────────────

@@ -24,6 +24,7 @@ namespace Gstarr.World
         [SerializeField] int heightInTiles = DefaultHeightTiles;
 
         private readonly List<ArenaRoom> rooms = new List<ArenaRoom>();
+        private readonly HashSet<BossActor> configuredBosses = new HashSet<BossActor>();
         private Collider2D playerBody;
 
         public void AssignArt(Sprite door, Sprite frame, Sprite lamp)
@@ -44,11 +45,16 @@ namespace Gstarr.World
                 if (tilemap.GetTile(cell) is DoorTile)
                     cells.Add(cell);
             }
-            if (cells.Count == 0) return;
+            if (cells.Count == 0)
+            {
+                ActivateUnboundedBosses();
+                return;
+            }
 
             if (doorSprite == null)
             {
                 Debug.LogWarning("문 이미지가 없습니다. Assets/_Project/Tilemaps/DoorTiles/Door.png 를 연결하세요.", this);
+                ActivateUnboundedBosses();
                 return;
             }
 
@@ -97,13 +103,51 @@ namespace Gstarr.World
                     rooms.Add(new ArenaRoom(gates[i], gates[i + 1], gates[i].MaxX, gates[i + 1].MinX));
             }
 
+            ConfigureBosses();
+
             for (int i = 0; i < cells.Count; i++)
                 tilemap.SetTile(cells[i], null);
         }
 
+        private void ConfigureBosses()
+        {
+            var enemies = Object.FindObjectsByType<EnemyActor>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            for (int i = 0; i < enemies.Length; i++)
+            {
+                if (enemies[i] == null || enemies[i].IsDead) continue;
+                var boss = enemies[i].GetComponent<BossActor>();
+                if (boss == null || configuredBosses.Contains(boss)) continue;
+
+                float x = enemies[i].transform.position.x;
+                bool registered = false;
+                for (int r = 0; r < rooms.Count; r++)
+                {
+                    if (!rooms[r].Contains(x)) continue;
+                    rooms[r].RegisterBoss(boss);
+                    registered = true;
+                    break;
+                }
+                if (!registered) boss.SetEncounterActive(true);
+                configuredBosses.Add(boss);
+            }
+        }
+
+        private static void ActivateUnboundedBosses()
+        {
+            var bosses = Object.FindObjectsByType<BossActor>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            for (int i = 0; i < bosses.Length; i++)
+                if (bosses[i] != null) bosses[i].SetEncounterActive(true);
+        }
+
         private void Update()
         {
-            if (rooms.Count == 0) return;
+            if (rooms.Count == 0)
+            {
+                ActivateUnboundedBosses();
+                return;
+            }
+
+            ConfigureBosses();
             if (playerBody == null)
             {
                 var player = GameObject.FindGameObjectWithTag("Player");
@@ -163,6 +207,22 @@ namespace Gstarr.World
             this.innerMax = innerMax;
         }
 
+        public bool Contains(float x) => x >= innerMin && x <= innerMax;
+
+        public void RegisterBoss(BossActor boss)
+        {
+            if (cleared)
+            {
+                cleared = false;
+                locked = false;
+                occupants.Clear();
+            }
+            var actor = boss.GetComponent<EnemyActor>();
+            if (actor != null && !occupants.Contains(actor)) occupants.Add(actor);
+            boss.SetArenaBounds(innerMin, innerMax);
+            boss.SetEncounterActive(locked);
+        }
+
         public void Tick(Bounds player)
         {
             if (cleared) return;
@@ -200,6 +260,11 @@ namespace Gstarr.World
             locked = true;
             left.Lock();
             right?.Lock();
+            for (int i = 0; i < occupants.Count; i++)
+            {
+                var boss = occupants[i] != null ? occupants[i].GetComponent<BossActor>() : null;
+                if (boss != null) boss.SetEncounterActive(true);
+            }
         }
 
         private bool AllDead()

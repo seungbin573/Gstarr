@@ -93,12 +93,13 @@ namespace Gstarr.Combat
                 return;
             }
 
-            // 곧 닿는 정박은 노트가 바로 붙어서 너무 빠르다. 항상 그 다음 정박 노트부터.
+            // 첫 노트는 글로리킬 시작 후 최소 한 박이 지난 정박에 배치한다.
             order = new int[NotesPerKill];
             beats = new long[NotesPerKill];
             if (conductor != null && conductor.IsReady)
             {
-                long first = conductor.FirstBeatAtOrAfter(conductor.SongTime) + 1;
+                double judgedSongTime = conductor.SongTime - conductor.InputOffsetSeconds;
+                long first = conductor.FirstBeatAtOrAfter(judgedSongTime + conductor.CountdownInterval);
                 for (int i = 0; i < NotesPerKill; i++)
                 {
                     long beat = first + i;
@@ -252,7 +253,7 @@ namespace Gstarr.Combat
         private double Remaining(int cue)
         {
             if (conductor != null && conductor.IsReady && cue >= 0 && cue < beats.Length)
-                return conductor.BeatTime(beats[cue]) - conductor.SongTime;
+                return conductor.BeatTime(beats[cue]) + conductor.InputOffsetSeconds - conductor.SongTime;
             return sequenceStart + 0.6 + cue * 0.65 - Time.unscaledTimeAsDouble;
         }
 

@@ -272,7 +272,8 @@ namespace Gstarr.Combat
 
         public bool CatchGlory(ref int nextHealth)
         {
-            if (state != State.Combat || health == null) return false;
+            // Flashbang-stunned enemies must still be eligible for a glory kill.
+            if ((state != State.Combat && state != State.Stunned) || health == null) return false;
             int floor = GloryFloor;
             var boss = GetComponent<BossActor>();
             if (boss != null)
@@ -298,7 +299,8 @@ namespace Gstarr.Combat
         public void EnterStagger()
         {
             var boss = GetComponent<BossActor>();
-            if (state != State.Combat || (staggerSpent && (boss == null || !boss.RequiresPhaseGlory))) return;
+            if ((state != State.Combat && state != State.Stunned)
+                || (staggerSpent && (boss == null || !boss.RequiresPhaseGlory))) return;
             state = State.Stagger;
             staggerTimer = staggerSeconds;
             if (sprite != null) sprite.color = staggerColor;

@@ -1,5 +1,7 @@
 using Gstarr.Rhythm;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace Gstarr.Game
@@ -20,8 +22,21 @@ namespace Gstarr.Game
         private RectTransform gameOverPanel;
         private CanvasGroup gameOverGroup;
         private Text resultText;
+        private Text resultTitle;
+        private Text initialsText;
+        private RectTransform initialsPanel;
         private Button retryButton;
+        private Button saveInitialsButton;
+        private Button menuButton;
         private float gameOverFade = -1f;
+        private bool resultShown;
+        private bool waitingForInitials;
+        private bool resultSubmitted;
+        private long pendingScore;
+        private string pendingStageName;
+        private readonly int[] initialIndices = { 0, 0, 0 };
+        private int selectedInitial;
+        private const string InitialCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
         private void Awake()
         {
@@ -115,26 +130,55 @@ namespace Gstarr.Game
             UIFactory.Stretch(dim.rectTransform);
             dim.raycastTarget = true;
 
-            var head = UIFactory.CreateText("Head", gameOverPanel, "GAME OVER", 130, style: FontStyle.BoldAndItalic);
-            UIFactory.Place(head.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 230f), new Vector2(1200f, 170f));
-            head.color = new Color(1f, 0.35f, 0.3f);
+            resultTitle = UIFactory.CreateText("Head", gameOverPanel, "GAME OVER", 130, style: FontStyle.BoldAndItalic);
+            UIFactory.Place(resultTitle.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 250f), new Vector2(1200f, 140f));
+            resultTitle.color = new Color(1f, 0.35f, 0.3f);
 
             resultText = UIFactory.CreateText("Result", gameOverPanel, "", 40, style: FontStyle.Bold);
-            UIFactory.Place(resultText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 40f), new Vector2(1000f, 200f));
+            UIFactory.Place(resultText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 85f), new Vector2(1000f, 160f));
             resultText.lineSpacing = 1.2f;
 
-            var list = UIFactory.Place(UIFactory.CreateRect("Buttons", gameOverPanel), new Vector2(0.5f, 0.5f), new Vector2(0f, -200f), new Vector2(420f, 200f));
-            UIFactory.AddVerticalLayout(list, 20f);
-            retryButton = UIFactory.CreateButton("Retry", list, "RETRY", 40, StageSession.Retry);
-            UIFactory.SetHeight(retryButton, 80f);
-            var menu = UIFactory.CreateButton("Menu", list, "MAIN MENU", 40, StageSession.ToMainMenu);
-            UIFactory.SetHeight(menu, 80f);
+            var list = UIFactory.Place(UIFactory.CreateRect("Buttons", gameOverPanel), new Vector2(0.5f, 0.5f), new Vector2(0f, -365f), new Vector2(420f, 132f));
+            UIFactory.AddVerticalLayout(list, 12f);
+            retryButton = UIFactory.CreateButton("Retry", list, "RETRY", 30, HandleRetry);
+            UIFactory.SetHeight(retryButton, 58f);
+            menuButton = UIFactory.CreateButton("Menu", list, "MAIN MENU", 30, HandleMenu);
+            UIFactory.SetHeight(menuButton, 58f);
+
+            initialsPanel = UIFactory.CreateRect("InitialsEntry", gameOverPanel);
+            UIFactory.Place(initialsPanel, new Vector2(0.5f, 0.5f), new Vector2(0f, -105f), new Vector2(800f, 160f));
+            var prompt = UIFactory.CreateText("Prompt", initialsPanel, "ENTER YOUR INITIALS", 32, style: FontStyle.Bold);
+            UIFactory.Place(prompt.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -12f), new Vector2(760f, 40f));
+            initialsText = UIFactory.CreateText("Initials", initialsPanel, "AAA", 66, style: FontStyle.BoldAndItalic);
+            initialsText.supportRichText = true;
+            UIFactory.Place(initialsText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 0f), new Vector2(500f, 70f));
+            var controls = UIFactory.CreateText("Controls", initialsPanel, "LEFT / RIGHT: SELECT     UP / DOWN: CHANGE     ENTER: SAVE", 20, style: FontStyle.Normal);
+            UIFactory.Place(controls.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 8f), new Vector2(780f, 30f));
+            saveInitialsButton = UIFactory.CreateButton("SaveInitials", gameOverPanel, "SAVE SCORE", 28, CommitInitials);
+            UIFactory.Place((RectTransform)saveInitialsButton.transform, new Vector2(0.5f, 0.5f), new Vector2(0f, -225f), new Vector2(300f, 54f));
 
             gameOverPanel.gameObject.SetActive(false);
+            initialsPanel.gameObject.SetActive(false);
         }
 
-        private void OnFinished()
+        private void OnFinished() => ShowResult(false);
+
+        public static void ShowGameClear()
         {
+            var hud = FindAnyObjectByType<StageHUD>();
+            if (hud != null) hud.ShowResult(true);
+        }
+
+        public static void ShowGameOver()
+        {
+            var hud = FindAnyObjectByType<StageHUD>();
+            if (hud != null) hud.ShowResult(false);
+        }
+
+        private void ShowResult(bool cleared)
+        {
+            if (resultShown) return;
+            resultShown = true;
             var combo = ComboSystem.Instance;
             long score = combo != null ? combo.Score : 0;
             int maxCombo = combo != null ? combo.MaxCombo : 0;
@@ -143,6 +187,17 @@ namespace Gstarr.Game
             long best = stage != null ? stage.BestScore : 0;
             bool newBest = stage != null && score > best;
             if (stage != null) stage.SubmitScore(score);
+            pendingScore = score;
+            pendingStageName = stage != null ? stage.displayName : "STAGE";
+            waitingForInitials = true;
+            resultSubmitted = false;
+            selectedInitial = 0;
+            for (int i = 0; i < initialIndices.Length; i++) initialIndices[i] = 0;
+            RefreshInitials();
+            initialsPanel.gameObject.SetActive(true);
+
+            resultTitle.text = cleared ? "GAME CLEAR!" : "GAME OVER";
+            resultTitle.color = cleared ? new Color(1f, 0.75f, 0.25f) : new Color(1f, 0.35f, 0.3f);
 
             resultText.text =
                 "SCORE   " + score.ToString("N0") + (newBest ? "   NEW BEST!" : "") + "\n" +
@@ -156,10 +211,14 @@ namespace Gstarr.Game
             GamePause.SetPaused(true);
             UIFactory.EnsureEventSystem();
             UIFactory.Select(retryButton);
+            EventSystem.current.sendNavigationEvents = false;
+            UIFactory.Select(saveInitialsButton);
         }
 
         private void Update()
         {
+            if (waitingForInitials) UpdateInitialsInput();
+
             if (conductor.IsReady)
             {
                 UpdateCountdown(Time.unscaledDeltaTime);
@@ -174,7 +233,71 @@ namespace Gstarr.Game
             }
 
             if (gameOverFade >= 1f && UIFactory.Cancel.WasPressedThisFrame())
-                StageSession.ToMainMenu();
+                HandleMenu();
+        }
+
+        private void UpdateInitialsInput()
+        {
+            var keyboard = Keyboard.current;
+            var gamepad = Gamepad.current;
+            bool left = keyboard != null && keyboard.leftArrowKey.wasPressedThisFrame;
+            bool right = keyboard != null && keyboard.rightArrowKey.wasPressedThisFrame;
+            bool up = keyboard != null && keyboard.upArrowKey.wasPressedThisFrame;
+            bool down = keyboard != null && keyboard.downArrowKey.wasPressedThisFrame;
+            bool confirm = keyboard != null && keyboard.enterKey.wasPressedThisFrame;
+            if (gamepad != null)
+            {
+                left |= gamepad.dpad.left.wasPressedThisFrame;
+                right |= gamepad.dpad.right.wasPressedThisFrame;
+                up |= gamepad.dpad.up.wasPressedThisFrame;
+                down |= gamepad.dpad.down.wasPressedThisFrame;
+                confirm |= gamepad.buttonEast.wasPressedThisFrame;
+            }
+
+            if (left) selectedInitial = (selectedInitial + initialIndices.Length - 1) % initialIndices.Length;
+            if (right) selectedInitial = (selectedInitial + 1) % initialIndices.Length;
+            if (up) initialIndices[selectedInitial] = (initialIndices[selectedInitial] + 1) % InitialCharacters.Length;
+            if (down) initialIndices[selectedInitial] = (initialIndices[selectedInitial] + InitialCharacters.Length - 1) % InitialCharacters.Length;
+            if (left || right || up || down) RefreshInitials();
+            if (confirm) CommitInitials();
+        }
+
+        private void RefreshInitials()
+        {
+            var value = new System.Text.StringBuilder();
+            for (int i = 0; i < initialIndices.Length; i++)
+            {
+                string character = InitialCharacters[initialIndices[i]].ToString();
+                value.Append(i == selectedInitial ? "<color=#FF9A40>" + character + "</color>" : character);
+            }
+            initialsText.text = value.ToString();
+        }
+
+        private void CommitInitials()
+        {
+            if (!waitingForInitials || resultSubmitted) return;
+            var name = new System.Text.StringBuilder(initialIndices.Length);
+            for (int i = 0; i < initialIndices.Length; i++) name.Append(InitialCharacters[initialIndices[i]]);
+            RunLeaderboard.SetNickname(name.ToString());
+            RunLeaderboard.Submit(pendingScore, pendingStageName);
+            resultSubmitted = true;
+            waitingForInitials = false;
+            initialsPanel.gameObject.SetActive(false);
+            resultText.text += "\nNICKNAME   " + name;
+            if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = true;
+            UIFactory.Select(retryButton);
+        }
+
+        private void HandleRetry()
+        {
+            CommitInitials();
+            StageSession.Retry();
+        }
+
+        private void HandleMenu()
+        {
+            CommitInitials();
+            StageSession.ToMainMenu();
         }
 
         private static string Format(float seconds)

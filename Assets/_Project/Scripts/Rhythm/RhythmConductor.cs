@@ -97,6 +97,7 @@ namespace Gstarr.Rhythm
         /// <summary>음악 시작 기준 누적 시간 (루프해도 계속 증가). 시작 전에는 음수.</summary>
         public double SongTime { get; private set; }
         public float GoodWindow => goodWindow;
+        public double InputOffsetSeconds => inputOffsetMs * 0.001;
         public float PerfectWindow => perfectWindow;
         public bool IsReady => Chart != null && Chart.Beats.Length > 0;
 
