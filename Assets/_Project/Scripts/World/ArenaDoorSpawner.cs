@@ -7,6 +7,8 @@ namespace Gstarr.World
 {
     /// <summary>
     /// Doors 타일맵의 칸을 문으로 만든다.
+    /// 바닥 칸 하나가 문이고, 그림은 위로 3칸이다.
+    /// 문 그림은 Assets/_Project/Tilemaps/DoorTiles/Door.png 를 바꾸면 바뀐다.
     /// 같은 x의 칸이 문 하나고, 이웃한 두 문 사이가 방이다.
     /// 방에 들어가면 양쪽 문이 잠기고, 그 안의 적을 모두 처치하면 열린다.
     /// </summary>
@@ -14,8 +16,22 @@ namespace Gstarr.World
     [DefaultExecutionOrder(100)]
     public class ArenaDoorSpawner : MonoBehaviour
     {
+        public const int DefaultHeightTiles = 3;
+
+        [SerializeField] Sprite doorSprite;
+        [SerializeField] Sprite frameSprite;
+        [SerializeField] Sprite lampSprite;
+        [SerializeField] int heightInTiles = DefaultHeightTiles;
+
         private readonly List<ArenaRoom> rooms = new List<ArenaRoom>();
         private Collider2D playerBody;
+
+        public void AssignArt(Sprite door, Sprite frame, Sprite lamp)
+        {
+            doorSprite = door;
+            frameSprite = frame;
+            lampSprite = lamp;
+        }
 
         private void Start()
         {
@@ -29,6 +45,12 @@ namespace Gstarr.World
                     cells.Add(cell);
             }
             if (cells.Count == 0) return;
+
+            if (doorSprite == null)
+            {
+                Debug.LogWarning("문 이미지가 없습니다. Assets/_Project/Tilemaps/DoorTiles/Door.png 를 연결하세요.", this);
+                return;
+            }
 
             var byColumn = new Dictionary<int, List<Vector3Int>>();
             for (int i = 0; i < cells.Count; i++)
@@ -44,18 +66,20 @@ namespace Gstarr.World
 
             var xs = new List<int>(byColumn.Keys);
             xs.Sort();
+            int tilesTall = Mathf.Max(1, heightInTiles);
 
             var gates = new List<DoorGate>();
             for (int i = 0; i < xs.Count; i++)
             {
                 var column = byColumn[xs[i]];
-                int top = int.MinValue;
+                int bottom = int.MaxValue;
                 for (int c = 0; c < column.Count; c++)
-                    if (column[c].y > top) top = column[c].y;
+                    if (column[c].y < bottom) bottom = column[c].y;
 
                 var gate = new DoorGate();
-                for (int c = 0; c < column.Count; c++)
-                    gate.Blocks.Add(DoorBlock.Create(tilemap, column[c], column[c].y == top, transform));
+                gate.Blocks.Add(DoorBlock.Create(
+                    tilemap, new Vector3Int(xs[i], bottom, 0), tilesTall,
+                    doorSprite, frameSprite, lampSprite, transform));
 
                 Vector3 corner = tilemap.CellToWorld(new Vector3Int(xs[i], 0, 0));
                 gate.MinX = corner.x;
@@ -191,9 +215,6 @@ namespace Gstarr.World
 
     internal class DoorBlock : MonoBehaviour
     {
-        private static Sprite frameSprite;
-        private static Sprite shutterSprite;
-        private static Sprite lampSprite;
         private static AudioClip slamClip;
 
         private Transform shutter;
@@ -203,43 +224,54 @@ namespace Gstarr.World
         private float targetY;
         private float speed;
 
-        public static DoorBlock Create(Tilemap tilemap, Vector3Int cell, bool top, Transform parent)
+        public static DoorBlock Create(
+            Tilemap tilemap, Vector3Int bottomCell, int heightTiles,
+            Sprite doorSprite, Sprite frameSprite, Sprite lampSprite, Transform parent)
         {
-            EnsureSprites();
-            Vector3 size = tilemap.cellSize;
-            var go = new GameObject("DoorBlock");
+            float cellW = tilemap.cellSize.x;
+            float cellH = tilemap.cellSize.y;
+            float targetW = cellW;
+            float targetH = cellH * heightTiles;
+
+            Vector3 corner = tilemap.CellToWorld(bottomCell);
+            var go = new GameObject("Door");
             go.transform.SetParent(parent, false);
-            go.transform.position = tilemap.CellToWorld(cell);
+            go.transform.position = corner + new Vector3(targetW * 0.5f, 0f, 0f);
 
             int ground = LayerMask.NameToLayer("Ground");
             if (ground < 0) ground = 0;
             go.layer = ground;
 
             var block = go.AddComponent<DoorBlock>();
-            block.openY = size.y;
-            block.targetY = size.y;
-            block.speed = size.y / 0.12f;
+            block.openY = targetH;
+            block.targetY = targetH;
+            block.speed = targetH / 0.12f;
 
-            var frame = NewSprite("Frame", go.transform, frameSprite, 6);
-            frame.transform.localScale = new Vector3(size.x, size.y, 1f);
+            if (frameSprite != null)
+            {
+                var frame = NewSprite("Frame", go.transform, frameSprite, 6);
+                frame.transform.localScale = Fit(frameSprite, targetW, targetH);
+            }
 
-            var shutterGo = NewSprite("Shutter", go.transform, shutterSprite, 7);
-            shutterGo.transform.localScale = frame.transform.localScale;
-            shutterGo.transform.localPosition = new Vector3(0f, size.y, 0f);
+            var shutterGo = NewSprite("Shutter", go.transform, doorSprite, 7);
+            shutterGo.transform.localScale = Fit(doorSprite, targetW, targetH);
+            shutterGo.transform.localPosition = new Vector3(0f, targetH, 0f);
             shutterGo.GetComponent<SpriteRenderer>().enabled = false;
             block.shutter = shutterGo.transform;
 
-            if (top)
+            if (lampSprite != null)
             {
+                const float lampSize = 0.28f;
                 var lampGo = NewSprite("Lamp", go.transform, lampSprite, 8);
-                lampGo.transform.localPosition = new Vector3(size.x * 0.5f, size.y - 0.2f, 0f);
+                lampGo.transform.localScale = Fit(lampSprite, lampSize, lampSize);
+                lampGo.transform.localPosition = new Vector3(0f, targetH - lampSize * 0.35f, 0f);
                 block.lamp = lampGo.GetComponent<SpriteRenderer>();
                 block.lamp.color = new Color(0.35f, 0.95f, 0.45f);
             }
 
             block.body = go.AddComponent<BoxCollider2D>();
-            block.body.size = new Vector2(size.x, size.y);
-            block.body.offset = new Vector2(size.x * 0.5f, size.y * 0.5f);
+            block.body.size = new Vector2(targetW, targetH);
+            block.body.offset = new Vector2(0f, targetH * 0.5f);
             block.body.enabled = false;
             return block;
         }
@@ -279,6 +311,14 @@ namespace Gstarr.World
             if (renderer != null) renderer.enabled = pos.y < openY - 0.02f;
         }
 
+        private static Vector3 Fit(Sprite sprite, float width, float height)
+        {
+            Vector2 size = sprite.bounds.size;
+            float sx = size.x > 0.0001f ? width / size.x : 1f;
+            float sy = size.y > 0.0001f ? height / size.y : 1f;
+            return new Vector3(sx, sy, 1f);
+        }
+
         private static GameObject NewSprite(string name, Transform parent, Sprite sprite, int order)
         {
             var go = new GameObject(name);
@@ -287,82 +327,6 @@ namespace Gstarr.World
             renderer.sprite = sprite;
             renderer.sortingOrder = order;
             return go;
-        }
-
-        private static void EnsureSprites()
-        {
-            if (frameSprite == null) frameSprite = MakeFrame();
-            if (shutterSprite == null) shutterSprite = MakeShutter();
-            if (lampSprite == null) lampSprite = MakeLamp();
-        }
-
-        private static Sprite MakeFrame()
-        {
-            var px = new Color32[16 * 16];
-            var edge = new Color32(18, 28, 58, 255);
-            var metal = new Color32(46, 78, 138, 255);
-            var trim = new Color32(168, 196, 230, 255);
-            for (int y = 0; y < 16; y++)
-            {
-                for (int x = 0; x < 16; x++)
-                {
-                    if (x > 1 && x < 14) continue;
-                    bool bolt = y % 5 == 2 && x != 0 && x != 15;
-                    px[y * 16 + x] = bolt ? trim : x == 0 || x == 15 ? edge : metal;
-                }
-            }
-            return SpriteFrom(px, new Vector2(0f, 0f), "DoorFrame");
-        }
-
-        private static Sprite MakeShutter()
-        {
-            var px = new Color32[16 * 16];
-            var dark = new Color32(24, 36, 72, 255);
-            var plate = new Color32(62, 104, 176, 255);
-            var shine = new Color32(186, 214, 242, 255);
-            var warn = new Color32(232, 186, 48, 255);
-            for (int y = 0; y < 16; y++)
-            {
-                for (int x = 2; x < 14; x++)
-                {
-                    bool stripe = y >= 6 && y <= 8;
-                    px[y * 16 + x] = stripe ? warn : y % 4 == 0 ? dark : x == 3 ? shine : plate;
-                }
-            }
-            return SpriteFrom(px, new Vector2(0f, 0f), "DoorShutter");
-        }
-
-        private static Sprite MakeLamp()
-        {
-            var px = new Color32[4 * 4];
-            for (int i = 0; i < px.Length; i++) px[i] = new Color32(255, 255, 255, 255);
-            var tex = NewTexture(4, 4, px, "DoorLamp");
-            var sprite = Sprite.Create(tex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f), 16f);
-            sprite.hideFlags = HideFlags.HideAndDontSave;
-            return sprite;
-        }
-
-        private static Sprite SpriteFrom(Color32[] pixels, Vector2 pivot, string spriteName)
-        {
-            var tex = NewTexture(16, 16, pixels, spriteName);
-            var sprite = Sprite.Create(tex, new Rect(0, 0, 16, 16), pivot, 16f, 0, SpriteMeshType.FullRect);
-            sprite.name = spriteName;
-            sprite.hideFlags = HideFlags.HideAndDontSave;
-            return sprite;
-        }
-
-        private static Texture2D NewTexture(int width, int height, Color32[] pixels, string textureName)
-        {
-            var tex = new Texture2D(width, height, TextureFormat.RGBA32, false)
-            {
-                filterMode = FilterMode.Point,
-                wrapMode = TextureWrapMode.Clamp,
-                name = textureName,
-                hideFlags = HideFlags.HideAndDontSave
-            };
-            tex.SetPixels32(pixels);
-            tex.Apply();
-            return tex;
         }
 
         private static AudioClip MakeSlam()

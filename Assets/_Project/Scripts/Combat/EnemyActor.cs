@@ -56,8 +56,12 @@ namespace Gstarr.Combat
         private bool moleEmerging;
         private bool moleActive;
         private Vector3 moleSurfacePosition;
+        private Vector3 moleDestinationPosition;
         private float moleHeight;
+        private float moleGroundY;
         private float moleTimer;
+        private SpriteRenderer moleTrail;
+        private SpriteRenderer moleDestinationMarker;
 
         private const float WallProbe = 0.22f;
         private const float GroundProbe = 1.15f;
@@ -424,6 +428,8 @@ namespace Gstarr.Combat
             {
                 sprite.color = preparing ? Color.Lerp(idleColor, Color.white, 0.7f) : idleColor;
             }
+
+            UpdateMoleVisuals();
         }
 
         private void BindConductor()
@@ -637,8 +643,32 @@ namespace Gstarr.Combat
             if (moleBuried)
             {
                 moleTimer -= Time.fixedDeltaTime;
-                if (moleTimer <= 0f && player != null
-                    && Vector2.Distance(player.position, moleSurfacePosition) <= detectionRange)
+                bool pursuingPlayer = IsPlayerOnMoleGround()
+                    && Mathf.Abs(player.position.x - moleSurfacePosition.x) <= detectionRange;
+                if (pursuingPlayer)
+                {
+                    float side = player.position.x >= moleSurfacePosition.x ? -1f : 1f;
+                    if (Mathf.Abs(player.position.x - moleSurfacePosition.x) < 0.15f)
+                        side = -patrolDirection;
+                    float offset = Mathf.Clamp(attackRange * 0.65f, 0.55f, 0.9f);
+                    moleDestinationPosition = new Vector3(player.position.x + side * offset, moleGroundY, transform.position.z);
+                }
+                else
+                {
+                    float patrolLimit = Mathf.Max(2f, detectionRange * 0.5f);
+                    if (Mathf.Abs(moleSurfacePosition.x - patrolHome.x) >= patrolLimit)
+                        patrolDirection = moleSurfacePosition.x < patrolHome.x ? 1 : -1;
+                    moleDestinationPosition = new Vector3(patrolHome.x + patrolDirection * patrolLimit, moleGroundY, transform.position.z);
+                }
+
+                moleSurfacePosition = Vector3.MoveTowards(
+                    moleSurfacePosition,
+                    moleDestinationPosition,
+                    Time.fixedDeltaTime * moveSpeed * 1.8f);
+                transform.position = moleSurfacePosition - Vector3.up * moleHeight * 0.85f;
+
+                bool reachedDestination = Mathf.Abs(moleSurfacePosition.x - moleDestinationPosition.x) < 0.12f;
+                if (moleTimer <= 0f && reachedDestination)
                     BeginMoleEmerge();
                 return true;
             }
@@ -662,6 +692,8 @@ namespace Gstarr.Combat
             if (moleActive)
             {
                 moleTimer -= Time.fixedDeltaTime;
+                if (IsPlayerOnSameGround() && !IsPlayerInMeleeRange())
+                    MoveGroundEnemy();
                 if (moleTimer <= 0f) BeginMoleBurrow();
                 return true;
             }
@@ -671,20 +703,23 @@ namespace Gstarr.Combat
         private void BeginMoleBurrow(bool initial = false)
         {
             if (body == null || rb == null) return;
-            if (!initial) moleSurfacePosition = transform.position;
-            else moleSurfacePosition = transform.position;
+            moleSurfacePosition = transform.position;
             moleHeight = body.bounds.extents.y;
+            var floorHit = Physics2D.Raycast(moleSurfacePosition + Vector3.up * 0.3f, Vector2.down, 2f, groundMask);
+            moleGroundY = floorHit.collider != null ? floorHit.point.y : moleSurfacePosition.y;
+            moleDestinationPosition = moleSurfacePosition;
             rb.linearVelocity = Vector2.zero;
             rb.bodyType = RigidbodyType2D.Kinematic;
             rb.gravityScale = 0f;
             body.enabled = false;
             transform.position = moleSurfacePosition - Vector3.up * moleHeight * 0.85f;
             if (sprite != null) sprite.enabled = false;
+            EnsureMoleVisuals();
             moleInitialized = true;
             moleBuried = true;
             moleEmerging = false;
             moleActive = false;
-            moleTimer = initial ? 0f : 1.25f;
+            moleTimer = initial ? 0.25f : 0.45f;
         }
 
         private void BeginMoleEmerge()
@@ -692,7 +727,80 @@ namespace Gstarr.Combat
             moleBuried = false;
             moleEmerging = true;
             rb.linearVelocity = Vector2.zero;
+            transform.position = moleSurfacePosition - Vector3.up * moleHeight * 0.85f;
             if (sprite != null) sprite.enabled = true;
+        }
+
+        private bool IsPlayerOnMoleGround()
+        {
+            if (player == null) return false;
+            var playerBody = player.GetComponent<Collider2D>();
+            if (playerBody == null || !playerBody.enabled) return false;
+
+            Vector2 playerFoot = new Vector2(playerBody.bounds.center.x, playerBody.bounds.min.y + 0.2f);
+            RaycastHit2D playerFloor = Physics2D.Raycast(playerFoot, Vector2.down, 0.55f, groundMask);
+            if (playerFloor.collider == null || Mathf.Abs(playerFloor.point.y - moleGroundY) > 0.35f)
+                return false;
+
+            float distance = Mathf.Abs(playerFoot.x - moleSurfacePosition.x);
+            int samples = Mathf.CeilToInt(distance / 0.45f);
+            for (int i = 1; i < samples; i++)
+            {
+                float x = Mathf.Lerp(moleSurfacePosition.x, playerFoot.x, i / (float)samples);
+                var floor = Physics2D.Raycast(new Vector2(x, moleGroundY + 0.35f), Vector2.down, 0.7f, groundMask);
+                if (floor.collider == null || Mathf.Abs(floor.point.y - moleGroundY) > 0.35f)
+                    return false;
+            }
+
+            return true;
+        }
+
+        private void EnsureMoleVisuals()
+        {
+            if (sprite == null || sprite.sprite == null) return;
+            if (moleTrail == null)
+            {
+                var trailObject = new GameObject("MoleBurrowTrail");
+                trailObject.transform.SetParent(transform, false);
+                moleTrail = trailObject.AddComponent<SpriteRenderer>();
+                moleTrail.sprite = sprite.sprite;
+                moleTrail.sortingOrder = sprite.sortingOrder - 1;
+                moleTrail.color = new Color(0.62f, 0.35f, 0.16f, 0.82f);
+                trailObject.transform.localScale = new Vector3(0.55f, 0.24f, 1f);
+            }
+
+            if (moleDestinationMarker == null)
+            {
+                var markerObject = new GameObject("MoleEmergenceMarker");
+                markerObject.transform.SetParent(transform, false);
+                moleDestinationMarker = markerObject.AddComponent<SpriteRenderer>();
+                moleDestinationMarker.sprite = sprite.sprite;
+                moleDestinationMarker.sortingOrder = sprite.sortingOrder - 1;
+                moleDestinationMarker.color = new Color(1f, 0.72f, 0.2f, 0.5f);
+                markerObject.transform.localScale = Vector3.one * 0.65f;
+            }
+        }
+
+        private void UpdateMoleVisuals()
+        {
+            bool show = kind == EnemyKind.Mole && moleBuried;
+            if (moleTrail != null)
+            {
+                moleTrail.enabled = show;
+                if (show) moleTrail.transform.position = moleSurfacePosition + Vector3.up * 0.04f;
+            }
+            if (moleDestinationMarker != null)
+            {
+                moleDestinationMarker.enabled = show;
+                if (show)
+                {
+                    moleDestinationMarker.transform.position = moleDestinationPosition + Vector3.up * 0.12f;
+                    float pulse = 0.45f + Mathf.PingPong(Time.time * 1.8f, 0.35f);
+                    var color = moleDestinationMarker.color;
+                    color.a = pulse;
+                    moleDestinationMarker.color = color;
+                }
+            }
         }
 
         private void AttackMelee()

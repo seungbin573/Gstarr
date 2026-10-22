@@ -8,7 +8,9 @@ namespace Gstarr.EditorTools
 {
     public static class DoorTools
     {
-        public const string SpritePath = "Assets/_Project/Tilemaps/DoorTiles/Door.png";
+        public const string DoorPath = "Assets/_Project/Tilemaps/DoorTiles/Door.png";
+        public const string FramePath = "Assets/_Project/Tilemaps/DoorTiles/DoorFrame.png";
+        public const string LampPath = "Assets/_Project/Tilemaps/DoorTiles/DoorLamp.png";
         public const string TilePath = "Assets/_Project/Tilemaps/DoorTiles/DoorTile.asset";
         private const string PaletteName = "Doors";
 
@@ -16,7 +18,7 @@ namespace Gstarr.EditorTools
         public static void BuildDoorPaletteMenu()
         {
             GetOrCreateTile();
-            Debug.Log("[Door Tools] Doors 팔레트를 만들었습니다. Tile Palette에서 Doors를 고르고 Doors 타일맵에 세로로 칠하세요.");
+            Debug.Log("[Door Tools] Doors 팔레트를 만들었습니다. Door.png 를 바꾸면 문 그림이 바뀝니다. 바닥 칸에 한 칸만 칠하면 위로 3칸 문이 됩니다.");
             EditorApplication.ExecuteMenuItem("Window/2D/Tile Palette");
         }
 
@@ -30,7 +32,7 @@ namespace Gstarr.EditorTools
                 AssetDatabase.CreateAsset(tile, TilePath);
             }
 
-            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(SpritePath);
+            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(DoorPath);
             tile.Setup(sprite);
             EditorUtility.SetDirty(tile);
             TilesetImporter.BuildPalette(PaletteName, new TileBase[] { tile }, 1);
@@ -41,19 +43,36 @@ namespace Gstarr.EditorTools
         public static Tilemap EnsureDoorTilemap(Transform grid)
         {
             var existing = grid.GetComponentsInChildren<ArenaDoorSpawner>(true).FirstOrDefault();
-            if (existing != null) return existing.GetComponent<Tilemap>();
+            if (existing != null)
+            {
+                AssignArt(existing);
+                var map = existing.GetComponent<Tilemap>();
+                map.tileAnchor = new Vector3(0.5f, 0f, 0f);
+                return map;
+            }
 
             var go = new GameObject("Doors", typeof(Tilemap), typeof(TilemapRenderer), typeof(ArenaDoorSpawner));
             Undo.RegisterCreatedObjectUndo(go, "Create Doors Tilemap");
             go.transform.SetParent(grid, false);
             go.GetComponent<TilemapRenderer>().sortingOrder = 6;
-            return go.GetComponent<Tilemap>();
+            var tilemap = go.GetComponent<Tilemap>();
+            tilemap.tileAnchor = new Vector3(0.5f, 0f, 0f);
+            AssignArt(go.GetComponent<ArenaDoorSpawner>());
+            return tilemap;
         }
 
-        public static void PaintColumn(Tilemap map, DoorTile tile, int x, int yMin, int yMax)
+        public static void PaintDoor(Tilemap map, DoorTile tile, int x, int floorCellY)
         {
-            for (int y = yMin; y <= yMax; y++)
-                map.SetTile(new Vector3Int(x, y, 0), tile);
+            map.SetTile(new Vector3Int(x, floorCellY, 0), tile);
+        }
+
+        static void AssignArt(ArenaDoorSpawner spawner)
+        {
+            spawner.AssignArt(
+                AssetDatabase.LoadAssetAtPath<Sprite>(DoorPath),
+                AssetDatabase.LoadAssetAtPath<Sprite>(FramePath),
+                AssetDatabase.LoadAssetAtPath<Sprite>(LampPath));
+            EditorUtility.SetDirty(spawner);
         }
     }
 }

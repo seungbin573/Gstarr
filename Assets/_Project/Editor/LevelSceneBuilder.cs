@@ -73,8 +73,8 @@ namespace Gstarr.EditorTools
             EnemyActor.Spawn(null, new Vector3(30f, 0.5f, 0f), EnemyKind.RangedHalfBeat);
             var doorTile = DoorTools.GetOrCreateTile();
             var doors = DoorTools.EnsureDoorTilemap(grid.transform);
-            DoorTools.PaintColumn(doors, doorTile, 12, -1, 4);
-            DoorTools.PaintColumn(doors, doorTile, 40, -1, 4);
+            DoorTools.PaintDoor(doors, doorTile, 12, -1);
+            DoorTools.PaintDoor(doors, doorTile, 40, -1);
 
             // 아이템은 직접 그릴 수 있게 빈 Items 타일맵만 만들어 둠
             ItemTools.EnsureDefaultItems();
@@ -92,7 +92,7 @@ namespace Gstarr.EditorTools
             EditorApplication.ExecuteMenuItem("Window/2D/Tile Palette");
             Debug.Log($"[Level Builder] 씬 생성 완료: {scenePath}\n" +
                       "Tile Palette에서 Ground, Enemies, Doors 팔레트를 고르고 해당 타일맵에 배치하세요. " +
-                      "문 칸을 같은 세로줄로 칠하면 방이 되고, 그 사이 적을 처치하면 문이 열립니다. " +
+                      "문 타일은 바닥 칸에 한 칸만 칠하면 위로 3칸 문이 됩니다. Door.png 를 바꾸면 문 그림이 바뀝니다. " +
                       $"적 배치 타일맵: {enemyTilemap.name}");
         }
 
