@@ -69,7 +69,7 @@ namespace Gstarr.Game
                 go.AddComponent<InputSystemUIInputModule>();
             }
 
-            foreach (var extra in UnityEngine.Object.FindObjectsByType<EventSystem>(FindObjectsInactive.Include))
+            foreach (var extra in UnityEngine.Object.FindObjectsByType<EventSystem>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 if (extra != persistentEventSystem) UnityEngine.Object.Destroy(extra.gameObject);
             }

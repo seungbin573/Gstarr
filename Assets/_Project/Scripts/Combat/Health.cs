@@ -23,6 +23,14 @@ namespace Gstarr.Combat
         public float InvulnOnHit { get; set; }
         public bool IsInvulnerable => invulnTimer > 0f;
 
+        public void GrantInvulnerability(float seconds)
+        {
+            invulnTimer = Mathf.Max(invulnTimer, Mathf.Max(0f, seconds));
+            if (blinkRenderers == null || blinkRenderers.Length == 0)
+                blinkRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+            SetBlinkVisible(true);
+        }
+
         public void Configure(int max, bool destroy)
         {
             maxHealth = Mathf.Max(1, max);
@@ -100,6 +108,11 @@ namespace Gstarr.Combat
             if (invulnTimer > 0f)
             {
                 invulnTimer -= Time.deltaTime;
+                if (Gstarr.Game.GamePause.IsGloryKill)
+                {
+                    SetBlinkVisible(true);
+                    return;
+                }
                 bool visible = Mathf.Repeat(Time.unscaledTime * 8f, 1f) < 0.55f || invulnTimer <= 0f;
                 if (blinkRenderers != null)
                     for (int i = 0; i < blinkRenderers.Length; i++)

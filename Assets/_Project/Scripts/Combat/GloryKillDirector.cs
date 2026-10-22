@@ -177,7 +177,7 @@ namespace Gstarr.Combat
             hitSource.playOnAwake = false;
             hitSource.spatialBlend = 0f;
 
-            banner = UIFactory.CreateText("Banner", canvasRoot, "GLORY KILL", 72, style: FontStyle.BoldAndItalic);
+            banner = UIFactory.CreateText("Banner", canvasRoot, "", 72, style: FontStyle.BoldAndItalic);
             UIFactory.Place(banner.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 220f), new Vector2(900f, 100f));
             banner.color = new Color(1f, 0.82f, 0.2f);
         }
@@ -306,7 +306,7 @@ namespace Gstarr.Combat
             }
 
             if (enemy != null) enemy.FinishGlory();
-            banner.text = "GLORY KILL  +" + bonus.ToString("N0");
+            banner.text = "+" + bonus.ToString("N0");
             banner.color = new Color(1f, 0.9f, 0.35f);
             if (note != null) note.gameObject.SetActive(false);
             if (noteLabel != null) noteLabel.gameObject.SetActive(false);

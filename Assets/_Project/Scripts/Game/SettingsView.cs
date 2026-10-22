@@ -13,6 +13,7 @@ namespace Gstarr.Game
     {
         private RectTransform settingsPanel;
         private RectTransform settingsContent;
+        private ScrollRect settingsScroll;
         private readonly List<Button> settingsTabs = new List<Button>();
         private int currentTab;
         private bool rebinding;
@@ -58,8 +59,26 @@ namespace Gstarr.Game
             var panelBg = UIFactory.CreateImage("ContentBg", settingsPanel, UIFactory.PanelColor);
             UIFactory.Place(panelBg.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -60f), new Vector2(1100f, 640f));
 
-            settingsContent = UIFactory.Place(UIFactory.CreateRect("Content", settingsPanel), new Vector2(0.5f, 0.5f), new Vector2(0f, -60f), new Vector2(1040f, 600f));
-            UIFactory.AddVerticalLayout(settingsContent, 12f);
+            var viewport = UIFactory.Place(UIFactory.CreateRect("Viewport", settingsPanel), new Vector2(0.5f, 0.5f), new Vector2(0f, -60f), new Vector2(1040f, 600f));
+            viewport.gameObject.AddComponent<RectMask2D>();
+            settingsScroll = viewport.gameObject.AddComponent<ScrollRect>();
+            settingsScroll.horizontal = false;
+            settingsScroll.movementType = ScrollRect.MovementType.Clamped;
+            settingsScroll.scrollSensitivity = 40f;
+            settingsScroll.viewport = viewport;
+
+            settingsContent = UIFactory.CreateRect("Content", viewport);
+            settingsContent.anchorMin = new Vector2(0f, 1f);
+            settingsContent.anchorMax = new Vector2(1f, 1f);
+            settingsContent.pivot = new Vector2(0.5f, 1f);
+            settingsContent.anchoredPosition = Vector2.zero;
+            settingsContent.sizeDelta = new Vector2(0f, 0f);
+            var layout = UIFactory.AddVerticalLayout(settingsContent, 12f);
+            layout.padding = new RectOffset(8, 8, 8, 8);
+            var fitter = settingsContent.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            settingsScroll.content = settingsContent;
 
             var back = UIFactory.CreateButton("Back", settingsPanel, "BACK", 34, () => onBack?.Invoke());
             UIFactory.Place((RectTransform)back.transform, new Vector2(0.5f, 0f), new Vector2(0f, 40f), new Vector2(260f, 70f));
@@ -87,6 +106,11 @@ namespace Gstarr.Game
                 default: first = BuildGraphics(); break;
             }
             if (select) UIFactory.Select(first != null ? first : settingsTabs[index]);
+            if (settingsScroll != null)
+            {
+                Canvas.ForceUpdateCanvases();
+                settingsScroll.verticalNormalizedPosition = 1f;
+            }
         }
 
         private OptionRow AddOption(string label, System.Func<string> get, System.Action<int> change)
@@ -169,9 +193,15 @@ namespace Gstarr.Game
 
             Selectable first = null;
             var map = actions.FindActionMap("Player");
+            if (map == null)
+            {
+                var missing = UIFactory.CreateText("NoMap", settingsContent, "Player action map was not found", 30);
+                UIFactory.SetHeight(missing, 60f);
+                return null;
+            }
+
             foreach (var action in map.actions)
             {
-                if (action.name == "Move") continue;
                 var row = UIFactory.CreateRect("Row_" + action.name, settingsContent);
                 UIFactory.SetHeight(row, 46f);
                 AddCell(row, Pretty(action.name), 0f, 0.4f, 26).alignment = TextAnchor.MiddleLeft;
@@ -207,7 +237,9 @@ namespace Gstarr.Game
             for (int i = 0; i < action.bindings.Count; i++)
             {
                 var b = action.bindings[i];
-                if (!b.isComposite && !b.isPartOfComposite && b.path.StartsWith(device)) { index = i; break; }
+                if (b.isComposite || b.isPartOfComposite) continue;
+                var path = string.IsNullOrEmpty(b.effectivePath) ? b.path : b.effectivePath;
+                if (!string.IsNullOrEmpty(path) && path.StartsWith(device)) { index = i; break; }
             }
 
             Button button = null;
@@ -216,9 +248,30 @@ namespace Gstarr.Game
             rt.anchorMin = new Vector2(x0, 0f);
             rt.anchorMax = new Vector2(x1, 1f);
             rt.offsetMin = rt.offsetMax = Vector2.zero;
-            SetBindLabel(button, action, index);
-            if (index < 0) button.interactable = false;
+            if (index >= 0)
+                SetBindLabel(button, action, index);
+            else
+            {
+                string composite = CompositeLabel(action, device);
+                button.GetComponentInChildren<Text>().text = string.IsNullOrEmpty(composite) ? "-" : composite;
+                button.interactable = false;
+            }
             return button;
+        }
+
+        private static string CompositeLabel(InputAction action, string device)
+        {
+            var names = new List<string>();
+            for (int i = 0; i < action.bindings.Count; i++)
+            {
+                var b = action.bindings[i];
+                if (!b.isPartOfComposite) continue;
+                var path = string.IsNullOrEmpty(b.effectivePath) ? b.path : b.effectivePath;
+                if (string.IsNullOrEmpty(path) || !path.StartsWith(device)) continue;
+                names.Add(action.GetBindingDisplayString(i));
+            }
+            if (names.Count == 0) return null;
+            return names.Count > 2 ? "Arrow Keys" : string.Join(" ", names);
         }
 
         private static void SetBindLabel(Button button, InputAction action, int index)

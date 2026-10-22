@@ -15,7 +15,10 @@ MonoBehaviour:
   slotSprite: {fileID: 21300000, guid: 8ca84faeb5ef1b4469809743a3d5a3c5, type: 3}
   defaultItems:
   - {fileID: 11400000, guid: f888e0b9c158e9e439ce1a8ebd51fa23, type: 2}
+  - {fileID: 11400000, guid: 8dd7962b3b0f4e9293405d41e9ca8413, type: 2}
   - {fileID: 11400000, guid: 16012a79a866dd64995870b4a78e16a9, type: 2}
+  - {fileID: 11400000, guid: 6bb971fda42a4e77a19da33bdb3bbdf1, type: 2}
+  - {fileID: 11400000, guid: 7cc615a6c0544a3294351904704e9f89, type: 2}
   defaultItemCount: 3
   enableRhythm: 1
   music: {fileID: 8300000, guid: 4d5cef3ed3d00b144856b26669a96d19, type: 3}
@@ -31,6 +34,11 @@ MonoBehaviour:
   defaultStageScene: Level_01
   mainMenuScene: MainMenu
   enemySprite: {fileID: 21300000, guid: 4c8e1b7a9d2f4e6ab0c31d58e7f64a02, type: 3}
+  enemySprites:
+  - {fileID: 21300000, guid: 4c8e1b7a9d2f4e6ab0c31d58e7f64a02, type: 3}
+  - {fileID: 21300000, guid: 2b379a7ba848409c991687a3ca271486, type: 3}
+  - {fileID: 21300000, guid: dfd40f5ecbab43e8b20722c374db3b1e, type: 3}
+  - {fileID: 21300000, guid: 9f56ab5b323e44468f1a201839828bcc, type: 3}
   gloryNoteSprites:
   - {fileID: 21300000, guid: a1c4e8b27f3d4a61b9e0c5d84f17a201, type: 3}
   - {fileID: 21300000, guid: b2d5f9c38e4e4b72c0f1d6e95a28b312, type: 3}

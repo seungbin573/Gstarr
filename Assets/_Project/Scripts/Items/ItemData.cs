@@ -18,6 +18,7 @@ namespace Gstarr.Items
     {
         [SerializeField] private string displayName = "Item";
         [SerializeField] private Sprite icon;
+        [SerializeField] private Color iconTint = Color.white;
         [SerializeField] private ItemCategory category = ItemCategory.Effect;
         [Tooltip("한 슬롯에 겹칠 수 있는 최대 개수")]
         [SerializeField] private int maxStack = 9;
@@ -26,6 +27,7 @@ namespace Gstarr.Items
 
         public string DisplayName => displayName;
         public Sprite Icon => icon;
+        public Color IconTint => iconTint;
         public ItemCategory Category => category;
         public int MaxStack => Mathf.Max(1, maxStack);
         public bool ConsumeOnUse => consumeOnUse;

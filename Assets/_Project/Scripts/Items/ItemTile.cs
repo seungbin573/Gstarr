@@ -12,6 +12,7 @@ namespace Gstarr.Items
     {
         [SerializeField] private ItemData item;
         [SerializeField] private int count = 1;
+        [SerializeField] private Color tint = Color.white;
 
         public ItemData Item => item;
         public int Count => Mathf.Max(1, count);
@@ -20,12 +21,13 @@ namespace Gstarr.Items
         {
             this.item = item;
             this.count = count;
+            tint = item != null ? item.IconTint : Color.white;
         }
 
         public override void GetTileData(Vector3Int position, ITilemap tilemap, ref TileData tileData)
         {
             tileData.sprite = item != null ? item.Icon : null;
-            tileData.color = Color.white;
+            tileData.color = tint;
             tileData.transform = Matrix4x4.identity;
             tileData.flags = TileFlags.LockAll;
             tileData.colliderType = Tile.ColliderType.None;

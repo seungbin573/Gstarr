@@ -20,6 +20,29 @@ namespace Gstarr.CameraSystem
         private float lookAhead;
         private float lookAheadVelocity;
         private Camera cam;
+        private Transform focusTarget;
+        private bool focusing;
+        private float previousSize;
+
+        public void BeginFocus(Transform subject, float orthographicSize)
+        {
+            if (subject == null) return;
+            if (cam == null) cam = GetComponent<Camera>();
+            if (!focusing && cam != null) previousSize = cam.orthographicSize;
+            focusing = true;
+            focusTarget = subject;
+            velocity = Vector3.zero;
+            if (cam != null) cam.orthographicSize = Mathf.Max(0.01f, orthographicSize);
+        }
+
+        public void EndFocus()
+        {
+            if (!focusing) return;
+            if (cam != null) cam.orthographicSize = previousSize;
+            focusing = false;
+            focusTarget = null;
+            velocity = Vector3.zero;
+        }
 
         public Transform Target
         {
@@ -34,6 +57,15 @@ namespace Gstarr.CameraSystem
 
         private void LateUpdate()
         {
+            if (focusing && focusTarget == null) EndFocus();
+            if (focusing)
+            {
+                Vector3 focusPosition = focusTarget.position;
+                focusPosition.z = transform.position.z;
+                transform.position = Vector3.SmoothDamp(transform.position, focusPosition,
+                    ref velocity, smoothTime, Mathf.Infinity, Time.unscaledDeltaTime);
+                return;
+            }
             if (target == null) return;
 
             float facing = Mathf.Sign(target.localScale.x);

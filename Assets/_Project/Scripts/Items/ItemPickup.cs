@@ -21,6 +21,7 @@ namespace Gstarr.Items
 
             var sr = go.AddComponent<SpriteRenderer>();
             sr.sprite = item.Icon;
+            sr.color = item.IconTint;
             sr.sortingOrder = sortingOrder;
 
             var circle = go.AddComponent<CircleCollider2D>();
@@ -43,8 +44,11 @@ namespace Gstarr.Items
         private void Start()
         {
             startPos = transform.position;
-            if (item != null && item.Icon != null && TryGetComponent(out SpriteRenderer sr) && sr.sprite == null)
-                sr.sprite = item.Icon;
+            if (item != null && TryGetComponent(out SpriteRenderer sr))
+            {
+                if (sr.sprite == null) sr.sprite = item.Icon;
+                sr.color = item.IconTint;
+            }
 
             // 생성 순간 이미 겹쳐 있으면 Enter 이벤트가 없으므로 직접 확인
             if (TryGetComponent(out Collider2D col))

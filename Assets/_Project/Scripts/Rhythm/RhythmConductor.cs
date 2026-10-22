@@ -52,6 +52,8 @@ namespace Gstarr.Rhythm
 
         /// <summary>박자를 지날 때 (절대 박자 번호)</summary>
         public event Action<long> Beat;
+        /// <summary>반박을 지날 때 (절대 반박 번호)</summary>
+        public event Action<long> HalfBeat;
         /// <summary>입력 판정 (행동, 판정, 오차 초: 음수 = 빠름)</summary>
         public event Action<BeatAction, BeatJudgement, double> Judged;
         /// <summary>루프하지 않는 곡이 끝났을 때</summary>
@@ -68,6 +70,7 @@ namespace Gstarr.Rhythm
 
         private double pauseReal, pauseDsp;
         private bool pausedBeforeStart;
+        private double countdownReleaseAt = double.MaxValue;
 
         public void Pause()
         {
@@ -102,6 +105,7 @@ namespace Gstarr.Rhythm
         private double realStart;
         private double loopLength;
         private long nextBeat;
+        private long nextHalfBeat;
         private readonly Dictionary<BeatAction, long> lastUsedBeat = new Dictionary<BeatAction, long>();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -154,6 +158,7 @@ namespace Gstarr.Rhythm
             if (GetComponent<ComboUI>() == null) gameObject.AddComponent<ComboUI>();
             if (GetComponent<Gstarr.Game.StageHUD>() == null) gameObject.AddComponent<Gstarr.Game.StageHUD>();
             if (GetComponent<Gstarr.Game.PauseMenu>() == null) gameObject.AddComponent<Gstarr.Game.PauseMenu>();
+            countdownReleaseAt = UnityEngine.Time.realtimeSinceStartupAsDouble + 6.0;
             Gstarr.Game.GamePause.SetCountdown(true);
         }
 
@@ -189,6 +194,7 @@ namespace Gstarr.Rhythm
             float beatLen = Chart.Bpm > 0f ? 60f / Chart.Bpm : 0.5f;
             CountdownInterval = beatLen;
             startDelay = countdownLead + countdownBeats * beatLen;
+            countdownReleaseAt = UnityEngine.Time.realtimeSinceStartupAsDouble + startDelay + 0.25;
 
             source.clip = music;
             source.loop = loop;
@@ -201,7 +207,13 @@ namespace Gstarr.Rhythm
 
         private void Update()
         {
-            if (!IsReady || IsFinished || IsPaused) return;
+            if (IsPaused) return;
+            // 박자 차트가 비어도 카운트다운이 시간을 0으로 붙잡아 두지 않는다.
+            if (Gstarr.Game.GamePause.IsCountdown &&
+                (SongTime >= 0 || UnityEngine.Time.realtimeSinceStartupAsDouble >= countdownReleaseAt))
+                Gstarr.Game.GamePause.SetCountdown(false);
+
+            if (!IsReady || IsFinished) return;
             source.volume = volume * Gstarr.Game.GameSettings.MusicVolume;
 
             // dspTime 은 오디오 버퍼 단위로만 갱신되므로 실시간 시계로 부드럽게 진행하고 dsp 에 천천히 맞춤
@@ -212,7 +224,6 @@ namespace Gstarr.Rhythm
             double step = Math.Abs(drift) > 0.2 ? drift * 0.15 : Math.Clamp(drift * 0.08, -0.0015, 0.0015);
             realStart -= step;
             SongTime = UnityEngine.Time.realtimeSinceStartupAsDouble - realStart;
-
             if (Gstarr.Game.GamePause.IsCountdown && SongTime >= 0)
                 Gstarr.Game.GamePause.SetCountdown(false);
 
@@ -220,6 +231,13 @@ namespace Gstarr.Rhythm
             {
                 Beat?.Invoke(nextBeat);
                 nextBeat++;
+            }
+
+            while (Chart.HalfBeats != null && Chart.HalfBeats.Length > 0
+                   && HalfBeatTime(nextHalfBeat) <= SongTime)
+            {
+                HalfBeat?.Invoke(nextHalfBeat);
+                nextHalfBeat++;
             }
 
             if (!loop && SongTime >= loopLength)
@@ -260,14 +278,24 @@ namespace Gstarr.Rhythm
             return lap * n + i;
         }
 
-        /// <summary>박자 + 반박 중 가장 가까운 판정 지점</summary>
-        public long NearestJudgePoint(double t, out double error)
+        /// <summary>가장 가까운 정박 인덱스</summary>
+        public long NearestBeatPoint(double t, out double error) => NearestPoint(Chart?.Beats, t, out error);
+
+        /// <summary>정박 + 반박 중 가장 가까운 판정 지점</summary>
+        public long NearestJudgePoint(double t, out double error) => NearestPoint(Chart?.JudgeTimes, t, out error);
+
+        private long NearestPoint(double[] times, double t, out double error)
         {
-            var arr = Chart.JudgeTimes;
-            long after = FirstAtOrAfter(arr, t);
+            if (!IsReady || times == null || times.Length == 0)
+            {
+                error = double.PositiveInfinity;
+                return 0;
+            }
+
+            long after = FirstAtOrAfter(times, t);
             long before = after - 1;
-            double ea = t - TimeAt(arr, after);
-            double eb = before >= 0 ? t - TimeAt(arr, before) : double.PositiveInfinity;
+            double ea = t - TimeAt(times, after);
+            double eb = before >= 0 ? t - TimeAt(times, before) : double.PositiveInfinity;
             if (Math.Abs(eb) < Math.Abs(ea))
             {
                 error = eb;
@@ -284,18 +312,31 @@ namespace Gstarr.Rhythm
         /// 박자 창 안에서만 true. reportMiss 가 false 면 창 밖이어도 MISS 를 올리지 않는다.
         /// 이미 이 박자를 쓴 경우는 항상 조용히 거절한다.
         /// </summary>
-        public bool TryPerform(BeatAction action, bool reportMiss)
+        public bool TryPerform(BeatAction action, bool reportMiss, bool allowHalfBeats = false)
         {
             if (!IsReady || !enabled) return true;
             if (IsPaused || IsFinished || Gstarr.Game.GamePause.BlocksGameplay) return false;
 
             double t = SongTime - inputOffsetMs * 0.001;
-            long beat = NearestJudgePoint(t, out double error);
+            bool judgeHalfBeats = action != BeatAction.Attack || allowHalfBeats;
+            long beat = judgeHalfBeats
+                ? NearestJudgePoint(t, out double error)
+                : NearestBeatPoint(t, out error);
             double abs = Math.Abs(error);
+            double allowedWindow = goodWindow;
+            if (action == BeatAction.Attack && !allowHalfBeats)
+            {
+                double beatTime = TimeAt(Chart.Beats, beat);
+                double previousGap = beatTime - TimeAt(Chart.Beats, beat - 1);
+                double nextGap = TimeAt(Chart.Beats, beat + 1) - beatTime;
+                double nearestGap = Math.Min(previousGap, nextGap);
+                if (nearestGap > 0 && !double.IsInfinity(nearestGap))
+                    allowedWindow = Math.Min(allowedWindow, Math.Max(0, nearestGap * 0.5 - 0.001));
+            }
 
             bool alreadyUsed = lastUsedBeat.TryGetValue(action, out long used) && used == beat;
             if (alreadyUsed) return false;
-            if (abs > goodWindow)
+            if (abs > allowedWindow)
             {
                 if (reportMiss) Judged?.Invoke(action, BeatJudgement.Miss, error);
                 return false;
@@ -312,10 +353,10 @@ namespace Gstarr.Rhythm
     {
         public static bool TryAct(BeatAction action) => TryPerform(action, true);
 
-        public static bool TryPerform(BeatAction action, bool reportMiss)
+        public static bool TryPerform(BeatAction action, bool reportMiss, bool allowHalfBeats = false)
         {
             var c = RhythmConductor.Instance;
-            return c == null || c.TryPerform(action, reportMiss);
+            return c == null || c.TryPerform(action, reportMiss, allowHalfBeats);
         }
     }
 }

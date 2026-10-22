@@ -59,6 +59,7 @@ namespace Gstarr.UI
             return new Carousel(this, name, offset, axis,
                 () => inventory.GetItems(category).Count,
                 i => inventory.GetItems(category)[i].item.Icon,
+                i => inventory.GetItems(category)[i].item.IconTint,
                 i => inventory.GetItems(category)[i].item.DisplayName,
                 i => inventory.GetItems(category)[i].count);
         }
@@ -126,6 +127,7 @@ namespace Gstarr.UI
             private readonly Vector2 axis;
             private readonly Func<int> getCount;
             private readonly Func<int, Sprite> getIcon;
+            private readonly Func<int, Color> getTint;
             private readonly Func<int, string> getName;
             private readonly Func<int, int> getStack;
             private readonly Slot[] slots = new Slot[Range * 2 + 1];
@@ -137,12 +139,14 @@ namespace Gstarr.UI
             private float visibility;
 
             public Carousel(EquipmentSelectorView view, string name, Vector2 offset, Vector2 axis,
-                Func<int> getCount, Func<int, Sprite> getIcon, Func<int, string> getName, Func<int, int> getStack)
+                Func<int> getCount, Func<int, Sprite> getIcon, Func<int, Color> getTint,
+                Func<int, string> getName, Func<int, int> getStack)
             {
                 this.view = view;
                 this.axis = axis;
                 this.getCount = getCount;
                 this.getIcon = getIcon;
+                this.getTint = getTint;
                 this.getName = getName;
                 this.getStack = getStack;
 
@@ -260,7 +264,9 @@ namespace Gstarr.UI
                     Vector2 size = sprite.bounds.size;
                     float fit = view.iconSize / Mathf.Max(0.01f, Mathf.Max(size.x, size.y));
                     slot.icon.transform.localScale = Vector3.one * fit;
-                    slot.icon.color = new Color(1f, 1f, 1f, alpha);
+                    Color iconTint = getTint(idx);
+                    iconTint.a *= alpha;
+                    slot.icon.color = iconTint;
                 }
 
                 int stack = getStack(idx);

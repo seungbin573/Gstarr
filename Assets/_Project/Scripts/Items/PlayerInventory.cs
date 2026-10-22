@@ -63,23 +63,23 @@ namespace Gstarr.Items
         {
             if (inputActions == null && GameAssets.Instance != null)
                 inputActions = GameAssets.Instance.inputActions;
+            InputActionMap map = null;
             if (inputActions != null)
-            {
-                var map = inputActions.FindActionMap("Player", throwIfNotFound: true);
-                useAction = map.FindAction("UseItem", throwIfNotFound: true);
-                prevCombat = map.FindAction("PrevCombatItem", throwIfNotFound: true);
-                nextCombat = map.FindAction("NextCombatItem", throwIfNotFound: true);
-                prevEffect = map.FindAction("PrevEffectItem", throwIfNotFound: true);
-                nextEffect = map.FindAction("NextEffectItem", throwIfNotFound: true);
+                map = inputActions.FindActionMap("Player", throwIfNotFound: false);
+            useAction = map != null ? map.FindAction("UseItem", throwIfNotFound: false) : null;
+            prevCombat = map != null ? map.FindAction("PrevCombatItem", throwIfNotFound: false) : null;
+            nextCombat = map != null ? map.FindAction("NextCombatItem", throwIfNotFound: false) : null;
+            prevEffect = map != null ? map.FindAction("PrevEffectItem", throwIfNotFound: false) : null;
+            nextEffect = map != null ? map.FindAction("NextEffectItem", throwIfNotFound: false) : null;
+            if (useAction != null && prevCombat != null && nextCombat != null && prevEffect != null && nextEffect != null)
                 return;
-            }
 
             ownedActionMap = new InputActionMap("Inventory");
-            useAction = Add("UseItem", "<Gamepad>/buttonNorth", "<Keyboard>/v");
-            prevCombat = Add("PrevCombatItem", "<Gamepad>/dpad/up", "<Keyboard>/r");
-            nextCombat = Add("NextCombatItem", "<Gamepad>/dpad/down", "<Keyboard>/f");
-            prevEffect = Add("PrevEffectItem", "<Gamepad>/dpad/left", "<Keyboard>/t");
-            nextEffect = Add("NextEffectItem", "<Gamepad>/dpad/right", "<Keyboard>/g");
+            if (useAction == null) useAction = Add("UseItem", "<Gamepad>/buttonNorth", "<Keyboard>/v");
+            if (prevCombat == null) prevCombat = Add("PrevCombatItem", "<Gamepad>/dpad/up", "<Keyboard>/r");
+            if (nextCombat == null) nextCombat = Add("NextCombatItem", "<Gamepad>/dpad/down", "<Keyboard>/f");
+            if (prevEffect == null) prevEffect = Add("PrevEffectItem", "<Gamepad>/dpad/left", "<Keyboard>/t");
+            if (nextEffect == null) nextEffect = Add("NextEffectItem", "<Gamepad>/dpad/right", "<Keyboard>/g");
 
             InputAction Add(string name, string pad, string key)
             {
@@ -118,12 +118,12 @@ namespace Gstarr.Items
             if (Gstarr.Game.GamePause.BlocksGameplay) return;
             cooldownTimer -= Time.deltaTime;
 
-            if (prevCombat.WasPressedThisFrame()) Select(ItemCategory.Combat, -1);
-            if (nextCombat.WasPressedThisFrame()) Select(ItemCategory.Combat, 1);
-            if (prevEffect.WasPressedThisFrame()) Select(ItemCategory.Effect, -1);
-            if (nextEffect.WasPressedThisFrame()) Select(ItemCategory.Effect, 1);
+            if (prevCombat != null && prevCombat.WasPressedThisFrame()) Select(ItemCategory.Combat, -1);
+            if (nextCombat != null && nextCombat.WasPressedThisFrame()) Select(ItemCategory.Combat, 1);
+            if (prevEffect != null && prevEffect.WasPressedThisFrame()) Select(ItemCategory.Effect, -1);
+            if (nextEffect != null && nextEffect.WasPressedThisFrame()) Select(ItemCategory.Effect, 1);
             // 쓸 아이템이 있을 때만 박자 판정 (빈 손으로 누른 건 미스 처리하지 않음)
-            if (useAction.WasPressedThisFrame() && GetSelected(ActiveCategory) != null && cooldownTimer <= 0f
+            if (useAction != null && useAction.WasPressedThisFrame() && GetSelected(ActiveCategory) != null && cooldownTimer <= 0f
                 && BeatGate.TryAct(BeatAction.UseItem))
                 UseSelected();
         }

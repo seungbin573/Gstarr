@@ -14,3 +14,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Gstarr.Items.ItemTile
   item: {fileID: 11400000, guid: f888e0b9c158e9e439ce1a8ebd51fa23, type: 2}
   count: 1
+  tint: {r: 1, g: 1, b: 1, a: 1}

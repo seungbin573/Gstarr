@@ -4,6 +4,7 @@ using Gstarr.CameraSystem;
 using Gstarr.Combat;
 using Gstarr.Items;
 using Gstarr.Player;
+using Gstarr.World;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -66,16 +67,21 @@ namespace Gstarr.EditorTools
 
             var player = CreatePlayer(playerSprite, noFriction, new Vector3(-2f, 0.5f, 0f));
             SetupCamera(player.transform);
-            var enemySprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/arts/character/enemy1.png");
-            if (enemySprite == null) enemySprite = playerSprite;
-            EnemyActor.Spawn(enemySprite, new Vector3(8f, 0.5f, 0f));
-            EnemyActor.Spawn(enemySprite, new Vector3(18f, 0.5f, 0f));
-            EnemyActor.Spawn(enemySprite, new Vector3(30f, 0.5f, 0f));
+            CreateParallaxBackground(new Vector3(-2f, 2f, 0f));
+            EnemyActor.Spawn(null, new Vector3(8f, 0.5f, 0f), EnemyKind.BeatChaser);
+            EnemyActor.Spawn(null, new Vector3(18f, 0.5f, 0f), EnemyKind.RangedBeat);
+            EnemyActor.Spawn(null, new Vector3(30f, 0.5f, 0f), EnemyKind.RangedHalfBeat);
+            var doorTile = DoorTools.GetOrCreateTile();
+            var doors = DoorTools.EnsureDoorTilemap(grid.transform);
+            DoorTools.PaintColumn(doors, doorTile, 12, -1, 4);
+            DoorTools.PaintColumn(doors, doorTile, 40, -1, 4);
 
             // 아이템은 직접 그릴 수 있게 빈 Items 타일맵만 만들어 둠
             ItemTools.EnsureDefaultItems();
             ItemTools.BuildItemTiles();
             ItemTools.EnsureItemTilemap(grid.transform);
+            EnemyTools.BuildEnemyPalette();
+            var enemyTilemap = EnemyTools.EnsureEnemyTilemap(grid.transform);
 
             Selection.activeGameObject = ground.gameObject;
 
@@ -85,7 +91,9 @@ namespace Gstarr.EditorTools
 
             EditorApplication.ExecuteMenuItem("Window/2D/Tile Palette");
             Debug.Log($"[Level Builder] 씬 생성 완료: {scenePath}\n" +
-                      "Tile Palette 창에서 팔레트를 고르고, Active Tilemap 을 Ground/Platforms/Background 중 선택해 그리세요.");
+                      "Tile Palette에서 Ground, Enemies, Doors 팔레트를 고르고 해당 타일맵에 배치하세요. " +
+                      "문 칸을 같은 세로줄로 칠하면 방이 되고, 그 사이 적을 처치하면 문이 열립니다. " +
+                      $"적 배치 타일맵: {enemyTilemap.name}");
         }
 
         private static Tilemap CreateTilemap(Transform parent, string name, int sortingOrder, string layer)
@@ -243,6 +251,33 @@ namespace Gstarr.EditorTools
                 follow = cam.gameObject.AddComponent<CameraFollow2D>();
             follow.Target = target;
             EditorUtility.SetDirty(follow);
+        }
+
+        private const string BackgroundSpritePath = "Assets/arts/picture/background.png";
+
+        private static void CreateParallaxBackground(Vector3 viewCenter)
+        {
+            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(BackgroundSpritePath);
+            if (sprite == null)
+            {
+                Debug.LogWarning("[Level Builder] Assets/arts/picture/background.png 스프라이트를 찾지 못했습니다.");
+                return;
+            }
+
+            var go = new GameObject("Parallax Background");
+            go.transform.position = viewCenter;
+            var renderer = go.AddComponent<SpriteRenderer>();
+            renderer.sprite = sprite;
+            renderer.sortingOrder = -100;
+
+            float height = sprite.bounds.size.y;
+            if (height > 0.001f)
+            {
+                float scale = 6f * 2f * 1.2f / height;
+                go.transform.localScale = new Vector3(scale, scale, 1f);
+            }
+
+            go.AddComponent<ParallaxBackground>();
         }
 
         private static TilesetImporter.Result CreatePlaceholderTileset()

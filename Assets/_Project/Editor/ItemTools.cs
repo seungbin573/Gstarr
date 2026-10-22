@@ -22,6 +22,20 @@ namespace Gstarr.EditorTools
 
         private const string PotionPath = ItemFolder + "/Potion.asset";
         private const string BombPath = ItemFolder + "/Bomb.asset";
+        private const string DamagePotionPath = ItemFolder + "/DamagePotion.asset";
+        private const string InvulnerabilityPotionPath = ItemFolder + "/InvulnerabilityPotion.asset";
+        private const string FlashbangPath = ItemFolder + "/Flashbang.asset";
+        private const string GameAssetsPath = "Assets/Resources/Gstarr/GameAssets.asset";
+
+        [InitializeOnLoadMethod]
+        private static void EnsureItemGridOnEditorLoad()
+        {
+            EditorApplication.delayCall += () =>
+            {
+                EnsureDefaultItems();
+                if (PaletteNeedsRebuild()) BuildItemTiles();
+            };
+        }
 
         [MenuItem("Tools/Gstarr/Build Item Palette", priority = 1)]
         public static void BuildItemPaletteMenu()
@@ -74,15 +88,17 @@ namespace Gstarr.EditorTools
 
             if (!go.TryGetComponent(out PlayerInventory inventory))
             {
-                inventory = Undo.AddComponent<PlayerInventory>(go);
                 EnsureDefaultItems();
+                inventory = Undo.AddComponent<PlayerInventory>(go);
                 var so = new SerializedObject(inventory);
                 var items = so.FindProperty("startingItems");
-                items.arraySize = 2;
-                items.GetArrayElementAtIndex(0).FindPropertyRelative("item").objectReferenceValue = AssetDatabase.LoadAssetAtPath<ItemData>(BombPath);
-                items.GetArrayElementAtIndex(0).FindPropertyRelative("count").intValue = 3;
-                items.GetArrayElementAtIndex(1).FindPropertyRelative("item").objectReferenceValue = AssetDatabase.LoadAssetAtPath<ItemData>(PotionPath);
-                items.GetArrayElementAtIndex(1).FindPropertyRelative("count").intValue = 3;
+                var assets = AssetDatabase.LoadAssetAtPath<GameAssets>(GameAssetsPath);
+                items.arraySize = assets != null && assets.defaultItems != null ? assets.defaultItems.Length : 0;
+                for (int i = 0; i < items.arraySize; i++)
+                {
+                    items.GetArrayElementAtIndex(i).FindPropertyRelative("item").objectReferenceValue = assets.defaultItems[i];
+                    items.GetArrayElementAtIndex(i).FindPropertyRelative("count").intValue = 3;
+                }
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
             SetIfEmpty(inventory, "inputActions", input);
@@ -112,8 +128,42 @@ namespace Gstarr.EditorTools
             CreateItemIfMissing<AreaDamageItem>(BombPath, "Bomb", "Assets/arts/Items/Bomb.png", ItemCategory.Combat,
                 so => so.FindProperty("effectSprite").objectReferenceValue =
                     AssetDatabase.LoadAssetAtPath<Sprite>("Assets/arts/Effects/Explosion.png"));
+            CreateItemIfMissing<FlashbangItem>(FlashbangPath, "Flashbang", "Assets/arts/Items/Bomb.png", ItemCategory.Combat,
+                so => so.FindProperty("iconTint").colorValue = new Color(0.8f, 0.95f, 1f));
+            CreateItemIfMissing<DamageBoostItem>(DamagePotionPath, "Strength Potion", "Assets/arts/Items/Potion.png", ItemCategory.Effect,
+                so => so.FindProperty("iconTint").colorValue = new Color(1f, 0.55f, 0.45f));
+            CreateItemIfMissing<InvulnerabilityPotionItem>(InvulnerabilityPotionPath, "Invulnerability Potion", "Assets/arts/Items/Potion.png", ItemCategory.Effect,
+                so => so.FindProperty("iconTint").colorValue = new Color(0.5f, 0.85f, 1f));
+
+            var gameAssets = AssetDatabase.LoadAssetAtPath<GameAssets>(GameAssetsPath);
+            if (gameAssets != null)
+            {
+                var defaults = new ItemData[]
+                {
+                    AssetDatabase.LoadAssetAtPath<ItemData>(BombPath),
+                    AssetDatabase.LoadAssetAtPath<ItemData>(FlashbangPath),
+                    AssetDatabase.LoadAssetAtPath<ItemData>(PotionPath),
+                    AssetDatabase.LoadAssetAtPath<ItemData>(DamagePotionPath),
+                    AssetDatabase.LoadAssetAtPath<ItemData>(InvulnerabilityPotionPath)
+                };
+                if (gameAssets.defaultItems == null || !gameAssets.defaultItems.SequenceEqual(defaults))
+                {
+                    gameAssets.defaultItems = defaults;
+                    EditorUtility.SetDirty(gameAssets);
+                }
+            }
 
             AssetDatabase.SaveAssets();
+        }
+
+        private static bool PaletteNeedsRebuild()
+        {
+            if (AssetDatabase.LoadAssetAtPath<GameObject>($"{TilesetImporter.PaletteFolder}/{ItemPaletteName}.prefab") == null)
+                return true;
+            return AssetDatabase.FindAssets("t:ItemData")
+                .Select(g => AssetDatabase.LoadAssetAtPath<ItemData>(AssetDatabase.GUIDToAssetPath(g)))
+                .Where(i => i != null)
+                .Any(i => AssetDatabase.LoadAssetAtPath<ItemTile>($"{ItemTileFolder}/{i.name}Tile.asset") == null);
         }
 
         private static void CreateItemIfMissing<T>(string path, string displayName, string iconPath, ItemCategory category,
@@ -163,9 +213,10 @@ namespace Gstarr.EditorTools
             if (tile == null)
             {
                 tile = ScriptableObject.CreateInstance<ItemTile>();
-                tile.Setup(item);
                 AssetDatabase.CreateAsset(tile, path);
             }
+            tile.Setup(item);
+            EditorUtility.SetDirty(tile);
             return tile;
         }
 
