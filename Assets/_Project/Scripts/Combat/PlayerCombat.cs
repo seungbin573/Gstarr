@@ -126,10 +126,7 @@ namespace Gstarr.Combat
             if (hitMask.value == 0)
                 hitMask = ~LayerMask.GetMask("Player", "Ignore Raycast");
 
-            SetupInput();
-            CreateWeaponVisual();
-
-            // 씬에 인벤토리/UI가 없어도 아이템이 동작하도록 보장
+            // 입력 설정이 실패해도 체력은 남긴다.
             var health = GetComponent<Health>();
             if (health == null) health = gameObject.AddComponent<Health>();
             health.Configure(5, false);
@@ -137,31 +134,43 @@ namespace Gstarr.Combat
             if (GetComponent<PlayerHealthView>() == null) gameObject.AddComponent<PlayerHealthView>();
             if (GetComponent<PlayerInventory>() == null) gameObject.AddComponent<PlayerInventory>();
             if (GetComponent<EquipmentSelectorView>() == null) gameObject.AddComponent<EquipmentSelectorView>();
+
+            SetupInput();
+            CreateWeaponVisual();
         }
 
         private void SetupInput()
         {
             if (inputActions == null && GameAssets.Instance != null)
                 inputActions = GameAssets.Instance.inputActions;
+
+            InputActionMap map = null;
             if (inputActions != null)
-            {
-                var map = inputActions.FindActionMap("Player", throwIfNotFound: true);
-                attackAction = map.FindAction("Attack", throwIfNotFound: true);
-                prevAction = map.FindAction("PrevWeapon", throwIfNotFound: true);
-                nextAction = map.FindAction("NextWeapon", throwIfNotFound: true);
-                return;
-            }
+                map = inputActions.FindActionMap("Player", throwIfNotFound: false);
+            attackAction = map != null ? map.FindAction("Attack", throwIfNotFound: false) : null;
+            prevAction = map != null ? map.FindAction("PrevWeapon", throwIfNotFound: false) : null;
+            nextAction = map != null ? map.FindAction("NextWeapon", throwIfNotFound: false) : null;
+            if (attackAction != null && prevAction != null && nextAction != null) return;
 
             ownedActionMap = new InputActionMap("Combat");
-            attackAction = ownedActionMap.AddAction("Attack", InputActionType.Button);
-            attackAction.AddBinding("<Gamepad>/buttonEast");
-            attackAction.AddBinding("<Keyboard>/c");
-            prevAction = ownedActionMap.AddAction("PrevWeapon", InputActionType.Button);
-            prevAction.AddBinding("<Gamepad>/leftShoulder");
-            prevAction.AddBinding("<Keyboard>/q");
-            nextAction = ownedActionMap.AddAction("NextWeapon", InputActionType.Button);
-            nextAction.AddBinding("<Gamepad>/rightShoulder");
-            nextAction.AddBinding("<Keyboard>/e");
+            if (attackAction == null)
+            {
+                attackAction = ownedActionMap.AddAction("Attack", InputActionType.Button);
+                attackAction.AddBinding("<Gamepad>/buttonEast");
+                attackAction.AddBinding("<Keyboard>/c");
+            }
+            if (prevAction == null)
+            {
+                prevAction = ownedActionMap.AddAction("PrevWeapon", InputActionType.Button);
+                prevAction.AddBinding("<Gamepad>/leftShoulder");
+                prevAction.AddBinding("<Keyboard>/q");
+            }
+            if (nextAction == null)
+            {
+                nextAction = ownedActionMap.AddAction("NextWeapon", InputActionType.Button);
+                nextAction.AddBinding("<Gamepad>/rightShoulder");
+                nextAction.AddBinding("<Keyboard>/e");
+            }
         }
 
         private void CreateWeaponVisual()
@@ -225,10 +234,10 @@ namespace Gstarr.Combat
             float dt = Time.deltaTime;
             cooldownTimer -= dt;
 
-            if (prevAction.WasPressedThisFrame()) SwitchWeapon(-1);
-            if (nextAction.WasPressedThisFrame()) SwitchWeapon(1);
+            if (prevAction != null && prevAction.WasPressedThisFrame()) SwitchWeapon(-1);
+            if (nextAction != null && nextAction.WasPressedThisFrame()) SwitchWeapon(1);
 
-            if (attackAction.WasPressedThisFrame())
+            if (attackAction != null && attackAction.WasPressedThisFrame())
             {
                 var glory = EnemyActor.NearestStaggered(transform.position, 2.4f);
                 if (glory != null)
@@ -239,7 +248,7 @@ namespace Gstarr.Combat
             }
 
             // 누르고 있어도 박자 창 안에서만 한 번씩 나간다
-            if (attackAction.IsPressed()) TryAttack();
+            if (attackAction != null && attackAction.IsPressed()) TryAttack();
 
             AnimateWeapon(dt);
         }

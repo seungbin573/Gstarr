@@ -68,6 +68,7 @@ namespace Gstarr.Rhythm
 
         private double pauseReal, pauseDsp;
         private bool pausedBeforeStart;
+        private double countdownReleaseAt = double.MaxValue;
 
         public void Pause()
         {
@@ -154,6 +155,7 @@ namespace Gstarr.Rhythm
             if (GetComponent<ComboUI>() == null) gameObject.AddComponent<ComboUI>();
             if (GetComponent<Gstarr.Game.StageHUD>() == null) gameObject.AddComponent<Gstarr.Game.StageHUD>();
             if (GetComponent<Gstarr.Game.PauseMenu>() == null) gameObject.AddComponent<Gstarr.Game.PauseMenu>();
+            countdownReleaseAt = UnityEngine.Time.realtimeSinceStartupAsDouble + 6.0;
             Gstarr.Game.GamePause.SetCountdown(true);
         }
 
@@ -189,6 +191,7 @@ namespace Gstarr.Rhythm
             float beatLen = Chart.Bpm > 0f ? 60f / Chart.Bpm : 0.5f;
             CountdownInterval = beatLen;
             startDelay = countdownLead + countdownBeats * beatLen;
+            countdownReleaseAt = UnityEngine.Time.realtimeSinceStartupAsDouble + startDelay + 0.25;
 
             source.clip = music;
             source.loop = loop;
@@ -201,7 +204,13 @@ namespace Gstarr.Rhythm
 
         private void Update()
         {
-            if (!IsReady || IsFinished || IsPaused) return;
+            if (IsPaused) return;
+            // 박자 차트가 비어도 카운트다운이 시간을 0으로 붙잡아 두지 않는다.
+            if (Gstarr.Game.GamePause.IsCountdown &&
+                (SongTime >= 0 || UnityEngine.Time.realtimeSinceStartupAsDouble >= countdownReleaseAt))
+                Gstarr.Game.GamePause.SetCountdown(false);
+
+            if (!IsReady || IsFinished) return;
             source.volume = volume * Gstarr.Game.GameSettings.MusicVolume;
 
             // dspTime 은 오디오 버퍼 단위로만 갱신되므로 실시간 시계로 부드럽게 진행하고 dsp 에 천천히 맞춤
@@ -212,7 +221,6 @@ namespace Gstarr.Rhythm
             double step = Math.Abs(drift) > 0.2 ? drift * 0.15 : Math.Clamp(drift * 0.08, -0.0015, 0.0015);
             realStart -= step;
             SongTime = UnityEngine.Time.realtimeSinceStartupAsDouble - realStart;
-
             if (Gstarr.Game.GamePause.IsCountdown && SongTime >= 0)
                 Gstarr.Game.GamePause.SetCountdown(false);
 

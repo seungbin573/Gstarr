@@ -10,6 +10,16 @@ namespace Gstarr.Game
         public static bool IsGloryKill { get; private set; }
         public static bool BlocksGameplay => IsPaused || IsCountdown || IsGloryKill;
 
+        // 도메인 리로드를 끈 상태에서도 이전 플레이의 timeScale 0 이 남지 않게 한다.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void ResetOnPlay()
+        {
+            IsPaused = false;
+            IsCountdown = false;
+            IsGloryKill = false;
+            Time.timeScale = 1f;
+        }
+
         public static void SetPaused(bool paused)
         {
             IsPaused = paused;
