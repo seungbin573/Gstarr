@@ -18,6 +18,7 @@ namespace Gstarr.Combat
         {
             if (Object.FindAnyObjectByType<MainMenu>() != null) return;
             if (Object.FindAnyObjectByType<EnemyActor>() != null) return;
+            if (Object.FindAnyObjectByType<EnemyTileSpawner>() != null) return;
 
             var player = GameObject.FindGameObjectWithTag("Player");
             if (player == null) return;

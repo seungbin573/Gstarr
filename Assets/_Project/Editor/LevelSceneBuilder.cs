@@ -70,11 +70,14 @@ namespace Gstarr.EditorTools
             EnemyActor.Spawn(null, new Vector3(8f, 0.5f, 0f), EnemyKind.BeatChaser);
             EnemyActor.Spawn(null, new Vector3(18f, 0.5f, 0f), EnemyKind.RangedBeat);
             EnemyActor.Spawn(null, new Vector3(30f, 0.5f, 0f), EnemyKind.RangedHalfBeat);
+            CreateBossDoor(new Vector3(14f, 0.5f, 0f));
 
             // 아이템은 직접 그릴 수 있게 빈 Items 타일맵만 만들어 둠
             ItemTools.EnsureDefaultItems();
             ItemTools.BuildItemTiles();
             ItemTools.EnsureItemTilemap(grid.transform);
+            EnemyTools.BuildEnemyPalette();
+            var enemyTilemap = EnemyTools.EnsureEnemyTilemap(grid.transform);
 
             Selection.activeGameObject = ground.gameObject;
 
@@ -84,7 +87,8 @@ namespace Gstarr.EditorTools
 
             EditorApplication.ExecuteMenuItem("Window/2D/Tile Palette");
             Debug.Log($"[Level Builder] 씬 생성 완료: {scenePath}\n" +
-                      "Tile Palette 창에서 팔레트를 고르고, Active Tilemap 을 Ground/Platforms/Background 중 선택해 그리세요.");
+                      "Tile Palette에서 Ground/Platforms/Background 또는 Enemies 팔레트를 고르고 해당 Tilemap에 배치하세요. " +
+                      $"적 배치 타일맵: {enemyTilemap.name}");
         }
 
         private static Tilemap CreateTilemap(Transform parent, string name, int sortingOrder, string layer)
@@ -269,6 +273,13 @@ namespace Gstarr.EditorTools
             }
 
             go.AddComponent<ParallaxBackground>();
+        }
+
+        private static void CreateBossDoor(Vector3 position)
+        {
+            var go = new GameObject("Boss Door");
+            go.transform.position = position;
+            go.AddComponent<Gstarr.World.BossDoor>();
         }
 
         private static TilesetImporter.Result CreatePlaceholderTileset()

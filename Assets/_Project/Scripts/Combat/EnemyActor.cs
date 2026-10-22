@@ -11,7 +11,8 @@ namespace Gstarr.Combat
         RangedBeat,
         RangedHalfBeat,
         Flyer,
-        Mole
+        Mole,
+        Boss
     }
 
     [RequireComponent(typeof(Health))]
@@ -62,6 +63,8 @@ namespace Gstarr.Combat
 
         public bool IsStaggered => state == State.Stagger;
         public bool AbsorbsDamage => state == State.Stagger || state == State.Glory;
+        public bool IsBoss => kind == EnemyKind.Boss;
+        public bool IsDead => state == State.Dead || health == null || health.Current <= 0;
         public int GloryFloor => Mathf.Max(1, Mathf.CeilToInt(health.Max * 0.2f));
 
         public static Sprite Art
@@ -120,8 +123,16 @@ namespace Gstarr.Combat
             hp.Configure(maxHealth, true);
             var enemy = go.AddComponent<EnemyActor>();
             enemy.SetKind(kind);
+            if (kind == EnemyKind.Boss)
+            {
+                go.transform.localScale = Vector3.one * 1.6f;
+                go.AddComponent<BossActor>();
+            }
             return enemy;
         }
+
+        public static EnemyActor SpawnBoss(Vector3 position, int maxHealth = 100) =>
+            Spawn(null, position, EnemyKind.Boss, maxHealth);
 
         public static EnemyActor NearestStaggered(Vector3 from, float range)
         {
@@ -238,8 +249,21 @@ namespace Gstarr.Combat
 
         public bool CatchGlory(ref int nextHealth)
         {
-            if (state != State.Combat || staggerSpent || health == null) return false;
+            if (state != State.Combat || health == null) return false;
             int floor = GloryFloor;
+            var boss = GetComponent<BossActor>();
+            if (boss != null)
+            {
+                if (!boss.RequiresPhaseGlory) return false;
+                if (health.Current <= floor || nextHealth <= floor)
+                {
+                    nextHealth = floor;
+                    return true;
+                }
+                return false;
+            }
+
+            if (staggerSpent) return false;
             if (health.Current > floor && nextHealth <= floor)
             {
                 nextHealth = floor;
@@ -250,7 +274,8 @@ namespace Gstarr.Combat
 
         public void EnterStagger()
         {
-            if (state != State.Combat || staggerSpent) return;
+            var boss = GetComponent<BossActor>();
+            if (state != State.Combat || (staggerSpent && (boss == null || !boss.RequiresPhaseGlory))) return;
             state = State.Stagger;
             staggerTimer = staggerSeconds;
             if (sprite != null) sprite.color = staggerColor;
@@ -265,7 +290,8 @@ namespace Gstarr.Combat
 
         public void CancelGlory()
         {
-            staggerSpent = true;
+            var boss = GetComponent<BossActor>();
+            staggerSpent = boss == null;
             state = State.Combat;
             transform.rotation = Quaternion.identity;
             if (sprite != null) sprite.color = idleColor;
@@ -273,6 +299,16 @@ namespace Gstarr.Combat
 
         public void FinishGlory()
         {
+            var boss = GetComponent<BossActor>();
+            if (boss != null && boss.TryAdvancePhase())
+            {
+                state = State.Combat;
+                transform.rotation = Quaternion.identity;
+                if (sprite != null) sprite.color = idleColor;
+                if (rb != null) rb.linearVelocity = Vector2.zero;
+                return;
+            }
+
             state = State.Dead;
             if (health != null && health.Current > 0)
                 health.TakeDamage(health.Current, Vector2.up);
@@ -314,6 +350,7 @@ namespace Gstarr.Combat
         private void FixedUpdate()
         {
             if (state != State.Combat || GamePause.BlocksGameplay || rb == null) return;
+            if (kind == EnemyKind.Boss) return;
             if (kind == EnemyKind.BeatChaser || kind == EnemyKind.Flyer)
             {
                 if (beatMoveTimer > 0f)
@@ -357,7 +394,7 @@ namespace Gstarr.Combat
 
         private void OnBeat(long beat)
         {
-            if (state != State.Combat || GamePause.BlocksGameplay) return;
+            if (state != State.Combat || kind == EnemyKind.Boss || GamePause.BlocksGameplay) return;
 
             if (kind == EnemyKind.Flyer)
             {
