@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Gstarr.Game;
 using Gstarr.Rhythm;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -146,6 +147,7 @@ namespace Gstarr.Items
             if (stack == null || cooldownTimer > 0f) return false;
             if (!stack.item.Use(gameObject)) return false;
 
+            GameAudio.Play(GameAudio.Id.Item);
             cooldownTimer = useCooldown;
             ItemUsed?.Invoke(stack.item);
 

@@ -87,13 +87,36 @@ namespace Gstarr.Combat
                 if (spriteRenderer != null) spriteRenderer.color = Color.white;
             }
 
+            bool playerHit = GetComponent<PlayerController>() != null;
+            if (playerHit)
+            {
+                GameAudio.Play(GameAudio.Id.Hurt);
+                CombatFeel.Impact(transform.position, false);
+                GetComponent<SpriteMotion>()?.HurtPose();
+            }
+            else
+            {
+                GameAudio.Play(GameAudio.Id.Hit, caught ? 0.7f : 1f);
+                CombatFeel.Impact(transform.position, amount >= 2);
+                GetComponent<SpriteMotion>()?.HurtPose();
+            }
+
             if (caught) enemy.EnterStagger();
             else if (Current == 0)
             {
                 onDeath?.Invoke();
+                CombatFeel.Burst(transform.position, playerHit ? new Color(1f, 0.35f, 0.3f) : new Color(1f, 0.75f, 0.3f), 10);
+                GetComponent<SpriteMotion>()?.PlayDeath();
                 if (enemy != null && enemy.IsBoss) StageHUD.ShowGameClear();
-                else if (GetComponent<PlayerController>() != null) StageHUD.ShowGameOver();
-                if (destroyOnDeath) Destroy(gameObject);
+                else if (playerHit) StageHUD.ShowGameOver();
+                if (destroyOnDeath)
+                {
+                    var body = GetComponent<Rigidbody2D>();
+                    if (body != null) body.simulated = false;
+                    var cols = GetComponents<Collider2D>();
+                    for (int i = 0; i < cols.Length; i++) cols[i].enabled = false;
+                    Destroy(gameObject, 0.32f);
+                }
             }
             return true;
         }
@@ -120,7 +143,8 @@ namespace Gstarr.Combat
                 bool visible = Mathf.Repeat(Time.unscaledTime * 8f, 1f) < 0.55f || invulnTimer <= 0f;
                 if (blinkRenderers != null)
                     for (int i = 0; i < blinkRenderers.Length; i++)
-                        if (blinkRenderers[i] != null) blinkRenderers[i].enabled = visible || invulnTimer <= 0f;
+                        if (blinkRenderers[i] != null && !IsHiddenBody(blinkRenderers[i]))
+                            blinkRenderers[i].enabled = visible || invulnTimer <= 0f;
                 if (invulnTimer <= 0f) SetBlinkVisible(true);
                 return;
             }
@@ -135,7 +159,14 @@ namespace Gstarr.Combat
         {
             if (blinkRenderers == null) return;
             for (int i = 0; i < blinkRenderers.Length; i++)
-                if (blinkRenderers[i] != null) blinkRenderers[i].enabled = visible;
+                if (blinkRenderers[i] != null && !IsHiddenBody(blinkRenderers[i]))
+                    blinkRenderers[i].enabled = visible;
+        }
+
+        private bool IsHiddenBody(SpriteRenderer renderer)
+        {
+            var motion = GetComponent<SpriteMotion>();
+            return motion != null && motion.IsSource(renderer);
         }
     }
 }

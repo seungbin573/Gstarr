@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Gstarr.Game;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Gstarr.Items;
@@ -63,9 +64,9 @@ namespace Gstarr.Combat
         {
             new Weapon
             {
-                name = "Sword", type = WeaponType.Melee, damage = 2, fireInterval = 0.3f,
+                name = "Sword", type = WeaponType.Melee, damage = 3, fireInterval = 0.3f,
                 holdOffset = new Vector2(0.7f, -0.1f),
-                meleeSize = new Vector2(1.6f, 1.2f), meleeReach = 0.9f
+                meleeSize = new Vector2(2f, 1.5f), meleeReach = 1f
             },
             new Weapon
             {
@@ -77,7 +78,7 @@ namespace Gstarr.Combat
             {
                 name = "Shotgun", type = WeaponType.Shotgun, damage = 1, fireInterval = 0.7f,
                 holdOffset = new Vector2(0.6f, -0.08f), muzzleOffset = new Vector2(1.15f, 0.02f),
-                projectileSpeed = 20f, range = 7f, pellets = 6, spreadAngle = 28f, recoil = 4f
+                projectileSpeed = 20f, range = 7f, pellets = 3, spreadAngle = 30f, recoil = 4.8f
             }
         };
 
@@ -88,7 +89,7 @@ namespace Gstarr.Combat
         public int CurrentIndex => currentIndex;
         public Weapon CurrentWeapon => weapons[currentIndex];
 
-        private const float SwingDuration = 0.14f;
+        private const float SwingDuration = 0.18f;
         private const float SwingStartAngle = 80f;
         private const float SwingEndAngle = -70f;
         private const float RecoilKickDistance = 0.12f;
@@ -394,14 +395,18 @@ namespace Gstarr.Combat
             if (!BeatGate.TryPerform(
                 BeatAction.Attack,
                 attackAction.WasPressedThisFrame(),
-                allowHalfBeats: w.type == WeaponType.Ranged)) return;
+                w.type == WeaponType.Ranged,
+                out BeatJudgement judgement,
+                GameSettings.RhythmAssist)) return;
 
             cooldownTimer = w.fireInterval;
             int facing = controller.FacingDirection;
             int damage = w.damage + (damageBonusTimer > 0f ? damageBonus : 0);
-            float range = w.type == WeaponType.Melee ? w.meleeReach + w.meleeSize.x : w.range;
+            if (judgement == BeatJudgement.Miss) damage = Mathf.Max(1, Mathf.RoundToInt(damage * 0.4f));
+            float range = TargetRange(w);
             Vector2 aim = AimVector(facing, range);
 
+            GetComponent<SpriteMotion>()?.AttackPose();
             if (w.type == WeaponType.Melee)
                 DoMelee(w, aim, damage);
             else
@@ -412,7 +417,7 @@ namespace Gstarr.Combat
         {
             var w = CurrentWeapon;
             int facing = controller.FacingDirection;
-            float range = w.type == WeaponType.Melee ? w.meleeReach + w.meleeSize.x : w.range;
+            float range = TargetRange(w);
             var target = EnemyActor.NearestInFront(transform.position, facing, range);
             float desired = 0f;
             if (target != null)
@@ -439,6 +444,7 @@ namespace Gstarr.Combat
 
         private void DoMelee(Weapon w, Vector2 aim, int damage)
         {
+            GameAudio.Play(GameAudio.Id.Melee);
             Vector2 center = (Vector2)transform.position + aim * w.meleeReach;
             float angle = Mathf.Atan2(aim.y, aim.x) * Mathf.Rad2Deg;
             var hits = Physics2D.OverlapBoxAll(center, w.meleeSize, angle, hitMask);
@@ -459,9 +465,13 @@ namespace Gstarr.Combat
                 var sr = slash.AddComponent<SpriteRenderer>();
                 sr.sprite = slashSprite;
                 sr.sortingOrder = weaponRenderer.sortingOrder + 1;
-                Destroy(slash, 0.1f);
+                Destroy(slash, SwingDuration);
             }
         }
+
+        private static float TargetRange(Weapon w) => w.type == WeaponType.Melee
+            ? w.meleeReach + w.meleeSize.x * 0.5f + 0.35f
+            : w.range;
 
         private void Fire(Weapon w, int facing, Vector2 aim, int damage)
         {

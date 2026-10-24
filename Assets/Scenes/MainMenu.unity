@@ -148,7 +148,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1ad6016a4f169c143bcadd4d4ee30448, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Gstarr.Game.MainMenu
-  title: GSTARR
+  title: "\uC5D0\uC774\uB4E0\uC758 \uAFC8"
 --- !u!4 &792688020
 Transform:
   m_ObjectHideFlags: 0

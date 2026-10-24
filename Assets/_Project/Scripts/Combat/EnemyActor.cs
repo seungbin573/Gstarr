@@ -216,9 +216,10 @@ namespace Gstarr.Combat
             if (groundMask.value == 0) groundMask = Physics2D.DefaultRaycastLayers;
 
             if (sprite != null && sprite.sprite == null) sprite.sprite = Art;
-            if (sprite != null && sprite.sprite != null) FitCollider(sprite.sprite);
             patrolHome = transform.position;
             ApplyKind();
+            if (GetComponent<Gstarr.Game.SpriteMotion>() == null)
+                gameObject.AddComponent<Gstarr.Game.SpriteMotion>();
         }
 
         private void SetKind(EnemyKind value)
@@ -241,16 +242,64 @@ namespace Gstarr.Combat
                 rb.bodyType = RigidbodyType2D.Dynamic;
                 rb.gravityScale = 0f;
             }
+            ApplyHitbox();
         }
 
-        private void FitCollider(Sprite art)
+        /// <summary>종류마다 다른 히트박스. 발밑은 스프라이트 바닥에 맞춘다.</summary>
+        private void ApplyHitbox()
         {
-            if (body is BoxCollider2D box && art != null)
+            Bounds art = sprite != null && sprite.sprite != null
+                ? sprite.sprite.bounds
+                : new Bounds(new Vector3(0f, 0.6f, 0f), new Vector3(1f, 1.2f, 0f));
+            float foot = art.min.y;
+            float midX = art.center.x;
+            var material = body != null ? body.sharedMaterial : null;
+            if (body != null) DestroyImmediate(body);
+
+            switch (kind)
             {
-                var size = (Vector2)art.bounds.size;
-                box.size = new Vector2(Mathf.Max(0.4f, size.x * 0.7f), Mathf.Max(0.6f, size.y * 0.9f));
-                box.offset = art.bounds.center;
+                case EnemyKind.BeatChaser:
+                    body = AddBox(new Vector2(1.25f, 0.78f), new Vector2(midX, foot + 0.39f), material);
+                    break;
+                case EnemyKind.RangedBeat:
+                    body = AddBox(new Vector2(0.48f, 1.55f), new Vector2(midX, foot + 0.78f), material);
+                    break;
+                case EnemyKind.RangedHalfBeat:
+                    body = AddCircle(0.36f, art.center, material);
+                    break;
+                case EnemyKind.Flyer:
+                    body = AddCircle(0.55f, art.center, material);
+                    break;
+                case EnemyKind.Mole:
+                    body = AddBox(new Vector2(1.5f, 0.4f), new Vector2(midX, foot + 0.2f), material);
+                    break;
+                default:
+                    var capsule = gameObject.AddComponent<CapsuleCollider2D>();
+                    capsule.direction = CapsuleDirection2D.Vertical;
+                    capsule.size = new Vector2(1.2f, 1.9f);
+                    capsule.offset = new Vector2(midX, foot + 0.95f);
+                    capsule.sharedMaterial = material;
+                    body = capsule;
+                    break;
             }
+        }
+
+        private BoxCollider2D AddBox(Vector2 size, Vector2 offset, PhysicsMaterial2D material)
+        {
+            var box = gameObject.AddComponent<BoxCollider2D>();
+            box.size = size;
+            box.offset = offset;
+            box.sharedMaterial = material;
+            return box;
+        }
+
+        private CircleCollider2D AddCircle(float radius, Vector3 center, PhysicsMaterial2D material)
+        {
+            var circle = gameObject.AddComponent<CircleCollider2D>();
+            circle.radius = radius;
+            circle.offset = center;
+            circle.sharedMaterial = material;
+            return circle;
         }
 
         private void OnEnable() => All.Add(this);
@@ -350,6 +399,12 @@ namespace Gstarr.Combat
 
         private void Update()
         {
+            if (health != null && health.Current <= 0)
+            {
+                HoldInPlace();
+                return;
+            }
+
             BindConductor();
             if (player == null)
             {
@@ -394,7 +449,7 @@ namespace Gstarr.Combat
 
         private void FixedUpdate()
         {
-            if (state != State.Combat || GamePause.BlocksGameplay || rb == null) return;
+            if (IsDead || state != State.Combat || GamePause.BlocksGameplay || rb == null) return;
             if (kind == EnemyKind.Boss) return;
             if (kind == EnemyKind.BeatChaser || kind == EnemyKind.Flyer)
             {
@@ -809,6 +864,8 @@ namespace Gstarr.Combat
         {
             if (kind == EnemyKind.Mole && !moleActive) return;
             if (!IsPlayerInMeleeRange()) return;
+            Gstarr.Game.GameAudio.Play(Gstarr.Game.GameAudio.Id.EnemySwing);
+            GetComponent<Gstarr.Game.SpriteMotion>()?.AttackPose();
             if (rb != null) rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
             float dx = player.position.x - transform.position.x;
             Face(dx);
@@ -838,6 +895,8 @@ namespace Gstarr.Combat
             RaycastHit2D wall = Physics2D.Raycast(origin, direction, detectionRange, groundMask);
             if (wall.collider != null && Vector2.Distance(origin, wall.point) < Vector2.Distance(origin, player.position)) return;
 
+            Gstarr.Game.GameAudio.Play(Gstarr.Game.GameAudio.Id.EnemyShot);
+            GetComponent<Gstarr.Game.SpriteMotion>()?.AttackPose();
             var shot = new GameObject("EnemyProjectile");
             shot.transform.position = origin;
             shot.transform.localScale = Vector3.one * 0.2f;

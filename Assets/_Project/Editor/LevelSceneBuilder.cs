@@ -183,12 +183,12 @@ namespace Gstarr.EditorTools
             var rb = go.AddComponent<Rigidbody2D>();
             rb.sharedMaterial = material;
 
-            var capsule = go.AddComponent<CapsuleCollider2D>();
-            capsule.direction = CapsuleDirection2D.Vertical;
-            var size = sprite != null ? (Vector2)sprite.bounds.size : new Vector2(1f, 1.5f);
-            capsule.size = new Vector2(size.x * 0.8f, size.y * 0.95f);
-            capsule.offset = sprite != null ? (Vector2)sprite.bounds.center : Vector2.zero;
-            capsule.sharedMaterial = material;
+            var box = go.AddComponent<BoxCollider2D>();
+            float foot = sprite != null ? sprite.bounds.min.y : -0.72f;
+            const float height = 1.9f;
+            box.size = new Vector2(0.58f, height);
+            box.offset = new Vector2(0f, foot + height * 0.5f);
+            box.sharedMaterial = material;
 
             var controller = go.AddComponent<PlayerController>();
             var so = new SerializedObject(controller);

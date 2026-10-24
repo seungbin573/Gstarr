@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Gstarr.Combat;
+using Gstarr.Game;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -10,7 +11,8 @@ namespace Gstarr.World
     /// 바닥 칸 하나가 문이고, 그림은 위로 3칸이다.
     /// 문 그림은 Assets/_Project/Tilemaps/DoorTiles/Door.png 를 바꾸면 바뀐다.
     /// 같은 x의 칸이 문 하나고, 이웃한 두 문 사이가 방이다.
-    /// 방에 들어가면 양쪽 문이 잠기고, 그 안의 적을 모두 처치하면 열린다.
+    /// 그 문 칸을 밟으면 잠기고, 그 높이의 적을 모두 처치하면 열린다.
+    /// 문 아래층을 지나가는 것만으로는 시작하지 않는다.
     /// </summary>
     [RequireComponent(typeof(Tilemap))]
     [DefaultExecutionOrder(100)]
@@ -87,20 +89,25 @@ namespace Gstarr.World
                     tilemap, new Vector3Int(xs[i], bottom, 0), tilesTall,
                     doorSprite, frameSprite, lampSprite, transform));
 
-                Vector3 corner = tilemap.CellToWorld(new Vector3Int(xs[i], 0, 0));
+                Vector3 corner = tilemap.CellToWorld(new Vector3Int(xs[i], bottom, 0));
                 gate.MinX = corner.x;
                 gate.MaxX = corner.x + tilemap.cellSize.x;
+                gate.FloorY = corner.y;
+                gate.OpeningHeight = tilemap.cellSize.y * tilesTall;
                 gates.Add(gate);
             }
 
             if (gates.Count == 1)
             {
-                rooms.Add(new ArenaRoom(gates[0], null, gates[0].MaxX, float.PositiveInfinity));
+                rooms.Add(new ArenaRoom(gates[0], null, gates[0].MaxX, float.PositiveInfinity, gates[0].FloorY));
             }
             else
             {
                 for (int i = 0; i < gates.Count - 1; i++)
-                    rooms.Add(new ArenaRoom(gates[i], gates[i + 1], gates[i].MaxX, gates[i + 1].MinX));
+                {
+                    float floor = Mathf.Min(gates[i].FloorY, gates[i + 1].FloorY);
+                    rooms.Add(new ArenaRoom(gates[i], gates[i + 1], gates[i].MaxX, gates[i + 1].MinX, floor));
+                }
             }
 
             ConfigureBosses();
@@ -119,15 +126,16 @@ namespace Gstarr.World
                 if (boss == null || configuredBosses.Contains(boss)) continue;
 
                 float x = enemies[i].transform.position.x;
-                bool registered = false;
+                ArenaRoom best = null;
+                float bestDist = float.PositiveInfinity;
                 for (int r = 0; r < rooms.Count; r++)
                 {
-                    if (!rooms[r].Contains(x)) continue;
-                    rooms[r].RegisterBoss(boss);
-                    registered = true;
-                    break;
+                    float dist = rooms[r].DistanceTo(x);
+                    if (dist >= bestDist) continue;
+                    bestDist = dist;
+                    best = rooms[r];
                 }
-                if (!registered) boss.SetEncounterActive(true);
+                if (best != null) best.RegisterBoss(boss);
                 configuredBosses.Add(boss);
             }
         }
@@ -166,7 +174,23 @@ namespace Gstarr.World
         public readonly List<DoorBlock> Blocks = new List<DoorBlock>();
         public float MinX;
         public float MaxX;
+        public float FloorY;
+        public float OpeningHeight;
         private int lockCount;
+
+        public bool SteppedOn(Bounds player)
+        {
+            if (player.max.x < MinX + 0.02f || player.min.x > MaxX - 0.02f) return false;
+            float feet = player.min.y;
+            return feet >= FloorY - 0.35f && feet <= FloorY + OpeningHeight;
+        }
+
+        public void NotePlayer(Bounds player)
+        {
+            bool onDoor = SteppedOn(player);
+            for (int i = 0; i < Blocks.Count; i++)
+                Blocks[i].SetPassageClear(onDoor);
+        }
 
         public void Lock()
         {
@@ -195,19 +219,29 @@ namespace Gstarr.World
         private readonly DoorGate right;
         private readonly float innerMin;
         private readonly float innerMax;
+        private readonly float floorY;
         private readonly List<EnemyActor> occupants = new List<EnemyActor>();
+        private readonly List<EnemyActor> anchored = new List<EnemyActor>();
         private bool locked;
         private bool cleared;
 
-        public ArenaRoom(DoorGate left, DoorGate right, float innerMin, float innerMax)
+        public ArenaRoom(DoorGate left, DoorGate right, float innerMin, float innerMax, float floorY)
         {
             this.left = left;
             this.right = right;
             this.innerMin = innerMin;
             this.innerMax = innerMax;
+            this.floorY = floorY;
         }
 
         public bool Contains(float x) => x >= innerMin && x <= innerMax;
+
+        public float DistanceTo(float x)
+        {
+            if (x < innerMin) return innerMin - x;
+            if (x > innerMax) return x - innerMax;
+            return 0f;
+        }
 
         public void RegisterBoss(BossActor boss)
         {
@@ -218,8 +252,8 @@ namespace Gstarr.World
                 occupants.Clear();
             }
             var actor = boss.GetComponent<EnemyActor>();
-            if (actor != null && !occupants.Contains(actor)) occupants.Add(actor);
-            boss.SetArenaBounds(innerMin, innerMax);
+            if (actor != null && !anchored.Contains(actor)) anchored.Add(actor);
+            boss.SetArenaBounds(innerMin, innerMax, floorY);
             boss.SetEncounterActive(locked);
         }
 
@@ -227,8 +261,10 @@ namespace Gstarr.World
         {
             if (cleared) return;
 
-            bool inside = player.min.x > innerMin && player.max.x < innerMax;
-            if (!locked && inside)
+            left.NotePlayer(player);
+            right?.NotePlayer(player);
+            bool onDoor = left.SteppedOn(player) || (right != null && right.SteppedOn(player));
+            if (!locked && onDoor)
                 TryLock();
 
             if (locked && AllDead())
@@ -242,13 +278,21 @@ namespace Gstarr.World
         private void TryLock()
         {
             occupants.Clear();
+            for (int i = 0; i < anchored.Count; i++)
+            {
+                var boss = anchored[i];
+                if (boss != null && !boss.IsDead) occupants.Add(boss);
+            }
+
             var enemies = Object.FindObjectsByType<EnemyActor>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             for (int i = 0; i < enemies.Length; i++)
             {
                 var enemy = enemies[i];
-                if (enemy == null || enemy.IsDead) continue;
+                if (enemy == null || enemy.IsDead || occupants.Contains(enemy)) continue;
                 float x = enemy.transform.position.x;
-                if (x > innerMin && x < innerMax) occupants.Add(enemy);
+                if (x <= innerMin || x >= innerMax) continue;
+                if (enemy.transform.position.y < floorY - 0.75f) continue;
+                occupants.Add(enemy);
             }
 
             if (occupants.Count == 0)
@@ -280,14 +324,18 @@ namespace Gstarr.World
 
     internal class DoorBlock : MonoBehaviour
     {
-        private static AudioClip slamClip;
 
         private Transform shutter;
+        private Sprite shutterSprite;
         private BoxCollider2D body;
         private SpriteRenderer lamp;
         private float openY;
         private float targetY;
+        private float shutterBottom;
+        private float shutterWidth;
+        private float shutterHeight;
         private float speed;
+        private bool passageClear;
 
         public static DoorBlock Create(
             Tilemap tilemap, Vector3Int bottomCell, int heightTiles,
@@ -296,7 +344,8 @@ namespace Gstarr.World
             float cellW = tilemap.cellSize.x;
             float cellH = tilemap.cellSize.y;
             float targetW = cellW;
-            float targetH = cellH * heightTiles;
+            int frameTiles = Mathf.Max(1, heightTiles);
+            float frameH = cellH * frameTiles;
 
             Vector3 corner = tilemap.CellToWorld(bottomCell);
             var go = new GameObject("Door");
@@ -308,35 +357,37 @@ namespace Gstarr.World
             go.layer = ground;
 
             var block = go.AddComponent<DoorBlock>();
-            block.openY = targetH;
-            block.targetY = targetH;
-            block.speed = targetH / 0.12f;
+            block.openY = frameH;
+            block.targetY = frameH;
+            block.shutterBottom = frameH;
+            block.shutterWidth = targetW;
+            block.shutterHeight = frameH;
+            block.shutterSprite = doorSprite;
+            block.speed = frameH / 0.12f;
 
             if (frameSprite != null)
             {
                 var frame = NewSprite("Frame", go.transform, frameSprite, 6);
-                frame.transform.localScale = Fit(frameSprite, targetW, targetH);
+                ApplyBottomCenter(frame.transform, frameSprite, targetW, frameH, 0f);
             }
 
             var shutterGo = NewSprite("Shutter", go.transform, doorSprite, 7);
-            shutterGo.transform.localScale = Fit(doorSprite, targetW, targetH);
-            shutterGo.transform.localPosition = new Vector3(0f, targetH, 0f);
-            shutterGo.GetComponent<SpriteRenderer>().enabled = false;
             block.shutter = shutterGo.transform;
+            block.SetShutterBottom(frameH);
+            shutterGo.GetComponent<SpriteRenderer>().enabled = false;
 
             if (lampSprite != null)
             {
                 const float lampSize = 0.28f;
                 var lampGo = NewSprite("Lamp", go.transform, lampSprite, 8);
-                lampGo.transform.localScale = Fit(lampSprite, lampSize, lampSize);
-                lampGo.transform.localPosition = new Vector3(0f, targetH - lampSize * 0.35f, 0f);
+                ApplyCenter(lampGo.transform, lampSprite, lampSize, lampSize, new Vector2(0f, frameH - lampSize * 0.35f));
                 block.lamp = lampGo.GetComponent<SpriteRenderer>();
                 block.lamp.color = new Color(0.35f, 0.95f, 0.45f);
             }
 
             block.body = go.AddComponent<BoxCollider2D>();
-            block.body.size = new Vector2(targetW, targetH);
-            block.body.offset = new Vector2(0f, targetH * 0.5f);
+            block.body.size = new Vector2(targetW, frameH);
+            block.body.offset = new Vector2(0f, frameH * 0.5f);
             block.body.enabled = false;
             return block;
         }
@@ -344,36 +395,60 @@ namespace Gstarr.World
         public void Close()
         {
             targetY = 0f;
-            speed = openY / 0.1f;
-            body.enabled = true;
+            speed = openY / 0.16f;
             if (lamp != null) lamp.color = new Color(1f, 0.28f, 0.22f);
         }
 
         public void Open()
         {
             targetY = openY;
-            speed = openY / 0.18f;
-            body.enabled = false;
+            speed = openY / 0.2f;
             if (lamp != null) lamp.color = new Color(0.35f, 0.95f, 0.45f);
         }
 
+        public void SetPassageClear(bool clear) => passageClear = clear;
+
         public void PlaySlam()
         {
-            if (slamClip == null) slamClip = MakeSlam();
-            var source = gameObject.AddComponent<AudioSource>();
-            source.spatialBlend = 0f;
-            source.playOnAwake = false;
-            source.PlayOneShot(slamClip, 0.85f);
+            GameAudio.Play(GameAudio.Id.Door, 0.9f);
+            CombatFeel.Shake(0.08f, 0.08f);
         }
 
         private void Update()
         {
             if (shutter == null) return;
-            var pos = shutter.localPosition;
-            pos.y = Mathf.MoveTowards(pos.y, targetY, speed * Time.deltaTime);
-            shutter.localPosition = pos;
+            shutterBottom = Mathf.MoveTowards(shutterBottom, targetY, speed * Time.deltaTime);
+            SetShutterBottom(shutterBottom);
+            bool closed = shutterBottom < openY * 0.08f;
+            if (body != null) body.enabled = closed && !passageClear;
             var renderer = shutter.GetComponent<SpriteRenderer>();
-            if (renderer != null) renderer.enabled = pos.y < openY - 0.02f;
+            if (renderer != null) renderer.enabled = shutterBottom < openY - 0.02f;
+        }
+
+        private void SetShutterBottom(float bottom)
+        {
+            if (shutter == null || shutterSprite == null) return;
+            ApplyBottomCenter(shutter, shutterSprite, shutterWidth, shutterHeight, bottom);
+        }
+
+        private static void ApplyBottomCenter(Transform target, Sprite sprite, float width, float height, float bottom)
+        {
+            target.localScale = Fit(sprite, width, height);
+            var bounds = sprite.bounds;
+            target.localPosition = new Vector3(
+                -bounds.center.x * target.localScale.x,
+                bottom - bounds.min.y * target.localScale.y,
+                0f);
+        }
+
+        private static void ApplyCenter(Transform target, Sprite sprite, float width, float height, Vector2 center)
+        {
+            target.localScale = Fit(sprite, width, height);
+            var bounds = sprite.bounds;
+            target.localPosition = new Vector3(
+                center.x - bounds.center.x * target.localScale.x,
+                center.y - bounds.center.y * target.localScale.y,
+                0f);
         }
 
         private static Vector3 Fit(Sprite sprite, float width, float height)
@@ -394,21 +469,5 @@ namespace Gstarr.World
             return go;
         }
 
-        private static AudioClip MakeSlam()
-        {
-            const int rate = 22050;
-            int n = rate / 10;
-            var data = new float[n];
-            for (int i = 0; i < n; i++)
-            {
-                float u = i / (float)n;
-                float body = Mathf.Sin(u * 48f * Mathf.PI) * Mathf.Exp(-u * 10f);
-                float knock = (Mathf.PerlinNoise(u * 18f, 0.2f) * 2f - 1f) * Mathf.Exp(-u * 16f);
-                data[i] = (body * 0.7f + knock * 0.3f) * 0.85f;
-            }
-            var clip = AudioClip.Create("ArenaDoorSlam", n, 1, rate, false);
-            clip.SetData(data, 0);
-            return clip;
-        }
     }
 }

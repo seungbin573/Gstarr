@@ -60,7 +60,7 @@ namespace Gstarr.Game
                 if (resetStatusTimer <= 0f) leaderboardStatus.text = "SHIFT + ENTER: RESET SCORES";
             }
 
-            if (settingsView.IsRebinding) return;
+            if (settingsView.IsRebinding || settingsView.IsCalibrating) return;
             if (UIFactory.Cancel.WasPressedThisFrame()) Back();
 
             // 마우스 클릭으로 선택이 풀렸을 때 컨트롤러로 다시 잡을 수 있게

@@ -12,6 +12,8 @@ namespace Gstarr.Game
         public static bool IsGloryKill { get; private set; }
         public static bool BlocksGameplay => IsPaused || IsCountdown || IsGloryKill;
 
+        private static float hitStopUntil = -1f;
+
         // 도메인 리로드를 끈 상태에서도 이전 플레이의 timeScale 0 이 남지 않게 한다.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void ResetOnPlay()
@@ -19,7 +21,23 @@ namespace Gstarr.Game
             IsPaused = false;
             IsCountdown = false;
             IsGloryKill = false;
+            hitStopUntil = -1f;
             Time.timeScale = 1f;
+        }
+
+        /// <summary>맞는 순간만 아주 짧게 멈춘다. 일시정지·글로리 킬 중에는 무시한다.</summary>
+        public static void HitStop(float seconds)
+        {
+            if (BlocksGameplay || seconds <= 0f) return;
+            hitStopUntil = Mathf.Max(hitStopUntil, Time.unscaledTime + seconds);
+            ApplyTimeScale();
+        }
+
+        public static void TickHitStop()
+        {
+            if (hitStopUntil < 0f || Time.unscaledTime < hitStopUntil) return;
+            hitStopUntil = -1f;
+            if (!BlocksGameplay) Time.timeScale = 1f;
         }
 
         public static void SetPaused(bool paused)
@@ -60,14 +78,20 @@ namespace Gstarr.Game
             IsPaused = false;
             IsCountdown = false;
             IsGloryKill = false;
+            hitStopUntil = -1f;
             ApplyTimeScale();
         }
 
         private static void ApplyTimeScale()
         {
-            if (IsPaused || IsCountdown) Time.timeScale = 0f;
-            else if (IsGloryKill) Time.timeScale = 0f;
-            else Time.timeScale = 1f;
+            if (IsPaused || IsCountdown || IsGloryKill)
+            {
+                hitStopUntil = -1f;
+                Time.timeScale = 0f;
+                return;
+            }
+
+            Time.timeScale = hitStopUntil > Time.unscaledTime ? 0.04f : 1f;
         }
     }
 }

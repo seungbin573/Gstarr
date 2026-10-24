@@ -11,21 +11,39 @@ namespace Gstarr.Game
     {
         private const string KeyMaster = "gstarr.masterVolume";
         private const string KeyMusic = "gstarr.musicVolume";
+        private const string KeySfx = "gstarr.sfxVolume";
+        private const string KeyAudioOffset = "gstarr.audioOffsetMs";
         private const string KeyQuality = "gstarr.quality";
         private const string KeyFullscreen = "gstarr.fullscreen";
         private const string KeyVSync = "gstarr.vsync";
         private const string KeyResW = "gstarr.resW";
         private const string KeyResH = "gstarr.resH";
         private const string KeyBindings = "gstarr.bindings";
+        private const string KeyRhythmAssist = "gstarr.rhythmAssist";
+        private const string KeyArcadeMode = "gstarr.arcadeMode";
+
+        public const int MinAudioOffsetMs = -200;
+        public const int MaxAudioOffsetMs = 200;
 
         public static float MasterVolume { get; private set; } = 1f;
         public static float MusicVolume { get; private set; } = 1f;
+        public static float SfxVolume { get; private set; } = 1f;
+        public static int AudioOffsetMs { get; private set; }
+        public static bool RhythmAssist { get; private set; }
+        public static bool ArcadeMode { get; private set; }
+
+        public static string AudioOffsetLabel =>
+            AudioOffsetMs > 0 ? "+" + AudioOffsetMs + " ms" : AudioOffsetMs + " ms";
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Init()
         {
             MasterVolume = PlayerPrefs.GetFloat(KeyMaster, 1f);
             MusicVolume = PlayerPrefs.GetFloat(KeyMusic, 1f);
+            SfxVolume = PlayerPrefs.GetFloat(KeySfx, 1f);
+            AudioOffsetMs = Mathf.Clamp(PlayerPrefs.GetInt(KeyAudioOffset, 0), MinAudioOffsetMs, MaxAudioOffsetMs);
+            RhythmAssist = PlayerPrefs.GetInt(KeyRhythmAssist, 0) == 1;
+            ArcadeMode = PlayerPrefs.GetInt(KeyArcadeMode, 0) == 1;
             AudioListener.volume = MasterVolume;
 
             if (PlayerPrefs.HasKey(KeyQuality))
@@ -54,6 +72,30 @@ namespace Gstarr.Game
         {
             MusicVolume = Mathf.Clamp01(v);
             PlayerPrefs.SetFloat(KeyMusic, MusicVolume);
+        }
+
+        public static void SetSfxVolume(float v)
+        {
+            SfxVolume = Mathf.Clamp01(v);
+            PlayerPrefs.SetFloat(KeySfx, SfxVolume);
+        }
+
+        public static void SetAudioOffsetMs(int ms)
+        {
+            AudioOffsetMs = Mathf.Clamp(ms, MinAudioOffsetMs, MaxAudioOffsetMs);
+            PlayerPrefs.SetInt(KeyAudioOffset, AudioOffsetMs);
+        }
+
+        public static void SetRhythmAssist(bool enabled)
+        {
+            RhythmAssist = enabled;
+            PlayerPrefs.SetInt(KeyRhythmAssist, enabled ? 1 : 0);
+        }
+
+        public static void SetArcadeMode(bool enabled)
+        {
+            ArcadeMode = enabled;
+            PlayerPrefs.SetInt(KeyArcadeMode, enabled ? 1 : 0);
         }
 
         public static int Quality

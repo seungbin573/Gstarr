@@ -27,6 +27,8 @@ namespace Gstarr.Player
         [SerializeField] private float jumpCutMultiplier = 0.5f;
         [SerializeField] private float coyoteTime = 0.1f;
         [SerializeField] private float jumpBufferTime = 0.12f;
+        [Tooltip("지상 점프 후 공중에서 추가로 사용할 수 있는 점프 횟수 (더블 점프 기본값 1)")]
+        [SerializeField, Min(0)] private int extraAirJumps = 1;
 
         [Header("Gravity")]
         [SerializeField] private float gravityScale = 4f;
@@ -59,6 +61,7 @@ namespace Gstarr.Player
         private Vector2 moveInput;
         private float coyoteTimer;
         private float jumpBufferTimer;
+        private int airJumpsLeft;
         private bool jumpCutRequested;
         private bool dashRequested;
         private bool isJumping;
@@ -72,6 +75,7 @@ namespace Gstarr.Player
         public bool IsDashing => dashTimer > 0f;
         public int FacingDirection { get; private set; } = 1;
         public Vector2 Velocity => rb.linearVelocity;
+        public bool HasMoveInput => moveInput.sqrMagnitude > stickDeadZone * stickDeadZone;
 
         private void Awake()
         {
@@ -90,6 +94,41 @@ namespace Gstarr.Player
             groundFilter.SetNormalAngle(90f - maxGroundAngle, 90f + maxGroundAngle);
 
             SetupInput();
+            ApplyTallHitbox();
+            airJumpsLeft = extraAirJumps;
+            if (GetComponent<SpriteMotion>() == null) gameObject.AddComponent<SpriteMotion>();
+        }
+
+        /// <summary>발 위치는 유지한 채, 몸통을 세로로 긴 직사각형으로 바꾼다.</summary>
+        private void ApplyTallHitbox()
+        {
+            var existing = GetComponents<Collider2D>();
+            PhysicsMaterial2D material = existing.Length > 0 ? existing[0].sharedMaterial : null;
+            float foot = -0.72f;
+            if (existing.Length > 0)
+                foot = transform.InverseTransformPoint(existing[0].bounds.min).y;
+            else
+            {
+                var art = GetComponent<SpriteRenderer>();
+                if (art != null && art.sprite != null) foot = art.sprite.bounds.min.y;
+            }
+
+            BoxCollider2D box = null;
+            for (int i = 0; i < existing.Length; i++)
+            {
+                if (existing[i] is BoxCollider2D existingBox)
+                    box = existingBox;
+                else
+                    existing[i].enabled = false;
+            }
+
+            const float height = 1.9f;
+            const float width = 0.58f;
+            if (box == null) box = gameObject.AddComponent<BoxCollider2D>();
+            box.enabled = true;
+            box.sharedMaterial = material;
+            box.size = new Vector2(width, height);
+            box.offset = new Vector2(0f, foot + height * 0.5f);
         }
 
         private void SetupInput()
@@ -142,12 +181,25 @@ namespace Gstarr.Player
 
         private void Update()
         {
-            if (GamePause.IsGloryKill)
+            var health = GetComponent<Gstarr.Combat.Health>();
+            if (health != null && health.Current <= 0)
+            {
+                StageHUD.ShowGameOver();
+                moveInput = Vector2.zero;
+                if (rb != null) rb.linearVelocity = Vector2.zero;
+                return;
+            }
+
+            if (!GamePause.BlocksGameplay && transform.position.y < -8f && health != null)
+                health.TakeDamage(health.Current, Vector2.up);
+
+            if (GamePause.BlocksGameplay)
             {
                 moveInput = Vector2.zero;
                 jumpBufferTimer = 0f;
                 jumpCutRequested = false;
                 dashRequested = false;
+                if (rb != null) rb.linearVelocity = Vector2.zero;
                 return;
             }
 
@@ -174,6 +226,12 @@ namespace Gstarr.Player
 
         private void FixedUpdate()
         {
+            if (GamePause.BlocksGameplay)
+            {
+                rb.linearVelocity = Vector2.zero;
+                return;
+            }
+
             float dt = Time.fixedDeltaTime;
 
             CheckGround();
@@ -182,6 +240,7 @@ namespace Gstarr.Player
             {
                 coyoteTimer = coyoteTime;
                 airDashesLeft = airDashCount;
+                airJumpsLeft = extraAirJumps;
             }
             else
             {
@@ -220,8 +279,11 @@ namespace Gstarr.Player
 
         private void HandleJump()
         {
-            if (jumpBufferTimer > 0f && coyoteTimer > 0f)
+            if (jumpBufferTimer > 0f && (coyoteTimer > 0f || airJumpsLeft > 0))
             {
+                bool isGroundJump = coyoteTimer > 0f;
+                if (!isGroundJump) airJumpsLeft--;
+
                 Vector2 v = rb.linearVelocity;
                 v.y = jumpVelocity;
                 rb.linearVelocity = v;
@@ -230,6 +292,8 @@ namespace Gstarr.Player
                 coyoteTimer = 0f;
                 isJumping = true;
                 IsGrounded = false;
+                GameAudio.Play(GameAudio.Id.Jump);
+                GetComponent<SpriteMotion>()?.JumpPose();
             }
 
             if (jumpCutRequested)
@@ -290,6 +354,7 @@ namespace Gstarr.Player
             dashTimer = dashDuration;
             dashCooldownTimer = dashDuration + dashCooldown;
             rb.gravityScale = 0f;
+            GameAudio.Play(GameAudio.Id.Dash);
             isJumping = false;
             jumpBufferTimer = 0f;
         }

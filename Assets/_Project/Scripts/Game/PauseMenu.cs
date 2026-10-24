@@ -60,7 +60,7 @@ namespace Gstarr.Game
 
         private void Update()
         {
-            if (conductor.IsFinished) return;
+            if (conductor.IsFinished || (GamePause.IsPaused && !IsOpen)) return;
             bool menu = menuAction.WasPressedThisFrame();
 
             if (!IsOpen)
@@ -68,7 +68,7 @@ namespace Gstarr.Game
                 if (menu) Open();
                 return;
             }
-            if (Time.frameCount == openedFrame || settings.IsRebinding) return;
+            if (Time.frameCount == openedFrame || settings.IsRebinding || settings.IsCalibrating) return;
 
             bool cancel = UIFactory.Cancel.WasPressedThisFrame();
             if (settings.Panel.gameObject.activeSelf)

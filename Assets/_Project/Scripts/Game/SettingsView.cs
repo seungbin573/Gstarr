@@ -18,11 +18,23 @@ namespace Gstarr.Game
         private int currentTab;
         private bool rebinding;
         private Action onBack;
+        private bool calibrating;
+        private int calibrateBeats;
+        private int calibrateTaps;
+        private double nextBeatAt;
+        private double lastBeatAt = double.NaN;
+        private double errorSum;
+        private Text calibrateStatus;
+        private Image calibrateFlash;
+        private const int CalibrateCount = 8;
+        private const double CalibrateInterval = 0.5;
 
-        private static readonly string[] TabNames = { "CONTROLS", "AUDIO", "GRAPHICS" };
+        private static readonly string[] TabNames = { "CONTROLS", "AUDIO", "GAMEPLAY", "GRAPHICS" };
 
         public RectTransform Panel => settingsPanel;
         public bool IsRebinding => rebinding;
+        public bool IsCalibrating => calibrating || ignoreCancelFrame == Time.frameCount;
+        private int ignoreCancelFrame = -1;
         public Selectable FirstSelectable =>
             currentTab >= 0 && currentTab < settingsTabs.Count ? settingsTabs[currentTab] : null;
 
@@ -83,11 +95,119 @@ namespace Gstarr.Game
             var back = UIFactory.CreateButton("Back", settingsPanel, "BACK", 34, () => onBack?.Invoke());
             UIFactory.Place((RectTransform)back.transform, new Vector2(0.5f, 0f), new Vector2(0f, 40f), new Vector2(260f, 70f));
 
+            calibrateFlash = UIFactory.CreateImage("CalibrateFlash", settingsPanel, new Color(1f, 0.75f, 0.35f, 0f));
+            UIFactory.Stretch(calibrateFlash.rectTransform);
+            calibrateFlash.raycastTarget = false;
+
             OpenTab(0, select: false);
+        }
+
+        private void Update()
+        {
+            if (calibrateFlash != null)
+            {
+                var color = calibrateFlash.color;
+                color.a = Mathf.MoveTowards(color.a, 0f, Time.unscaledDeltaTime * 4f);
+                calibrateFlash.color = color;
+            }
+
+            if (!calibrating) return;
+
+            if (UIFactory.Cancel.WasPressedThisFrame())
+            {
+                StopCalibration("CALIBRATION CANCELED");
+                return;
+            }
+
+            if (CalibratePressed()) RegisterCalibrationTap();
+
+            if (Time.unscaledTimeAsDouble < nextBeatAt) return;
+            lastBeatAt = Time.unscaledTimeAsDouble;
+            nextBeatAt += CalibrateInterval;
+            calibrateBeats++;
+            GameAudio.Play(GameAudio.Id.Calibrate);
+            if (calibrateFlash != null)
+            {
+                var color = calibrateFlash.color;
+                color.a = 0.45f;
+                calibrateFlash.color = color;
+            }
+
+            if (calibrateBeats >= CalibrateCount) FinishCalibration();
+            else if (calibrateStatus != null)
+                calibrateStatus.text = "TAP  " + calibrateBeats + " / " + CalibrateCount + "     ENTER OR A ON THE CLICK";
+        }
+
+        private void OnDisable()
+        {
+            if (!calibrating) return;
+            calibrating = false;
+            ignoreCancelFrame = Time.frameCount;
+            if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = true;
+        }
+
+        private void StartCalibration()
+        {
+            calibrating = true;
+            calibrateBeats = 0;
+            calibrateTaps = 0;
+            errorSum = 0;
+            lastBeatAt = double.NaN;
+            nextBeatAt = Time.unscaledTimeAsDouble + 0.65;
+            if (calibrateStatus != null)
+                calibrateStatus.text = "LISTEN, THEN TAP ENTER OR A ON EACH CLICK";
+            if (EventSystem.current != null)
+            {
+                EventSystem.current.SetSelectedGameObject(null);
+                EventSystem.current.sendNavigationEvents = false;
+            }
+        }
+
+        private void RegisterCalibrationTap()
+        {
+            if (double.IsNaN(lastBeatAt)) return;
+            double error = Time.unscaledTimeAsDouble - lastBeatAt;
+            if (Math.Abs(error) > 0.22) return;
+            errorSum += error;
+            calibrateTaps++;
+        }
+
+        private void FinishCalibration()
+        {
+            if (calibrateTaps >= 3)
+            {
+                int ms = (int)Math.Round(errorSum / calibrateTaps * 1000.0);
+                GameSettings.SetAudioOffsetMs(ms);
+                StopCalibration("OFFSET SET TO  " + GameSettings.AudioOffsetLabel);
+            }
+            else
+            {
+                StopCalibration("NEED AT LEAST 3 TAPS. OFFSET UNCHANGED.");
+            }
+        }
+
+        private void StopCalibration(string message)
+        {
+            calibrating = false;
+            ignoreCancelFrame = Time.frameCount;
+            lastBeatAt = double.NaN;
+            if (calibrateStatus != null) calibrateStatus.text = message;
+            if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = true;
+            if (currentTab >= 0 && currentTab < settingsTabs.Count) UIFactory.Select(settingsTabs[currentTab]);
+        }
+
+        private static bool CalibratePressed()
+        {
+            var keyboard = Keyboard.current;
+            var pad = Gamepad.current;
+            bool key = keyboard != null && (keyboard.enterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame || keyboard.zKey.wasPressedThisFrame);
+            bool button = pad != null && pad.buttonEast.wasPressedThisFrame;
+            return key || button;
         }
 
         private void OpenTab(int index, bool select = true)
         {
+            if (calibrating) StopCalibration("CALIBRATION CANCELED");
             currentTab = index;
             for (int i = 0; i < settingsTabs.Count; i++)
             {
@@ -103,6 +223,7 @@ namespace Gstarr.Game
             {
                 case 0: first = BuildControls(); break;
                 case 1: first = BuildAudio(); break;
+                case 2: first = BuildGameplay(); break;
                 default: first = BuildGraphics(); break;
             }
             if (select) UIFactory.Select(first != null ? first : settingsTabs[index]);
@@ -137,6 +258,27 @@ namespace Gstarr.Game
                 d => GameSettings.SetMasterVolume(Step(GameSettings.MasterVolume, d)));
             AddOption("MUSIC VOLUME", () => Mathf.RoundToInt(GameSettings.MusicVolume * 100) + "%",
                 d => GameSettings.SetMusicVolume(Step(GameSettings.MusicVolume, d)));
+            AddOption("SFX VOLUME", () => Mathf.RoundToInt(GameSettings.SfxVolume * 100) + "%",
+                d => GameSettings.SetSfxVolume(Step(GameSettings.SfxVolume, d)));
+            AddOption("AUDIO OFFSET", () => GameSettings.AudioOffsetLabel,
+                d => GameSettings.SetAudioOffsetMs(GameSettings.AudioOffsetMs + d * 5));
+            var calibrate = UIFactory.CreateButton("Calibrate", settingsContent, "CALIBRATE", 28, StartCalibration);
+            UIFactory.SetHeight(calibrate, 54f);
+            calibrateStatus = UIFactory.CreateText("CalibrateHelp", settingsContent,
+                "Late hits: raise offset. Early hits: lower it. Calibrate taps Enter or A on each click.", 20);
+            UIFactory.SetHeight(calibrateStatus, 72f);
+            return first;
+        }
+
+        private Selectable BuildGameplay()
+        {
+            var first = AddOption("RHYTHM ASSIST", () => GameSettings.RhythmAssist ? "ON" : "OFF",
+                d => GameSettings.SetRhythmAssist(!GameSettings.RhythmAssist));
+            AddOption("ARCADE MODE", () => GameSettings.ArcadeMode ? "ON" : "OFF",
+                d => GameSettings.SetArcadeMode(!GameSettings.ArcadeMode));
+            var help = UIFactory.CreateText("GameplayHelp", settingsContent,
+                "Assist: missed attacks deal reduced damage. Arcade: return to title after inactivity.", 20);
+            UIFactory.SetHeight(help, 54f);
             return first;
         }
 

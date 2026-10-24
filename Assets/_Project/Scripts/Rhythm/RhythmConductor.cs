@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Gstarr.Game;
 using Gstarr.Items;
 using UnityEngine;
 
@@ -21,7 +22,7 @@ namespace Gstarr.Rhythm
     }
 
     /// <summary>
-    /// 음악을 재생하고 박자 판정을 담당. 점프/대쉬/아이템 사용은 박자에 맞을 때만 허용된다.
+    /// 음악을 재생하고 박자 판정을 담당. 이동은 자유롭게 두고 공격/아이템 사용을 박자에 맞춘다.
     /// 시간은 AudioSettings.dspTime 기준이라 프레임레이트와 무관하게 정확하다.
     /// </summary>
     public class RhythmConductor : MonoBehaviour
@@ -71,6 +72,12 @@ namespace Gstarr.Rhythm
         private double pauseReal, pauseDsp;
         private bool pausedBeforeStart;
         private double countdownReleaseAt = double.MaxValue;
+        private AudioSource cueSource;
+        private StageMusicCue[] musicCues;
+        private int nextMusicCue;
+        private int activeSource;
+        private bool cueScheduled;
+        private double cueSwitchTime;
 
         public void Pause()
         {
@@ -79,25 +86,27 @@ namespace Gstarr.Rhythm
             pauseReal = UnityEngine.Time.realtimeSinceStartupAsDouble;
             pauseDsp = AudioSettings.dspTime;
             pausedBeforeStart = SongTime < 0;
-            if (pausedBeforeStart) source.Stop();
-            else source.Pause();
+            if (pausedBeforeStart) { source.Stop(); cueSource.Stop(); }
+            else { source.Pause(); cueSource.Pause(); }
         }
 
         public void Resume()
         {
             if (!IsPaused) return;
             IsPaused = false;
-            realStart += UnityEngine.Time.realtimeSinceStartupAsDouble - pauseReal;
+            double pausedFor = UnityEngine.Time.realtimeSinceStartupAsDouble - pauseReal;
+            realStart += pausedFor;
             dspStart += AudioSettings.dspTime - pauseDsp;
+            if (countdownReleaseAt != double.MaxValue) countdownReleaseAt += pausedFor;
             if (pausedBeforeStart) source.PlayScheduled(dspStart);
-            else source.UnPause();
+            else { source.UnPause(); cueSource.UnPause(); }
         }
 
         public BeatChart Chart { get; private set; }
         /// <summary>음악 시작 기준 누적 시간 (루프해도 계속 증가). 시작 전에는 음수.</summary>
         public double SongTime { get; private set; }
         public float GoodWindow => goodWindow;
-        public double InputOffsetSeconds => inputOffsetMs * 0.001;
+        public double InputOffsetSeconds => (inputOffsetMs + Gstarr.Game.GameSettings.AudioOffsetMs) * 0.001;
         public float PerfectWindow => perfectWindow;
         public bool IsReady => Chart != null && Chart.Beats.Length > 0;
 
@@ -153,6 +162,9 @@ namespace Gstarr.Rhythm
             source = gameObject.AddComponent<AudioSource>();
             source.playOnAwake = false;
             source.spatialBlend = 0f;
+            cueSource = gameObject.AddComponent<AudioSource>();
+            cueSource.playOnAwake = false;
+            cueSource.spatialBlend = 0f;
 
             if (GetComponent<BeatBarUI>() == null) gameObject.AddComponent<BeatBarUI>();
             if (GetComponent<ComboSystem>() == null) gameObject.AddComponent<ComboSystem>();
@@ -191,6 +203,9 @@ namespace Gstarr.Rhythm
                 return;
             }
             loopLength = music.length;
+            musicCues = Gstarr.Game.StageSession.Current != null
+                ? Gstarr.Game.StageSession.Current.musicCues
+                : Array.Empty<StageMusicCue>();
 
             float beatLen = Chart.Bpm > 0f ? 60f / Chart.Bpm : 0.5f;
             CountdownInterval = beatLen;
@@ -216,6 +231,7 @@ namespace Gstarr.Rhythm
 
             if (!IsReady || IsFinished) return;
             source.volume = volume * Gstarr.Game.GameSettings.MusicVolume;
+            cueSource.volume = source.volume;
 
             // dspTime 은 오디오 버퍼 단위로만 갱신되므로 실시간 시계로 부드럽게 진행하고 dsp 에 천천히 맞춤
             double dspT = AudioSettings.dspTime - dspStart;
@@ -225,6 +241,7 @@ namespace Gstarr.Rhythm
             double step = Math.Abs(drift) > 0.2 ? drift * 0.15 : Math.Clamp(drift * 0.08, -0.0015, 0.0015);
             realStart -= step;
             SongTime = UnityEngine.Time.realtimeSinceStartupAsDouble - realStart;
+            UpdateMusicCues();
             if (Gstarr.Game.GamePause.IsCountdown && SongTime >= 0)
                 Gstarr.Game.GamePause.SetCountdown(false);
 
@@ -245,8 +262,41 @@ namespace Gstarr.Rhythm
             {
                 IsFinished = true;
                 source.Stop();
+                cueSource.Stop();
                 Finished?.Invoke();
             }
+        }
+
+        private void UpdateMusicCues()
+        {
+            if (cueScheduled && SongTime >= cueSwitchTime)
+            {
+                activeSource = 1 - activeSource;
+                cueScheduled = false;
+            }
+            if (cueScheduled || musicCues == null || nextMusicCue >= musicCues.Length) return;
+
+            var cue = musicCues[nextMusicCue];
+            if (cue == null || cue.loop == null) { nextMusicCue++; return; }
+            if (SongTime < cue.atSeconds) return;
+
+            long beat = FirstBeatAtOrAfter(Math.Max(SongTime, cue.atSeconds));
+            long barBeat = ((beat + 3) / 4) * 4;
+            double switchTime = BeatTime(barBeat);
+            if (double.IsInfinity(switchTime)) { nextMusicCue++; return; }
+
+            AudioSource outgoing = activeSource == 0 ? source : cueSource;
+            AudioSource incoming = activeSource == 0 ? cueSource : source;
+            double switchDsp = dspStart + switchTime;
+            outgoing.SetScheduledEndTime(switchDsp);
+            incoming.Stop();
+            incoming.clip = cue.loop;
+            incoming.loop = true;
+            incoming.volume = volume * Gstarr.Game.GameSettings.MusicVolume;
+            incoming.PlayScheduled(switchDsp);
+            cueSwitchTime = switchTime;
+            cueScheduled = true;
+            nextMusicCue++;
         }
 
         /// <summary>절대 박자 번호의 시각. 루프하지 않고 곡이 끝났으면 무한대.</summary>
@@ -314,11 +364,16 @@ namespace Gstarr.Rhythm
         /// 이미 이 박자를 쓴 경우는 항상 조용히 거절한다.
         /// </summary>
         public bool TryPerform(BeatAction action, bool reportMiss, bool allowHalfBeats = false)
+            => TryPerform(action, reportMiss, allowHalfBeats, out _, false);
+
+        public bool TryPerform(BeatAction action, bool reportMiss, bool allowHalfBeats,
+            out BeatJudgement judgement, bool acceptMiss = false)
         {
+            judgement = BeatJudgement.Perfect;
             if (!IsReady || !enabled) return true;
             if (IsPaused || IsFinished || Gstarr.Game.GamePause.BlocksGameplay) return false;
 
-            double t = SongTime - inputOffsetMs * 0.001;
+            double t = SongTime - InputOffsetSeconds;
             bool judgeHalfBeats = action != BeatAction.Attack || allowHalfBeats;
             long beat = judgeHalfBeats
                 ? NearestJudgePoint(t, out double error)
@@ -339,12 +394,15 @@ namespace Gstarr.Rhythm
             if (alreadyUsed) return false;
             if (abs > allowedWindow)
             {
+                judgement = BeatJudgement.Miss;
                 if (reportMiss) Judged?.Invoke(action, BeatJudgement.Miss, error);
-                return false;
+                if (acceptMiss) lastUsedBeat[action] = beat;
+                return acceptMiss;
             }
 
             lastUsedBeat[action] = beat;
-            Judged?.Invoke(action, abs <= perfectWindow ? BeatJudgement.Perfect : BeatJudgement.Good, error);
+            judgement = abs <= perfectWindow ? BeatJudgement.Perfect : BeatJudgement.Good;
+            Judged?.Invoke(action, judgement, error);
             return true;
         }
     }
@@ -355,9 +413,18 @@ namespace Gstarr.Rhythm
         public static bool TryAct(BeatAction action) => TryPerform(action, true);
 
         public static bool TryPerform(BeatAction action, bool reportMiss, bool allowHalfBeats = false)
+            => TryPerform(action, reportMiss, allowHalfBeats, out _, false);
+
+        public static bool TryPerform(BeatAction action, bool reportMiss, bool allowHalfBeats,
+            out BeatJudgement judgement, bool acceptMiss = false)
         {
             var c = RhythmConductor.Instance;
-            return c == null || c.TryPerform(action, reportMiss, allowHalfBeats);
+            if (c == null)
+            {
+                judgement = BeatJudgement.Perfect;
+                return true;
+            }
+            return c.TryPerform(action, reportMiss, allowHalfBeats, out judgement, acceptMiss);
         }
     }
 }

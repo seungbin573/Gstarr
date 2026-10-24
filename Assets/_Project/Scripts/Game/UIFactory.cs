@@ -209,7 +209,11 @@ namespace Gstarr.Game
             colors.disabledColor = new Color(0.3f, 0.3f, 0.3f, 0.6f);
             colors.fadeDuration = 0.06f;
             button.colors = colors;
-            if (onClick != null) button.onClick.AddListener(() => onClick());
+            if (onClick != null) button.onClick.AddListener(() =>
+            {
+                GameAudio.Play(GameAudio.Id.Ui, 0.7f);
+                onClick();
+            });
             var nav = button.navigation;
             nav.mode = Navigation.Mode.Automatic;
             button.navigation = nav;

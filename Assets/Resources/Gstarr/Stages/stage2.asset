@@ -15,7 +15,8 @@ MonoBehaviour:
   order: 2
   displayName: STAGE 2
   music: {fileID: 8300000, guid: bc52752f6721ad541899d0e09b3c4660, type: 3}
+  musicCues: []
   beatChart: {fileID: 0}
   gloryChart: {fileID: 4900000, guid: 3210d1b500ab9cb4db932a90b79bb2ed, type: 3}
   firstBeatOffset: 0.017
-  sceneName: Stage_2
+  sceneName: 

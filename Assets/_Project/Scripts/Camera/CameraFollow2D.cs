@@ -23,6 +23,14 @@ namespace Gstarr.CameraSystem
         private Transform focusTarget;
         private bool focusing;
         private float previousSize;
+        private float shakeTime;
+        private float shakeMagnitude;
+
+        public void Shake(float magnitude, float duration)
+        {
+            shakeMagnitude = Mathf.Max(shakeMagnitude, magnitude);
+            shakeTime = Mathf.Max(shakeTime, duration);
+        }
 
         public void BeginFocus(Transform subject, float orthographicSize)
         {
@@ -63,7 +71,7 @@ namespace Gstarr.CameraSystem
                 Vector3 focusPosition = focusTarget.position;
                 focusPosition.z = transform.position.z;
                 transform.position = Vector3.SmoothDamp(transform.position, focusPosition,
-                    ref velocity, smoothTime, Mathf.Infinity, Time.unscaledDeltaTime);
+                    ref velocity, smoothTime, Mathf.Infinity, Time.unscaledDeltaTime) + ShakeOffset();
                 return;
             }
             if (target == null) return;
@@ -86,7 +94,20 @@ namespace Gstarr.CameraSystem
                 pos.y = Mathf.Clamp(pos.y, minBounds.y + halfH, Mathf.Max(minBounds.y + halfH, maxBounds.y - halfH));
             }
 
-            transform.position = pos;
+            transform.position = pos + ShakeOffset();
+        }
+
+        private Vector3 ShakeOffset()
+        {
+            if (shakeTime <= 0f) return Vector3.zero;
+            shakeTime -= Time.unscaledDeltaTime;
+            float falloff = Mathf.Clamp01(shakeTime / 0.12f);
+            float amount = shakeMagnitude * Mathf.Max(0.25f, falloff);
+            if (shakeTime <= 0f) shakeMagnitude = 0f;
+            return new Vector3(
+                Random.Range(-1f, 1f) * amount,
+                Random.Range(-1f, 1f) * amount,
+                0f);
         }
 
         private void OnDrawGizmosSelected()

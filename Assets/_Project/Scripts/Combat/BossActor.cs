@@ -1,49 +1,81 @@
+using System.Collections.Generic;
 using Gstarr.Game;
 using Gstarr.Player;
 using UnityEngine;
 
 namespace Gstarr.Combat
 {
-    /// <summary>1단계는 잡몹 소환과 강타, 2단계는 강타와 휩쓸기를 사용한다.</summary>
+    /// <summary>
+    /// 처음 놓인 자리에 머물고, 돌진과 바닥 쓸기만 나갔다가 그 자리로 돌아온다.
+    /// 1페이즈: 돌진, 바닥 쓸기, 원거리, 느린 회전. 2페이즈: 돌진, 넓은 쓸기, 세 발, 빈칸 회전.
+    /// </summary>
     [RequireComponent(typeof(EnemyActor), typeof(Health), typeof(Rigidbody2D))]
     public class BossActor : MonoBehaviour
     {
-        private enum Attack { Idle, SlamWindup, SweepWindup }
+        private enum Motion { Idle, Mark, Move, Sweep, Shot }
+        private enum Pattern { Charge, SweepFloor, Ranged, Orbit, Volley, Ring }
 
-        [SerializeField] private float summonInterval = 3.5f;
-        [SerializeField] private int maxMinions = 4;
-        [SerializeField] private float attackInterval = 1.1f;
-        [SerializeField] private float phaseOneAttackInterval = 2.2f;
-        [SerializeField] private float moveSpeed = 2.8f;
-        [SerializeField] private float slamRadius = 1.8f;
-        [SerializeField] private Vector2 sweepSize = new Vector2(5f, 0.85f);
+        [SerializeField] private float attackInterval = 0.32f;
+        [SerializeField] private float phaseOneAttackInterval = 0.18f;
+        [SerializeField] private float slamRadius = 1.05f;
+
+        private readonly List<Vector2> waypoints = new List<Vector2>(3);
+        private readonly List<SpriteRenderer> beams = new List<SpriteRenderer>(8);
 
         private Health health;
         private Transform player;
         private Vector3 baseScale;
+        private Vector3 home;
+        private Vector2 cell = Vector2.one;
         private int phase = 1;
-        private int summonIndex;
         private int facing = 1;
-        private float summonTimer = 1.2f;
-        private float attackTimer = 0.7f;
-        private Attack attack;
-        private bool nextSlam = true;
+        private int patternCursor;
+        private int waypointIndex;
+        private float attackTimer = 0.8f;
+        private float moveTimer;
+        private Motion motion;
+        private Pattern pattern;
+        private bool arrived;
+        private bool strikeCircle = true;
         private EnemyActor enemyActor;
         private Rigidbody2D body;
         private Collider2D hitbox;
-        private SpriteRenderer slamWarning;
-        private SpriteRenderer sweepWarning;
-        private Vector2 slamTarget;
+        private SpriteRenderer circleWarning;
+        private SpriteRenderer boxWarning;
+        private Vector2 strikeCenter;
+        private Vector2 strikeSize = new Vector2(4f, 0.9f);
         private int attackFacing = 1;
+        private int strikeAtWaypoint = -1;
+        private int shotIndex;
+        private int shotCount = 1;
+        private bool struckThisPattern;
+        private Vector2 shotFrom;
+        private Vector2 shotTo;
+        private float shotDuration = 0.42f;
+        private SpriteRenderer shotVisual;
+        private float sweepTime;
+        private float sweepDuration = 3.4f;
+        private float sweepStart = 90f;
+        private float beamLength = 8f;
+        private float ringRadius = 4f;
+        private float hurtCooldown;
+        private const float EntranceHold = 3.2f;
+
         private float arenaMinX;
         private float arenaMaxX;
+        private float arenaFloorY = float.NegativeInfinity;
         private bool hasArenaBounds;
         private bool encounterActive;
+        private bool homeCaptured;
         private static Sprite warningCircleSprite;
         private static Sprite warningSquareSprite;
 
         public int Phase => phase;
         public bool RequiresPhaseGlory => phase == 1;
+
+        private float MoveSpeed => phase == 1 ? 18f : 13f;
+        private float ReturnSpeed => phase == 1 ? 14f : 10f;
+        private float MarkTime => phase == 1 ? 0.28f : 0.38f;
 
         private void Awake()
         {
@@ -52,11 +84,15 @@ namespace Gstarr.Combat
             body = GetComponent<Rigidbody2D>();
             hitbox = GetComponent<Collider2D>();
             baseScale = transform.localScale;
+            CaptureHome();
+            KeepHovering();
             CreateWarnings();
         }
 
         private void Start()
         {
+            CaptureHome();
+            KeepHovering();
             if (Object.FindAnyObjectByType<Gstarr.World.ArenaDoorSpawner>() == null)
                 SetEncounterActive(true);
         }
@@ -71,60 +107,38 @@ namespace Gstarr.Combat
             }
             FindPlayer();
             if (player == null) return;
-
-            if (phase == 1)
+            var playerHealth = player.GetComponent<Health>();
+            if (playerHealth != null && playerHealth.Current <= 0)
             {
-                summonTimer -= Time.deltaTime;
-                if (summonTimer <= 0f)
-                {
-                    SummonMinion();
-                    summonTimer = summonInterval;
-                }
+                motion = Motion.Idle;
+                SetWarningsVisible(false);
+                return;
             }
-
             UpdateAttackPattern();
         }
 
         private void FixedUpdate()
         {
             if (body == null) return;
-            if (!encounterActive)
-            {
-                body.linearVelocity = Vector2.zero;
-                return;
-            }
-
-            bool canAct = !GamePause.BlocksGameplay && (enemyActor == null || !enemyActor.IsStunned);
-            if (canAct && attack == Attack.Idle && player != null)
-            {
-                float dx = player.position.x - body.position.x;
-                FacePlayer();
-                float speedX = Mathf.Abs(dx) > 1.65f ? Mathf.Sign(dx) * moveSpeed : 0f;
-                body.linearVelocity = new Vector2(speedX, body.linearVelocity.y);
-            }
-            else if (attack != Attack.Idle || !canAct || player == null)
-            {
-                body.linearVelocity = new Vector2(0f, body.linearVelocity.y);
-            }
-
-            if (!hasArenaBounds || hitbox == null) return;
-
-            float minX = arenaMinX + hitbox.bounds.extents.x;
-            float maxX = float.IsPositiveInfinity(arenaMaxX)
-                ? arenaMaxX
-                : arenaMaxX - hitbox.bounds.extents.x;
-            if (maxX < minX) minX = maxX = (arenaMinX + arenaMaxX) * 0.5f;
-
-            float clampedX = Mathf.Clamp(body.position.x, minX, maxX);
-            if (Mathf.Abs(clampedX - body.position.x) < 0.001f) return;
-            body.position = new Vector2(clampedX, body.position.y);
-            body.linearVelocity = new Vector2(0f, body.linearVelocity.y);
+            KeepHovering();
+            if (motion == Motion.Move && waypointIndex < waypoints.Count)
+                FlyToward(waypoints[waypointIndex], MoveSpeed);
+            else
+                Hold(HoverPoint());
         }
 
-        public void SetArenaBounds(float minX, float maxX)
+        private void LateUpdate()
+        {
+            if (!homeCaptured || motion == Motion.Move) return;
+            var point = HoverPoint();
+            transform.position = new Vector3(point.x, point.y, transform.position.z);
+        }
+
+        public void SetArenaBounds(float minX, float maxX, float floorY = float.NegativeInfinity)
         {
             arenaMinX = minX;
             arenaMaxX = maxX;
+            arenaFloorY = floorY;
             hasArenaBounds = true;
         }
 
@@ -135,75 +149,422 @@ namespace Gstarr.Combat
             if (active)
             {
                 FindPlayer();
-                summonTimer = 1.2f;
-                attackTimer = 0.7f;
+                motion = Motion.Idle;
+                arrived = false;
+                attackTimer = EntranceHold;
+                SetWarningsVisible(false);
+                if (body != null) Hold((Vector2)home);
                 return;
             }
 
-            attack = Attack.Idle;
+            motion = Motion.Idle;
+            arrived = false;
             transform.localScale = baseScale;
             SetWarningsVisible(false);
-            if (body != null) body.linearVelocity = Vector2.zero;
+            if (body != null) Hold(body.position);
         }
 
         private void UpdateAttackPattern()
         {
-            if (attack == Attack.Idle)
+            if (motion == Motion.Idle)
             {
                 transform.localScale = baseScale;
-                attackTimer -= Time.deltaTime;
-                float distance = Vector2.Distance(transform.position, player.position);
-                if (attackTimer > 0f || distance > 9f) return;
-
                 FacePlayer();
-                attack = phase == 1 || nextSlam ? Attack.SlamWindup : Attack.SweepWindup;
-                if (phase > 1) nextSlam = !nextSlam;
-                attackFacing = facing;
-                attackTimer = attack == Attack.SlamWindup ? 0.8f : 0.65f;
-                if (attack == Attack.SlamWindup) slamTarget = PlayerGroundPoint();
+                if (!AtHome()) return;
+                attackTimer -= Time.deltaTime;
+                if (attackTimer > 0f) return;
+                BeginPattern();
+                return;
             }
 
-            attackTimer -= Time.deltaTime;
-            if (attack == Attack.SlamWindup)
+            if (motion == Motion.Mark)
             {
-                float squash = Mathf.Lerp(1f, 0.58f, Mathf.Clamp01(1f - attackTimer / 0.8f));
-                transform.localScale = new Vector3(baseScale.x, baseScale.y * squash, baseScale.z);
+                attackTimer -= Time.deltaTime;
+                PoseMark();
+                if (IsSweep(pattern)) UpdateSweep(false);
+                else if (IsRanged(pattern)) UpdateAim();
+                else UpdateWarnings();
+                if (attackTimer > 0f) return;
+                if (IsSweep(pattern))
+                {
+                    motion = Motion.Sweep;
+                    sweepTime = 0f;
+                    hurtCooldown = 0f;
+                    GameAudio.Play(GameAudio.Id.EnemyShot, 0.45f);
+                    return;
+                }
+                if (IsRanged(pattern))
+                {
+                    motion = Motion.Shot;
+                    shotIndex = 0;
+                    hurtCooldown = 0f;
+                    BeginShot(0);
+                    return;
+                }
+                motion = Motion.Move;
+                waypointIndex = 0;
+                moveTimer = 2.6f;
+                arrived = false;
+                struckThisPattern = false;
+                GameAudio.Play(GameAudio.Id.Dash, 0.45f);
+                return;
             }
-            else
+
+            if (motion == Motion.Shot)
             {
-                float stretch = Mathf.Lerp(1f, 1.25f, Mathf.Clamp01(1f - attackTimer / 0.65f));
-                transform.localScale = new Vector3(baseScale.x * stretch, baseScale.y, baseScale.z);
+                UpdateShot();
+                return;
             }
+
+            if (motion == Motion.Sweep)
+            {
+                sweepTime += Time.deltaTime;
+                hurtCooldown -= Time.deltaTime;
+                PoseDash();
+                UpdateSweep(true);
+                if (sweepTime < sweepDuration) return;
+                FinishPattern();
+                return;
+            }
+
+            if (waypoints.Count == 0)
+            {
+                FinishPattern();
+                return;
+            }
+
+            moveTimer -= Time.deltaTime;
+            PoseDash();
             UpdateWarnings();
+            Face((int)Mathf.Sign(waypoints[waypointIndex].x - transform.position.x));
+            if (!arrived && moveTimer > 0f) return;
 
-            if (attackTimer > 0f) return;
-            if (attack == Attack.SlamWindup) Slam();
-            else Sweep();
-            attack = Attack.Idle;
+            if (waypointIndex == strikeAtWaypoint && !struckThisPattern)
+            {
+                struckThisPattern = true;
+                Strike();
+            }
+
+            if (waypointIndex < waypoints.Count - 1)
+            {
+                waypointIndex++;
+                moveTimer = 2.6f;
+                arrived = false;
+                return;
+            }
+
+            FinishPattern();
+        }
+
+        private void FinishPattern()
+        {
+            motion = Motion.Idle;
+            arrived = false;
             attackTimer = phase == 1 ? phaseOneAttackInterval : attackInterval;
             transform.localScale = baseScale;
             SetWarningsVisible(false);
+            patternCursor = (patternCursor + 1) % 4;
         }
 
-        private void Slam()
+        private void BeginPattern()
         {
-            if (player == null) return;
-            var playerCollider = player.GetComponent<Collider2D>();
-            float playerFootY = playerCollider != null ? playerCollider.bounds.min.y : player.position.y;
-            if (Mathf.Abs(player.position.x - slamTarget.x) > slamRadius
-                || playerFootY > slamTarget.y + 0.75f) return;
-            DamagePlayer(new Vector2(attackFacing, 1.1f));
+            pattern = phase == 1
+                ? (Pattern)(patternCursor % 4)
+                : patternCursor % 4 == 2 ? Pattern.Volley
+                : patternCursor % 4 == 3 ? Pattern.Ring
+                : (Pattern)(patternCursor % 4);
+            waypoints.Clear();
+            strikeAtWaypoint = -1;
+            struckThisPattern = false;
+            strikeCircle = false;
+            Vector2 playerCell = Snap(PlayerGroundPoint());
+            int toward = playerCell.x >= home.x ? 1 : -1;
+            if (toward == 0) toward = facing;
+
+            switch (pattern)
+            {
+                case Pattern.Charge:
+                    BuildCharge(playerCell);
+                    break;
+                case Pattern.SweepFloor:
+                    BuildFloorSweep(playerCell);
+                    break;
+                case Pattern.Ranged:
+                    shotCount = 1;
+                    AimShot(PlayerBodyCenter(), 0);
+                    break;
+                case Pattern.Volley:
+                    shotCount = 3;
+                    AimShot(PlayerBodyCenter(), 0);
+                    break;
+                case Pattern.Orbit:
+                    sweepDuration = 4.8f;
+                    sweepStart = 90f;
+                    beamLength = OuterReach();
+                    break;
+                default:
+                    sweepDuration = 5.8f;
+                    sweepStart = 0f;
+                    ringRadius = Mathf.Clamp(cell.x * 3.1f, cell.x * 2.2f, InnerReach() * 0.8f);
+                    beamLength = ringRadius;
+                    break;
+            }
+
+            attackFacing = toward;
+            Face(attackFacing);
+            motion = Motion.Mark;
+            attackTimer = MarkTime;
+            arrived = false;
         }
 
-        private void Sweep()
+        private void FlyToward(Vector2 target, float speed)
         {
-            float floorY = hitbox != null ? hitbox.bounds.min.y : transform.position.y;
-            Vector2 center = (Vector2)transform.position + new Vector2(attackFacing * sweepSize.x * 0.5f, floorY - transform.position.y + sweepSize.y * 0.5f);
-            var hits = Physics2D.OverlapBoxAll(center, sweepSize, 0f);
+            Vector2 next = Vector2.MoveTowards(body.position, target, speed * Time.fixedDeltaTime);
+            body.MovePosition(next);
+            arrived = Vector2.Distance(next, target) <= 0.08f;
+            if (Mathf.Abs(target.x - body.position.x) > 0.05f)
+                Face(target.x >= body.position.x ? 1 : -1);
+        }
+
+        private void Hold(Vector2 point)
+        {
+            body.MovePosition(point);
+            arrived = false;
+        }
+
+        private Vector2 HoverPoint()
+        {
+            float bob = Mathf.Sin(Time.time * 2.1f) * 0.07f;
+            return (Vector2)home + new Vector2(0f, bob);
+        }
+
+        private bool AtHome() => Vector2.Distance(body.position, home) <= 0.22f;
+
+        private static bool IsSweep(Pattern value) => value == Pattern.Orbit || value == Pattern.Ring;
+
+        private static bool IsRanged(Pattern value) => value == Pattern.Ranged || value == Pattern.Volley;
+
+        private void BuildCharge(Vector2 playerCell)
+        {
+            float reach = cell.x * (phase == 1 ? 4.2f : 3.4f);
+            var aim = new Vector2(playerCell.x, home.y);
+            Vector2 delta = aim - (Vector2)home;
+            if (delta.magnitude > reach) aim = (Vector2)home + delta.normalized * reach;
+            aim = new Vector2(ClampX(aim.x), home.y);
+            strikeCenter = ((Vector2)home + aim) * 0.5f;
+            strikeSize = new Vector2(Mathf.Max(1.2f, Mathf.Abs(aim.x - home.x) + 1.1f), 1.2f);
+            strikeAtWaypoint = 0;
+            waypoints.Add(aim);
+            waypoints.Add(home);
+        }
+
+        private void BuildFloorSweep(Vector2 playerCell)
+        {
+            float floor = arenaFloorY > float.NegativeInfinity ? arenaFloorY + 0.5f : home.y - cell.y;
+            floor = Mathf.Clamp(floor, home.y - cell.y * 3f, home.y + cell.y);
+            float half = cell.x * (phase == 1 ? 3.2f : 4.4f);
+            float left = ClampX(playerCell.x - half);
+            float right = ClampX(playerCell.x + half);
+            if (right < left) right = left;
+            strikeCenter = new Vector2((left + right) * 0.5f, floor);
+            strikeSize = new Vector2(Mathf.Max(cell.x, right - left), 0.95f);
+            strikeAtWaypoint = 1;
+            waypoints.Add(new Vector2(left, floor));
+            waypoints.Add(new Vector2(right, floor));
+            waypoints.Add(home);
+        }
+
+        private void AimShot(Vector2 target, int index)
+        {
+            Vector2 origin = home;
+            Vector2 aim = target - origin;
+            if (aim.sqrMagnitude < 0.01f) aim = new Vector2(facing, 0f);
+            float dist = Mathf.Clamp(aim.magnitude, cell.x * 3f, cell.x * 8f);
+            Vector2 dir = aim.normalized;
+            if (pattern == Pattern.Volley)
+                dir = AngleDir(Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg + (index - 1) * 16f);
+            shotFrom = origin;
+            shotTo = origin + dir * dist;
+        }
+
+        private void BeginShot(int index)
+        {
+            AimShot(PlayerBodyCenter(), index);
+            shotDuration = phase == 1 ? 0.42f : 0.55f;
+            sweepTime = 0f;
+            GameAudio.Play(GameAudio.Id.EnemyShot, 0.4f);
+        }
+
+        private void UpdateAim()
+        {
+            HideBeams();
+            if (circleWarning != null) circleWarning.enabled = false;
+            if (pattern == Pattern.Volley)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    AimShot(PlayerBodyCenter(), i);
+                    ShowBeam(i, shotFrom, Mathf.Atan2(shotTo.y - shotFrom.y, shotTo.x - shotFrom.x) * Mathf.Rad2Deg,
+                        Vector2.Distance(shotFrom, shotTo), 0.18f, false);
+                }
+                return;
+            }
+            AimShot(PlayerBodyCenter(), 0);
+            float angle = Mathf.Atan2(shotTo.y - shotFrom.y, shotTo.x - shotFrom.x) * Mathf.Rad2Deg;
+            ShowBeam(0, shotFrom, angle, Vector2.Distance(shotFrom, shotTo), 0.16f, false);
+        }
+
+        private void UpdateShot()
+        {
+            sweepTime += Time.deltaTime;
+            hurtCooldown -= Time.deltaTime;
+            float u = shotDuration <= 0.01f ? 1f : Mathf.Clamp01(sweepTime / shotDuration);
+            Vector2 pos = Vector2.Lerp(shotFrom, shotTo, u);
+            if (shotVisual != null)
+            {
+                shotVisual.enabled = true;
+                shotVisual.transform.position = pos;
+                shotVisual.transform.localScale = Vector3.one * 0.42f;
+                shotVisual.color = new Color(1f, 0.35f, 0.2f, 0.95f);
+            }
+            HideBeams();
+            if (hurtCooldown <= 0f && player != null && Vector2.Distance(pos, PlayerBodyCenter()) <= 0.5f)
+            {
+                hurtCooldown = 0.6f;
+                DamagePlayer((PlayerBodyCenter() - pos).normalized);
+            }
+            if (u < 1f) return;
+            shotIndex++;
+            if (shotIndex < shotCount)
+            {
+                BeginShot(shotIndex);
+                return;
+            }
+            if (shotVisual != null) shotVisual.enabled = false;
+            FinishPattern();
+        }
+
+        private void UpdateSweep(bool damaging)
+        {
+            if (boxWarning != null) boxWarning.enabled = false;
+            if (circleWarning != null) circleWarning.enabled = false;
+            HideBeams();
+
+            if (pattern == Pattern.Orbit)
+            {
+                float angle = sweepStart + 360f * Sweep01();
+                ShowBeam(0, home, angle, beamLength, 1.05f, damaging);
+                Face(Mathf.Cos(angle * Mathf.Deg2Rad) >= 0f ? 1 : -1);
+                return;
+            }
+
+            float gap = sweepStart + 360f * Sweep01();
+            for (int i = 0; i < 8; i++)
+            {
+                float angle = sweepStart + i * 45f;
+                if (Mathf.Abs(Mathf.DeltaAngle(angle, gap)) < 52f) continue;
+                ShowBeam(i, home, angle, beamLength, 0.82f, damaging);
+            }
+            Face(Mathf.Cos(gap * Mathf.Deg2Rad) >= 0f ? 1 : -1);
+        }
+
+        private float Sweep01() => sweepDuration <= 0.01f ? 1f : Mathf.Clamp01(sweepTime / sweepDuration);
+
+        private static Vector2 AngleDir(float degrees)
+        {
+            float rad = degrees * Mathf.Deg2Rad;
+            return new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
+        }
+
+        private void ShowBeam(int index, Vector2 origin, float angleDeg, float length, float thickness, bool damaging)
+        {
+            var warning = BeamView(index);
+            Vector2 dir = AngleDir(angleDeg);
+            Vector2 center = origin + dir * (length * 0.5f);
+            warning.enabled = true;
+            warning.transform.position = center;
+            warning.transform.rotation = Quaternion.Euler(0f, 0f, angleDeg);
+            warning.transform.localScale = new Vector3(Mathf.Max(0.2f, length), thickness, 1f);
+            warning.color = damaging
+                ? new Color(0.9f, 0.96f, 1f, 0.9f)
+                : new Color(1f, 0.86f, 0.25f, 0.42f);
+            if (damaging) HitBeam(center, new Vector2(length, thickness), angleDeg);
+        }
+
+        private void HitBeam(Vector2 center, Vector2 size, float angle)
+        {
+            if (hurtCooldown > 0f || player == null) return;
+            var hits = Physics2D.OverlapBoxAll(center, size, angle);
             for (int i = 0; i < hits.Length; i++)
             {
                 if (hits[i].GetComponentInParent<PlayerController>() == null) continue;
-                DamagePlayer(new Vector2(attackFacing, 0.65f));
+                hurtCooldown = 0.5f;
+                DamagePlayer((PlayerBodyCenter() - center).normalized);
+                return;
+            }
+        }
+
+        private float OuterReach()
+        {
+            float span = cell.x * 8f;
+            if (!hasArenaBounds) return span;
+            float right = float.IsPositiveInfinity(arenaMaxX) ? home.x + span : arenaMaxX;
+            return Mathf.Max(cell.x * 3f, Mathf.Max(home.x - arenaMinX, right - home.x));
+        }
+
+        private float InnerReach()
+        {
+            if (!hasArenaBounds) return cell.x * 5f;
+            float left = home.x - arenaMinX;
+            float right = float.IsPositiveInfinity(arenaMaxX) ? cell.x * 8f : arenaMaxX - home.x;
+            return Mathf.Max(cell.x * 2.2f, Mathf.Min(left, right) - 0.35f);
+        }
+
+        private SpriteRenderer BeamView(int index)
+        {
+            while (beams.Count <= index)
+                beams.Add(MakeWarning("BossBeam" + beams.Count, warningSquareSprite));
+            return beams[index];
+        }
+
+        private void HideBeams()
+        {
+            for (int i = 0; i < beams.Count; i++)
+                if (beams[i] != null) beams[i].enabled = false;
+        }
+
+        private void PoseMark()
+        {
+            float t = 1f - Mathf.Clamp01(attackTimer / MarkTime);
+            float squash = Mathf.Lerp(1f, 0.7f, t);
+            transform.localScale = new Vector3(baseScale.x, baseScale.y * squash, baseScale.z);
+        }
+
+        private void PoseDash()
+        {
+            transform.localScale = new Vector3(baseScale.x * 1.18f, baseScale.y * 0.86f, baseScale.z);
+        }
+
+        private void Strike()
+        {
+            transform.localScale = new Vector3(baseScale.x * 1.3f, baseScale.y * 0.62f, baseScale.z);
+            GameAudio.Play(GameAudio.Id.EnemySwing, 0.7f);
+            CombatFeel.Shake(0.12f, 0.1f);
+            CombatFeel.Burst(strikeCenter, new Color(1f, 0.45f, 0.15f), 8);
+            if (player == null) return;
+
+            if (strikeCircle)
+            {
+                if (Vector2.Distance(PlayerBodyCenter(), strikeCenter) > slamRadius) return;
+                DamagePlayer((PlayerBodyCenter() - (Vector2)transform.position).normalized);
+                return;
+            }
+
+            var hits = Physics2D.OverlapBoxAll(strikeCenter, strikeSize, 0f);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                if (hits[i].GetComponentInParent<PlayerController>() == null) continue;
+                DamagePlayer(new Vector2(attackFacing, 0.45f));
                 return;
             }
         }
@@ -216,6 +577,82 @@ namespace Gstarr.Combat
                 : (Vector2)player.position;
         }
 
+        private Vector2 PlayerBodyCenter()
+        {
+            var playerCollider = player != null ? player.GetComponent<Collider2D>() : null;
+            return playerCollider != null ? playerCollider.bounds.center : (Vector2)player.position;
+        }
+
+        private void CaptureHome()
+        {
+            if (homeCaptured) return;
+            homeCaptured = true;
+            var grid = GetComponentInParent<Grid>();
+            if (grid == null) grid = Object.FindAnyObjectByType<Grid>();
+            cell = grid != null ? (Vector2)grid.cellSize : Vector2.one;
+            if (cell.x < 0.01f) cell.x = 1f;
+            if (cell.y < 0.01f) cell.y = 1f;
+            home = transform.position;
+        }
+
+        private Vector2 GridPoint(int stepX, int stepY) =>
+            ClampPoint(new Vector2(home.x + stepX * cell.x, home.y + stepY * cell.y));
+
+        private Vector2 Snap(Vector2 world)
+        {
+            float x = home.x + Mathf.Round((world.x - home.x) / cell.x) * cell.x;
+            float y = home.y + Mathf.Round((world.y - home.y) / cell.y) * cell.y;
+            return ClampPoint(new Vector2(x, y));
+        }
+
+        private Vector2 ClampPoint(Vector2 point)
+        {
+            point.x = ClampX(point.x);
+            float minY = home.y - cell.y * 2f;
+            if (arenaFloorY > float.NegativeInfinity)
+                minY = Mathf.Max(minY, arenaFloorY + 0.6f);
+            point.y = Mathf.Clamp(point.y, minY, home.y + cell.y * 8f);
+            return point;
+        }
+
+        private float BodyPad()
+        {
+            float pad = hitbox != null ? hitbox.bounds.extents.x : 0.9f;
+            return Mathf.Max(0.9f, pad);
+        }
+
+        private float ClampX(float x)
+        {
+            if (!hasArenaBounds) return x;
+            float pad = BodyPad();
+            float minX = arenaMinX + pad;
+            float maxX = float.IsPositiveInfinity(arenaMaxX) ? arenaMaxX : arenaMaxX - pad;
+            if (maxX < minX) return (arenaMinX + arenaMaxX) * 0.5f;
+            return Mathf.Clamp(x, minX, maxX);
+        }
+
+        private void ClampToArena()
+        {
+            if (!hasArenaBounds || body == null) return;
+            float clampedX = ClampX(body.position.x);
+            float minY = home.y - cell.y * 2f;
+            if (arenaFloorY > float.NegativeInfinity)
+                minY = Mathf.Max(minY, arenaFloorY + 0.6f);
+            float clampedY = Mathf.Clamp(body.position.y, minY, home.y + cell.y * 8f);
+            if (Mathf.Abs(clampedX - body.position.x) < 0.001f && Mathf.Abs(clampedY - body.position.y) < 0.001f)
+                return;
+            body.position = new Vector2(clampedX, clampedY);
+            if (motion == Motion.Move) arrived = true;
+        }
+
+        private void KeepHovering()
+        {
+            if (body == null) return;
+            body.bodyType = RigidbodyType2D.Kinematic;
+            body.gravityScale = 0f;
+            body.linearVelocity = Vector2.zero;
+        }
+
         private void CreateWarnings()
         {
             if (warningCircleSprite == null) warningCircleSprite = MakeWarningCircle();
@@ -225,8 +662,9 @@ namespace Gstarr.Combat
                 warningSquareSprite = Sprite.Create(white, new Rect(0f, 0f, white.width, white.height), new Vector2(0.5f, 0.5f), white.width);
             }
 
-            slamWarning = MakeWarning("BossSlamWarning", warningCircleSprite);
-            sweepWarning = MakeWarning("BossSweepWarning", warningSquareSprite);
+            circleWarning = MakeWarning("BossCircleWarning", warningCircleSprite);
+            boxWarning = MakeWarning("BossBoxWarning", warningSquareSprite);
+            shotVisual = MakeWarning("BossShot", warningCircleSprite);
         }
 
         private SpriteRenderer MakeWarning(string warningName, Sprite warningSprite)
@@ -264,66 +702,50 @@ namespace Gstarr.Combat
 
         private void UpdateWarnings()
         {
-            if (attack == Attack.SlamWindup && slamWarning != null)
+            float danger = motion == Motion.Move ? 1f : 1f - Mathf.Clamp01(attackTimer / MarkTime);
+            if (strikeCircle && circleWarning != null)
             {
-                slamWarning.enabled = true;
-                slamWarning.transform.position = new Vector3(slamTarget.x, slamTarget.y + 0.02f, transform.position.z);
-                slamWarning.transform.localScale = Vector3.one * slamRadius * 2f;
-                float danger = 1f - Mathf.Clamp01(attackTimer / 0.8f);
-                slamWarning.color = Color.Lerp(new Color(1f, 0.8f, 0.15f, 0.45f), new Color(1f, 0.15f, 0.08f, 0.85f), danger);
+                circleWarning.enabled = true;
+                if (boxWarning != null) boxWarning.enabled = false;
+                circleWarning.transform.position = new Vector3(strikeCenter.x, strikeCenter.y + 0.02f, transform.position.z);
+                circleWarning.transform.localScale = Vector3.one * slamRadius * 2f;
+                circleWarning.color = Color.Lerp(new Color(1f, 0.8f, 0.15f, 0.45f), new Color(1f, 0.15f, 0.08f, 0.85f), danger);
+                return;
             }
-            else if (attack == Attack.SweepWindup && sweepWarning != null)
+
+            if (boxWarning != null)
             {
-                float floorY = hitbox != null ? hitbox.bounds.min.y : transform.position.y;
-                sweepWarning.enabled = true;
-                sweepWarning.transform.position = (Vector2)transform.position + new Vector2(attackFacing * sweepSize.x * 0.5f, floorY + sweepSize.y * 0.5f);
-                sweepWarning.transform.localScale = new Vector3(sweepSize.x, sweepSize.y, 1f);
-                float danger = 1f - Mathf.Clamp01(attackTimer / 0.65f);
-                sweepWarning.color = Color.Lerp(new Color(1f, 0.8f, 0.15f, 0.28f), new Color(1f, 0.12f, 0.08f, 0.72f), danger);
-            }
-            else
-            {
-                SetWarningsVisible(false);
+                boxWarning.enabled = true;
+                if (circleWarning != null) circleWarning.enabled = false;
+                boxWarning.transform.position = strikeCenter;
+                boxWarning.transform.localScale = new Vector3(strikeSize.x, strikeSize.y, 1f);
+                boxWarning.color = Color.Lerp(new Color(1f, 0.8f, 0.15f, 0.28f), new Color(1f, 0.12f, 0.08f, 0.72f), danger);
             }
         }
 
         private void SetWarningsVisible(bool visible)
         {
-            if (slamWarning != null) slamWarning.enabled = visible && attack == Attack.SlamWindup;
-            if (sweepWarning != null) sweepWarning.enabled = visible && attack == Attack.SweepWindup;
+            if (visible) return;
+            if (circleWarning != null) circleWarning.enabled = false;
+            if (boxWarning != null) boxWarning.enabled = false;
+            if (shotVisual != null) shotVisual.enabled = false;
+            HideBeams();
         }
 
         private void OnDestroy()
         {
-            if (slamWarning != null) Destroy(slamWarning.gameObject);
-            if (sweepWarning != null) Destroy(sweepWarning.gameObject);
+            if (circleWarning != null) Destroy(circleWarning.gameObject);
+            if (boxWarning != null) Destroy(boxWarning.gameObject);
+            if (shotVisual != null) Destroy(shotVisual.gameObject);
+            for (int i = 0; i < beams.Count; i++)
+                if (beams[i] != null) Destroy(beams[i].gameObject);
         }
 
         private void DamagePlayer(Vector2 direction)
         {
             if (player == null) return;
+            if (direction.sqrMagnitude < 0.001f) direction = new Vector2(attackFacing, 0.4f);
             player.GetComponent<Health>()?.TakeDamage(2, direction);
-        }
-
-        private void SummonMinion()
-        {
-            var enemies = FindObjectsByType<EnemyActor>(FindObjectsSortMode.None);
-            int count = 0;
-            for (int i = 0; i < enemies.Length; i++)
-                if (enemies[i] != null && !enemies[i].IsBoss && !enemies[i].IsDead) count++;
-            if (count >= maxMinions) return;
-
-            EnemyKind[] kinds = { EnemyKind.BeatChaser, EnemyKind.RangedBeat, EnemyKind.RangedHalfBeat };
-            EnemyKind kind = kinds[summonIndex++ % kinds.Length];
-            int side = summonIndex % 2 == 0 ? -1 : 1;
-            Vector2 probe = (Vector2)transform.position + new Vector2(side * 2.2f, 1f);
-            int groundMask = LayerMask.GetMask("Ground");
-            if (groundMask == 0) groundMask = Physics2D.DefaultRaycastLayers;
-            RaycastHit2D floor = Physics2D.Raycast(probe, Vector2.down, 3.5f, groundMask);
-            Vector3 spawnAt = floor.collider != null
-                ? new Vector3(probe.x, floor.point.y, transform.position.z)
-                : transform.position + new Vector3(side * 2.2f, 0f, 0f);
-            EnemyActor.Spawn(null, spawnAt, kind, 12);
         }
 
         private void FindPlayer()
@@ -336,7 +758,13 @@ namespace Gstarr.Combat
         private void FacePlayer()
         {
             if (player == null) return;
-            facing = player.position.x >= transform.position.x ? 1 : -1;
+            Face(player.position.x >= transform.position.x ? 1 : -1);
+        }
+
+        private void Face(int direction)
+        {
+            if (direction == 0) return;
+            facing = direction;
             var scale = transform.localScale;
             scale.x = Mathf.Abs(scale.x) * facing;
             transform.localScale = scale;
@@ -347,14 +775,15 @@ namespace Gstarr.Combat
         {
             if (phase != 1) return false;
             phase = 2;
-            attack = Attack.Idle;
-            nextSlam = true;
-            attackTimer = 0.8f;
+            patternCursor = 0;
+            motion = Motion.Idle;
+            arrived = false;
+            attackTimer = 0.9f;
             SetWarningsVisible(false);
             transform.localScale = baseScale;
             health.Heal(health.Max);
+            StageHUD.ShowHint("2페이즈. 돌진은 더 짧고, 탄이 세 발로 퍼집니다.", 4.5f);
             return true;
         }
-
     }
 }
