@@ -99,10 +99,10 @@ namespace Gstarr.Combat
             return Art;
         }
 
-        public static EnemyActor Spawn(Sprite spriteSource, Vector3 position, int maxHealth = 16) =>
+        public static EnemyActor Spawn(Sprite spriteSource, Vector3 position, int maxHealth = 0) =>
             Spawn(spriteSource, position, EnemyKind.BeatChaser, maxHealth);
 
-        public static EnemyActor Spawn(Sprite spriteSource, Vector3 position, EnemyKind kind, int maxHealth = 16)
+        public static EnemyActor Spawn(Sprite spriteSource, Vector3 position, EnemyKind kind, int maxHealth = 0)
         {
             if (spriteSource == null) spriteSource = ArtFor(kind);
             var go = new GameObject($"Enemy_{kind}");
@@ -127,7 +127,7 @@ namespace Gstarr.Combat
             else box.size = new Vector2(0.8f, 1.4f);
 
             var hp = go.AddComponent<Health>();
-            hp.Configure(maxHealth, true);
+            hp.Configure(maxHealth > 0 ? maxHealth : DefaultHealth(kind), true);
             var enemy = go.AddComponent<EnemyActor>();
             enemy.SetKind(kind);
             if (kind == EnemyKind.Boss)
@@ -138,8 +138,19 @@ namespace Gstarr.Combat
             return enemy;
         }
 
-        public static EnemyActor SpawnBoss(Vector3 position, int maxHealth = 100) =>
+        public static EnemyActor SpawnBoss(Vector3 position, int maxHealth = 0) =>
             Spawn(null, position, EnemyKind.Boss, maxHealth);
+
+        private static int DefaultHealth(EnemyKind kind) => kind switch
+        {
+            EnemyKind.BeatChaser => 8,
+            EnemyKind.RangedBeat => 6,
+            EnemyKind.RangedHalfBeat => 6,
+            EnemyKind.Flyer => 6,
+            EnemyKind.Mole => 7,
+            EnemyKind.Boss => 60,
+            _ => 8
+        };
 
         public static EnemyActor NearestStaggered(Vector3 from, float range)
         {
@@ -226,6 +237,15 @@ namespace Gstarr.Combat
         {
             kind = value;
             ApplyKind();
+            moveSpeed = kind switch
+            {
+                EnemyKind.BeatChaser => 5.4f,
+                EnemyKind.RangedBeat => 4.6f,
+                EnemyKind.RangedHalfBeat => 4.9f,
+                EnemyKind.Flyer => 6.4f,
+                EnemyKind.Mole => 4.8f,
+                _ => moveSpeed
+            };
         }
 
         private void ApplyKind()
@@ -560,7 +580,7 @@ namespace Gstarr.Combat
         private float BeatStepDuration()
         {
             float interval = conductor != null ? conductor.CountdownInterval : 0.5f;
-            return Mathf.Clamp(interval * 0.42f, 0.12f, 0.35f);
+            return Mathf.Clamp(interval * 0.56f, 0.14f, 0.4f);
         }
 
         private void MoveGroundEnemy()

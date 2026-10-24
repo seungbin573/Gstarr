@@ -59,7 +59,7 @@ namespace Gstarr.Combat
         private float beamLength = 8f;
         private float ringRadius = 4f;
         private float hurtCooldown;
-        private const float EntranceHold = 3.2f;
+        private const float EntranceHold = 2.2f;
 
         private float arenaMinX;
         private float arenaMaxX;
@@ -73,8 +73,8 @@ namespace Gstarr.Combat
         public int Phase => phase;
         public bool RequiresPhaseGlory => phase == 1;
 
-        private float MoveSpeed => phase == 1 ? 18f : 13f;
-        private float ReturnSpeed => phase == 1 ? 14f : 10f;
+        private float MoveSpeed => phase == 1 ? 23f : 17f;
+        private float ReturnSpeed => phase == 1 ? 18f : 13f;
         private float MarkTime => phase == 1 ? 0.28f : 0.38f;
 
         private void Awake()
@@ -203,7 +203,7 @@ namespace Gstarr.Combat
                 }
                 motion = Motion.Move;
                 waypointIndex = 0;
-                moveTimer = 2.6f;
+                moveTimer = 2.2f;
                 arrived = false;
                 struckThisPattern = false;
                 GameAudio.Play(GameAudio.Id.Dash, 0.45f);
@@ -248,7 +248,7 @@ namespace Gstarr.Combat
             if (waypointIndex < waypoints.Count - 1)
             {
                 waypointIndex++;
-                moveTimer = 2.6f;
+                moveTimer = 2.2f;
                 arrived = false;
                 return;
             }
