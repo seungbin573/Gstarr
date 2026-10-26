@@ -51,6 +51,9 @@ namespace Gstarr.Rhythm
         public int Combo { get; private set; }
         public int MaxCombo { get; private set; }
         public long Score { get; private set; }
+        public static BeatJudgement CurrentJudgement { get; private set; } = BeatJudgement.Perfect;
+
+        public static void NoteJudgement(BeatJudgement judgement) => CurrentJudgement = judgement;
         public float Gauge { get; private set; }
         public StyleRank Rank { get; private set; } = StyleRank.None;
         public float MaxGauge => gaugePerRank * (RankCount + 1);
@@ -81,10 +84,12 @@ namespace Gstarr.Rhythm
         }
 
         /// <summary>적이 플레이어 공격/아이템에 맞았을 때만 호출. 점프/대시/키 입력은 콤보에 넣지 않는다.</summary>
-        public static void RegisterHit(GameObject victim)
+        public static void RegisterHit(GameObject victim) => RegisterHit(victim, CurrentJudgement);
+
+        public static void RegisterHit(GameObject victim, BeatJudgement judgement)
         {
             if (Instance == null || victim == null || victim.CompareTag("Player")) return;
-            Instance.OnEnemyHit();
+            Instance.OnEnemyHit(judgement);
         }
 
         public void AddBonus(int points)
@@ -113,17 +118,33 @@ namespace Gstarr.Rhythm
             }
         }
 
-        private void OnEnemyHit()
+        private void OnEnemyHit(BeatJudgement judgement)
         {
+            sinceLastHit = 0f;
+            if (judgement == BeatJudgement.Miss)
+            {
+                if (Combo != 0)
+                {
+                    Combo = 0;
+                    ComboChanged?.Invoke(Combo);
+                }
+                SetGauge(Mathf.Max(0f, Gauge - gaugePerRank * 0.35f));
+                int missPoints = Mathf.RoundToInt(hitScore * 0.25f);
+                Score += missPoints;
+                ScoreAdded?.Invoke(missPoints, Score);
+                return;
+            }
+
             Combo++;
             MaxCombo = Mathf.Max(MaxCombo, Combo);
-            sinceLastHit = 0f;
             ComboChanged?.Invoke(Combo);
 
             int rankIndex = Mathf.Max(0, (int)Rank + 1);
-            SetGauge(Gauge + hitGain / (1f + rankIndex * gainFalloffPerRank));
+            float scoreScale = judgement == BeatJudgement.Perfect ? 1.6f : 1f;
+            float gaugeScale = judgement == BeatJudgement.Perfect ? 1f : 0.5f;
+            SetGauge(Gauge + hitGain * gaugeScale / (1f + rankIndex * gainFalloffPerRank));
 
-            int points = Mathf.RoundToInt(hitScore * ComboMultiplier * RankMultiplier);
+            int points = Mathf.RoundToInt(hitScore * ComboMultiplier * RankMultiplier * scoreScale);
             Score += points;
             ScoreAdded?.Invoke(points, Score);
         }

@@ -139,8 +139,8 @@ namespace Gstarr.Combat
             // 입력 설정이 실패해도 체력은 남긴다.
             var health = GetComponent<Health>();
             if (health == null) health = gameObject.AddComponent<Health>();
-            health.Configure(5, false);
-            health.InvulnOnHit = 3f;
+            health.Configure(7, false);
+            health.InvulnOnHit = 1f;
             if (GetComponent<PlayerHealthView>() == null) gameObject.AddComponent<PlayerHealthView>();
             if (GetComponent<PlayerInventory>() == null) gameObject.AddComponent<PlayerInventory>();
             if (GetComponent<EquipmentSelectorView>() == null) gameObject.AddComponent<EquipmentSelectorView>();
@@ -407,10 +407,11 @@ namespace Gstarr.Combat
             Vector2 aim = AimVector(facing, range);
 
             GetComponent<SpriteMotion>()?.AttackPose();
+            ComboSystem.NoteJudgement(judgement);
             if (w.type == WeaponType.Melee)
-                DoMelee(w, aim, damage);
+                DoMelee(w, aim, damage, judgement);
             else
-                Fire(w, facing, aim, damage);
+                Fire(w, facing, aim, damage, judgement);
         }
 
         private void UpdateAim(float dt)
@@ -442,7 +443,7 @@ namespace Gstarr.Combat
             return delta.normalized;
         }
 
-        private void DoMelee(Weapon w, Vector2 aim, int damage)
+        private void DoMelee(Weapon w, Vector2 aim, int damage, BeatJudgement judgement)
         {
             GameAudio.Play(GameAudio.Id.Melee);
             Vector2 center = (Vector2)transform.position + aim * w.meleeReach;
@@ -452,7 +453,7 @@ namespace Gstarr.Combat
             {
                 if (hit.transform == transform || hit.transform.IsChildOf(transform)) continue;
                 if (hit.TryGetComponent(out IDamageable target) && target.TakeDamage(damage, aim))
-                    ComboSystem.RegisterHit(hit.gameObject);
+                    ComboSystem.RegisterHit(hit.gameObject, judgement);
             }
 
             swingTimer = SwingDuration;
@@ -473,7 +474,7 @@ namespace Gstarr.Combat
             ? w.meleeReach + w.meleeSize.x * 0.5f + 0.35f
             : w.range;
 
-        private void Fire(Weapon w, int facing, Vector2 aim, int damage)
+        private void Fire(Weapon w, int facing, Vector2 aim, int damage, BeatJudgement judgement)
         {
             float baseAngle = Mathf.Atan2(aim.y, aim.x) * Mathf.Rad2Deg;
             float rad = baseAngle * Mathf.Deg2Rad;
@@ -489,7 +490,7 @@ namespace Gstarr.Combat
                 float speed = w.projectileSpeed * (w.pellets > 1 ? UnityEngine.Random.Range(0.9f, 1.1f) : 1f);
                 Vector2 dir = new Vector2(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad));
 
-                SpawnProjectile(w, origin).Launch(dir * speed, damage, w.range, hitMask, gameObject);
+                SpawnProjectile(w, origin).Launch(dir * speed, damage, w.range, hitMask, gameObject, judgement);
             }
 
             recoilKick = RecoilKickDistance;

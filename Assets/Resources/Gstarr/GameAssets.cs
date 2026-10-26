@@ -27,7 +27,7 @@ namespace Gstarr.Items
         [Tooltip("키 설정이 적용되는 공용 입력 에셋")]
         public UnityEngine.InputSystem.InputActionAsset inputActions;
         [Tooltip("스테이지에 씬이 지정되지 않았을 때 쓸 기본 스테이지 씬")]
-        public string defaultStageScene = "Level_01";
+        public string defaultStageScene = "Stage_1";
         public string mainMenuScene = "MainMenu";
         [Tooltip("적 스프라이트 (Assets/arts/character/enemy1.png)")]
         public Sprite enemySprite;

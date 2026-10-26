@@ -107,7 +107,10 @@ namespace Gstarr.Combat
                 onDeath?.Invoke();
                 CombatFeel.Burst(transform.position, playerHit ? new Color(1f, 0.35f, 0.3f) : new Color(1f, 0.75f, 0.3f), 10);
                 GetComponent<SpriteMotion>()?.PlayDeath();
-                if (enemy != null && enemy.IsBoss) StageHUD.ShowGameClear();
+                if (enemy != null)
+                {
+                    if (EnemyActor.CountAlive() == 0) StageHUD.ShowGameClear();
+                }
                 else if (playerHit) StageHUD.ShowGameOver();
                 if (destroyOnDeath)
                 {

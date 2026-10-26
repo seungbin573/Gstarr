@@ -42,14 +42,14 @@ namespace Gstarr.Rhythm
         [SerializeField] private float countdownLead = 0.5f;
 
         private float startDelay = 1f;
-        [Tooltip("끄면 음악이 끝날 때 Finished 이벤트 (게임 오버)")]
-        [SerializeField] private bool loop = false;
+        [Tooltip("스테이지를 도는 동안 곡을 반복한다. 곡 끝은 패배가 아니다.")]
+        [SerializeField] private bool loop = true;
 
         [Header("판정")]
         [Tooltip("입력/출력 지연 보정 (ms). 판정이 늦게 느껴지면 +, 빠르게 느껴지면 -")]
         [SerializeField] private float inputOffsetMs = 0f;
-        [SerializeField] private float perfectWindow = 0.05f;
-        [SerializeField] private float goodWindow = 0.12f;
+        [SerializeField] private float perfectWindow = 0.07f;
+        [SerializeField] private float goodWindow = 0.16f;
 
         /// <summary>박자를 지날 때 (절대 박자 번호)</summary>
         public event Action<long> Beat;
@@ -62,7 +62,16 @@ namespace Gstarr.Rhythm
 
         public bool IsFinished { get; private set; }
         /// <summary>곡 진행도 0~1</summary>
-        public float Progress => loopLength > 0 ? Mathf.Clamp01((float)(SongTime / loopLength)) : 0f;
+        public bool Loops => loop;
+        public float Progress
+        {
+            get
+            {
+                if (loopLength <= 0 || SongTime < 0) return 0f;
+                float ratio = (float)(SongTime / loopLength);
+                return loop ? Mathf.Repeat(ratio, 1f) : Mathf.Clamp01(ratio);
+            }
+        }
         public double Length => loopLength;
         public AudioClip Music => music;
         public int CountdownBeats => countdownBeats;

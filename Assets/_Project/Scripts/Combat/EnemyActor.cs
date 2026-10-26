@@ -27,7 +27,7 @@ namespace Gstarr.Combat
         [SerializeField] private float attackRange = 1.35f;
         [SerializeField] private float detectionRange = 8f;
         [SerializeField] private int attackDamage = 1;
-        [SerializeField] private float staggerSeconds = 4f;
+        [SerializeField] private float staggerSeconds = 5f;
         [SerializeField] private Color bodyColor = new Color(0.85f, 0.22f, 0.25f);
         [SerializeField] private Color staggerColor = new Color(1f, 0.82f, 0.15f);
         [SerializeField] private Color stunnedColor = new Color(0.5f, 0.9f, 1f);
@@ -72,7 +72,7 @@ namespace Gstarr.Combat
         public bool AbsorbsDamage => state == State.Stagger || state == State.Glory;
         public bool IsBoss => kind == EnemyKind.Boss;
         public bool IsDead => state == State.Dead || health == null || health.Current <= 0;
-        public int GloryFloor => Mathf.Max(1, Mathf.CeilToInt(health.Max * 0.2f));
+        public int GloryFloor => Mathf.Max(1, Mathf.CeilToInt(health.Max * 0.3f));
 
         public static Sprite Art
         {
@@ -143,12 +143,12 @@ namespace Gstarr.Combat
 
         private static int DefaultHealth(EnemyKind kind) => kind switch
         {
-            EnemyKind.BeatChaser => 8,
+            EnemyKind.BeatChaser => 6,
             EnemyKind.RangedBeat => 6,
             EnemyKind.RangedHalfBeat => 6,
-            EnemyKind.Flyer => 6,
+            EnemyKind.Flyer => 5,
             EnemyKind.Mole => 7,
-            EnemyKind.Boss => 60,
+            EnemyKind.Boss => 28,
             _ => 8
         };
 
@@ -239,11 +239,11 @@ namespace Gstarr.Combat
             ApplyKind();
             moveSpeed = kind switch
             {
-                EnemyKind.BeatChaser => 5.4f,
-                EnemyKind.RangedBeat => 4.6f,
-                EnemyKind.RangedHalfBeat => 4.9f,
-                EnemyKind.Flyer => 6.4f,
-                EnemyKind.Mole => 4.8f,
+                EnemyKind.BeatChaser => 4.2f,
+                EnemyKind.RangedBeat => 3.6f,
+                EnemyKind.RangedHalfBeat => 3.8f,
+                EnemyKind.Flyer => 4.8f,
+                EnemyKind.Mole => 3.6f,
                 _ => moveSpeed
             };
         }
@@ -339,9 +339,16 @@ namespace Gstarr.Combat
             beatBound = false;
         }
 
+        public static int CountAlive()
+        {
+            int count = 0;
+            for (int i = 0; i < All.Count; i++)
+                if (All[i] != null && !All[i].IsDead) count++;
+            return count;
+        }
+
         public bool CatchGlory(ref int nextHealth)
         {
-            // Flashbang-stunned enemies must still be eligible for a glory kill.
             if ((state != State.Combat && state != State.Stunned) || health == null) return false;
             int floor = GloryFloor;
             var boss = GetComponent<BossActor>();
@@ -393,11 +400,11 @@ namespace Gstarr.Combat
 
         public void CancelGlory()
         {
-            var boss = GetComponent<BossActor>();
-            staggerSpent = boss == null;
-            state = State.Combat;
+            state = State.Stagger;
+            staggerTimer = Mathf.Max(staggerSeconds, 5f);
             transform.rotation = Quaternion.identity;
-            if (sprite != null) sprite.color = idleColor;
+            if (sprite != null) sprite.color = staggerColor;
+            HoldInPlace();
         }
 
         public void FinishGlory()
@@ -447,7 +454,12 @@ namespace Gstarr.Combat
             {
                 staggerTimer -= Time.deltaTime;
                 HoldInPlace();
-                if (staggerTimer <= 0f) CancelGlory();
+                if (staggerTimer <= 0f)
+                {
+                    state = State.Combat;
+                    transform.rotation = Quaternion.identity;
+                    if (sprite != null) sprite.color = idleColor;
+                }
             }
             else if (state == State.Glory)
             {
@@ -530,7 +542,7 @@ namespace Gstarr.Combat
                 beatMoveTimer = BeatStepDuration();
             }
 
-            // 짝수 박은 예고, 홀수 박에만 공격. 보고 나서 한 박 뒤에 친다.
+            // 짝수 박은 예고, 홀수 박에 공격. 보고 나서 한 박 뒤에 친다.
             bool attackTurn = (beat & 1) == 1;
             if (!attackTurn)
             {

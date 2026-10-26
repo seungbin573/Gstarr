@@ -272,6 +272,7 @@ namespace Gstarr.World
                 cleared = true;
                 left.Unlock();
                 right?.Unlock();
+                StageHUD.AnnounceRoomClear();
             }
         }
 
@@ -304,6 +305,7 @@ namespace Gstarr.World
             locked = true;
             left.Lock();
             right?.Lock();
+            StageHUD.HideAdvance();
             for (int i = 0; i < occupants.Count; i++)
             {
                 var boss = occupants[i] != null ? occupants[i].GetComponent<BossActor>() : null;

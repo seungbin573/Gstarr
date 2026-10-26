@@ -131,6 +131,16 @@ namespace Gstarr.EditorTools
                     EditorUtility.SetDirty(stage);
                 }
             }
+            var liveFolders = new HashSet<string>();
+            foreach (var folder in AssetDatabase.GetSubFolders(MusicRoot))
+                liveFolders.Add(Path.GetFileName(folder));
+            foreach (var guid in AssetDatabase.FindAssets("t:StageData", new[] { StagesFolder }))
+            {
+                string assetPath = AssetDatabase.GUIDToAssetPath(guid);
+                if (!liveFolders.Contains(Path.GetFileNameWithoutExtension(assetPath)))
+                    AssetDatabase.DeleteAsset(assetPath);
+            }
+
             AssetDatabase.SaveAssets();
         }
 

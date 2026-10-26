@@ -42,6 +42,11 @@ namespace Gstarr.Game
             MusicVolume = PlayerPrefs.GetFloat(KeyMusic, 1f);
             SfxVolume = PlayerPrefs.GetFloat(KeySfx, 1f);
             AudioOffsetMs = Mathf.Clamp(PlayerPrefs.GetInt(KeyAudioOffset, 0), MinAudioOffsetMs, MaxAudioOffsetMs);
+            if (PlayerPrefs.GetInt("gstarr.balance.v2", 0) == 0)
+            {
+                PlayerPrefs.SetInt(KeyRhythmAssist, 0);
+                PlayerPrefs.SetInt("gstarr.balance.v2", 1);
+            }
             RhythmAssist = PlayerPrefs.GetInt(KeyRhythmAssist, 0) == 1;
             ArcadeMode = PlayerPrefs.GetInt(KeyArcadeMode, 0) == 1;
             AudioListener.volume = MasterVolume;

@@ -51,7 +51,7 @@ namespace Gstarr.Game
             {
                 if (!string.IsNullOrEmpty(sceneName)) return sceneName;
                 var assets = GameAssets.Instance;
-                return assets != null ? assets.defaultStageScene : "Level_01";
+                return assets != null ? assets.defaultStageScene : "Stage_1";
             }
         }
 

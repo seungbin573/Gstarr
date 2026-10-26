@@ -9,7 +9,7 @@ using UnityEngine.UI;
 namespace Gstarr.Game
 {
     /// <summary>
-    /// 화면 위 음악 진행도 바, 그리고 음악이 끝나면 게임 오버 화면 (점수 / 최대 콤보 / 재시작 / 메인 메뉴).
+    /// 화면 위 음악 진행도 바. 방을 비우면 GO GO, 스테이지를 비우거나 죽으면 결과.
     /// </summary>
     [RequireComponent(typeof(RhythmConductor))]
     public class StageHUD : MonoBehaviour
@@ -56,6 +56,9 @@ namespace Gstarr.Game
         private Sprite clearCutscene;
         private Sprite gameOverCutscene;
         private bool cutsceneActive;
+        private Text marchText;
+        private bool showMarch;
+        private bool routeHintShown;
 
         private void Awake()
         {
@@ -85,6 +88,11 @@ namespace Gstarr.Game
             countdownText = UIFactory.CreateText("Countdown", root, "", 220, style: FontStyle.BoldAndItalic);
             UIFactory.Place(countdownText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 60f), new Vector2(900f, 300f));
             countdownText.GetComponent<Outline>().effectDistance = new Vector2(5f, -5f);
+
+            marchText = UIFactory.CreateText("MarchCall", root, "", 110, TextAnchor.MiddleRight, FontStyle.BoldAndItalic);
+            UIFactory.Place(marchText.rectTransform, new Vector2(1f, 0.5f), new Vector2(-70f, 10f), new Vector2(860f, 200f));
+            marchText.color = new Color(1f, 0.55f, 0.12f, 0f);
+            marchText.GetComponent<Outline>().effectDistance = new Vector2(4f, -4f);
 
             hintBackdrop = UIFactory.CreateImage("GameplayHintBg", root, new Color(0f, 0f, 0f, 0f));
             UIFactory.Place(hintBackdrop.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 130f), new Vector2(1240f, 110f));
@@ -131,9 +139,6 @@ namespace Gstarr.Game
             c.a = label == "GO!" ? Mathf.Clamp01((float)(0.6 - t) / 0.25f) : 1f;
             countdownText.color = c;
         }
-
-        private void OnEnable() => conductor.Finished += OnFinished;
-        private void OnDisable() => conductor.Finished -= OnFinished;
 
         private void Start()
         {
@@ -294,7 +299,36 @@ namespace Gstarr.Game
             initialsPanel.gameObject.SetActive(false);
         }
 
-        private void OnFinished() => ShowResult(false);
+        public static bool HasResult
+        {
+            get
+            {
+                var hud = FindAnyObjectByType<StageHUD>();
+                return hud != null && hud.resultShown;
+            }
+        }
+
+        public static void AnnounceRoomClear()
+        {
+            if (HasResult) return;
+            if (Gstarr.Combat.EnemyActor.CountAlive() > 0) ShowAdvance();
+            else ShowGameClear();
+        }
+
+        public static void ShowAdvance()
+        {
+            var hud = FindAnyObjectByType<StageHUD>();
+            if (hud == null || hud.resultShown) return;
+            hud.showMarch = true;
+            var camera = FindAnyObjectByType<Gstarr.CameraSystem.CameraFollow2D>();
+            if (camera != null) camera.PushForward(1.4f);
+        }
+
+        public static void HideAdvance()
+        {
+            var hud = FindAnyObjectByType<StageHUD>();
+            if (hud != null) hud.showMarch = false;
+        }
 
         public static void ShowGameClear()
         {
@@ -346,6 +380,7 @@ namespace Gstarr.Game
             GamePause.SetPaused(true);
             var playerBody = playerController != null ? playerController.GetComponent<Rigidbody2D>() : null;
             if (playerBody != null) playerBody.linearVelocity = Vector2.zero;
+            showMarch = false;
             StartCoroutine(PlayEndingCutscene(cleared));
         }
 
@@ -357,6 +392,8 @@ namespace Gstarr.Game
             if (countdownText != null) countdownText.gameObject.SetActive(false);
             if (hintText != null) hintText.gameObject.SetActive(false);
             if (hintBackdrop != null) hintBackdrop.gameObject.SetActive(false);
+            showMarch = false;
+            if (marchText != null) marchText.text = "";
         }
 
         private IEnumerator PlayEndingCutscene(bool cleared)
@@ -398,6 +435,25 @@ namespace Gstarr.Game
                 return;
             }
 
+            if (!routeHintShown && conductor.IsReady && conductor.SongTime >= 0.7)
+            {
+                routeHintShown = true;
+                ShowHint("방을 비우면 GO GO. 오른쪽으로 가세요. 공격은 박자에 맞추세요.", 4.5f);
+            }
+
+            if (showMarch && marchText != null)
+            {
+                int arrows = 1 + (int)(Time.unscaledTime * 6f) % 3;
+                marchText.text = "GO GO  " + new string('>', arrows);
+                float pulse = 0.92f + 0.08f * Mathf.Sin(Time.unscaledTime * 14f);
+                marchText.rectTransform.localScale = new Vector3(pulse, pulse, 1f);
+                marchText.color = new Color(1f, 0.55f, 0.12f, 1f);
+            }
+            else if (marchText != null && marchText.text.Length > 0)
+            {
+                marchText.text = "";
+            }
+
             if (!comboHintShown && ComboSystem.Instance != null && ComboSystem.Instance.MaxCombo > 0)
             {
                 comboHintShown = true;
@@ -417,7 +473,10 @@ namespace Gstarr.Game
             {
                 UpdateCountdown(Time.unscaledDeltaTime);
                 fill.fillAmount = conductor.Progress;
-                timeText.text = Format(Mathf.Max(0f, (float)conductor.SongTime)) + " / " + Format((float)conductor.Length);
+                double shown = conductor.SongTime;
+                if (shown < 0) shown = 0;
+                else if (conductor.Loops && conductor.Length > 0) shown %= conductor.Length;
+                timeText.text = Format((float)shown) + " / " + Format((float)conductor.Length);
             }
 
             if (gameOverFade >= 0f && gameOverFade < 1f)

@@ -19,12 +19,15 @@ namespace Gstarr.CameraSystem
         private Vector3 velocity;
         private float lookAhead;
         private float lookAheadVelocity;
+        private float forwardBoost;
         private Camera cam;
         private Transform focusTarget;
         private bool focusing;
         private float previousSize;
         private float shakeTime;
         private float shakeMagnitude;
+
+        public void PushForward(float seconds) => forwardBoost = Mathf.Max(forwardBoost, seconds);
 
         public void Shake(float magnitude, float duration)
         {
@@ -76,8 +79,10 @@ namespace Gstarr.CameraSystem
             }
             if (target == null) return;
 
-            float facing = Mathf.Sign(target.localScale.x);
-            lookAhead = Mathf.SmoothDamp(lookAhead, facing * lookAheadDistance, ref lookAheadVelocity, lookAheadSmoothTime);
+            if (forwardBoost > 0f) forwardBoost -= Time.deltaTime;
+            float facing = forwardBoost > 0f ? 1f : Mathf.Sign(target.localScale.x);
+            float ahead = lookAheadDistance * (forwardBoost > 0f ? 3.2f : 1f);
+            lookAhead = Mathf.SmoothDamp(lookAhead, facing * ahead, ref lookAheadVelocity, lookAheadSmoothTime);
 
             Vector3 desired = new Vector3(
                 target.position.x + offset.x + lookAhead,

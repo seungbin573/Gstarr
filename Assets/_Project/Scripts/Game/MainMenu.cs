@@ -106,7 +106,17 @@ namespace Gstarr.Game
 
             var start = UIFactory.CreateButton("Start", list, "START", 44, () =>
             {
-                if (!IsResetShortcutPressed()) Show(stagePanel, stageFirst);
+                if (IsResetShortcutPressed()) return;
+                StageData only = null;
+                int playable = 0;
+                foreach (var stage in StageData.LoadAll())
+                {
+                    if (!stage.IsPlayable) continue;
+                    playable++;
+                    only = stage;
+                }
+                if (playable == 1) StageSession.Play(only);
+                else Show(stagePanel, stageFirst);
             });
             UIFactory.SetHeight(start, 90f);
             var settings = UIFactory.CreateButton("Settings", list, "SETTINGS", 44, () =>

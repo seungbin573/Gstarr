@@ -11,11 +11,11 @@ namespace Gstarr.Combat
 {
     /// <summary>
     /// 글로리 킬. 카메라가 적에게 다가가고 주변은 슬로우가 된다.
-    /// 차트 노트는 곡의 정박 번호와 맞춘다. 곧 닿는 박자는 건너뛰고 그 다음 노트부터 5개를 친다.
+    /// 차트 노트는 곡의 정박 번호와 맞춘다. 곧 닿는 박자는 건너뛰고 그 다음 노트부터 4개를 친다.
     /// </summary>
     public class GloryKillDirector : MonoBehaviour
     {
-        private const int NotesPerKill = 5;
+        private const int NotesPerKill = 4;
         private struct Face
         {
             public string Label;
@@ -40,6 +40,7 @@ namespace Gstarr.Combat
         private int[] order;
         private long[] beats;
         private int index;
+        private int noteRetries;
         private float travel = 1.05f;
         private float endTimer = -1f;
         private double sequenceStart;
@@ -79,6 +80,7 @@ namespace Gstarr.Combat
             conductor = RhythmConductor.Instance;
             cameraFollow = Object.FindAnyObjectByType<CameraFollow2D>();
             index = 0;
+            noteRetries = 0;
             endTimer = -1f;
             sequenceStart = Time.unscaledTimeAsDouble;
             IsRunning = true;
@@ -90,7 +92,6 @@ namespace Gstarr.Combat
                 return;
             }
 
-            // 첫 노트는 글로리킬 시작 후 최소 한 박이 지난 정박에 배치한다.
             order = new int[NotesPerKill];
             beats = new long[NotesPerKill];
             if (conductor != null && conductor.IsReady)
@@ -221,7 +222,21 @@ namespace Gstarr.Combat
                 ring.rectTransform.localScale = new Vector3(pulse, pulse, 1f);
             }
 
-            if (double.IsInfinity(remain) || remain < -Window()) Fail();
+            if (double.IsInfinity(remain))
+            {
+                Fail();
+                return;
+            }
+            if (remain < -Window())
+            {
+                if (noteRetries < 1 && beats != null && index < beats.Length)
+                {
+                    noteRetries++;
+                    beats[index] += 1;
+                    return;
+                }
+                Fail();
+            }
         }
 
         private void ReadButton()
@@ -239,6 +254,7 @@ namespace Gstarr.Combat
                 return;
             }
 
+            noteRetries = 0;
             bool last = index >= order.Length - 1;
             PlayCue(last);
             CombatFeel.Shake(last ? 0.2f : 0.07f, last ? 0.14f : 0.06f);
@@ -260,7 +276,7 @@ namespace Gstarr.Combat
 
         private float Window()
         {
-            return conductor != null && conductor.IsReady ? conductor.GoodWindow : 0.12f;
+            return conductor != null && conductor.IsReady ? conductor.GoodWindow : 0.16f;
         }
 
         private Vector2 EnemyLocalPoint()

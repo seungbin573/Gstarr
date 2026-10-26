@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Gstarr.Combat;
 using Gstarr.Player;
+using Gstarr.Rhythm;
 using UnityEngine;
 
 namespace Gstarr.Items
@@ -19,6 +20,7 @@ namespace Gstarr.Items
         private float stunDuration;
         private int damage;
         private LayerMask hitMask;
+        private BeatJudgement judgement;
 
         public static bool Throw(GameObject user, Sprite icon, Color tint, Sprite effectSprite, float radius,
             int damage, float range, float speed, float arcHeight, LayerMask hitMask, float stunDuration)
@@ -50,6 +52,7 @@ namespace Gstarr.Items
             thrown.stunDuration = Mathf.Max(0f, stunDuration);
             thrown.arcHeight = Mathf.Max(0f, arcHeight);
             thrown.flightDuration = Mathf.Clamp(Vector2.Distance(start, destination) / Mathf.Max(0.1f, speed), 0.18f, 1.25f);
+            thrown.judgement = ComboSystem.CurrentJudgement;
             return true;
         }
 
@@ -83,7 +86,7 @@ namespace Gstarr.Items
 
                 if (damage > 0 && enemy.TryGetComponent(out Health health)
                     && health.TakeDamage(damage, (Vector2)enemy.transform.position - center + Vector2.up * 0.5f))
-                    Gstarr.Rhythm.ComboSystem.RegisterHit(enemy.gameObject);
+                    ComboSystem.RegisterHit(enemy.gameObject, judgement);
             }
 
             if (effectSprite != null)

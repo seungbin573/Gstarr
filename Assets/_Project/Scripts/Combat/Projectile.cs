@@ -1,3 +1,4 @@
+using Gstarr.Rhythm;
 using UnityEngine;
 
 namespace Gstarr.Combat
@@ -9,13 +10,16 @@ namespace Gstarr.Combat
         private LayerMask hitMask;
         private float lifeTimer;
         private GameObject owner;
+        private BeatJudgement judgement;
 
-        public void Launch(Vector2 velocity, int damage, float range, LayerMask hitMask, GameObject owner = null)
+        public void Launch(Vector2 velocity, int damage, float range, LayerMask hitMask, GameObject owner = null,
+            BeatJudgement judgement = BeatJudgement.Perfect)
         {
             this.velocity = velocity;
             this.damage = damage;
             this.hitMask = hitMask;
             this.owner = owner;
+            this.judgement = judgement;
             lifeTimer = range / Mathf.Max(0.01f, velocity.magnitude);
 
             float angle = Mathf.Atan2(velocity.y, velocity.x) * Mathf.Rad2Deg;
@@ -35,7 +39,7 @@ namespace Gstarr.Combat
                 if (owner == null || (hit.collider.transform != owner.transform && !hit.collider.transform.IsChildOf(owner.transform)))
                 {
                     if (hit.collider.TryGetComponent(out IDamageable target) && target.TakeDamage(damage, velocity))
-                        Gstarr.Rhythm.ComboSystem.RegisterHit(hit.collider.gameObject);
+                        ComboSystem.RegisterHit(hit.collider.gameObject, judgement);
                 }
                 Destroy(gameObject);
                 return;

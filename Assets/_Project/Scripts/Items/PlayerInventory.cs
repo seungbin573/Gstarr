@@ -125,8 +125,11 @@ namespace Gstarr.Items
             if (nextEffect != null && nextEffect.WasPressedThisFrame()) Select(ItemCategory.Effect, 1);
             // 쓸 아이템이 있을 때만 박자 판정 (빈 손으로 누른 건 미스 처리하지 않음)
             if (useAction != null && useAction.WasPressedThisFrame() && GetSelected(ActiveCategory) != null && cooldownTimer <= 0f
-                && BeatGate.TryAct(BeatAction.UseItem))
+                && BeatGate.TryPerform(BeatAction.UseItem, true, false, out BeatJudgement judged, false))
+            {
+                ComboSystem.NoteJudgement(judged);
                 UseSelected();
+            }
         }
 
         public void Select(ItemCategory category, int delta)
