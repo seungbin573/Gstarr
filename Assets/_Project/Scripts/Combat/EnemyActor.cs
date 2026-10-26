@@ -47,6 +47,9 @@ namespace Gstarr.Combat
         private Collider2D body;
         private int patrolDirection = 1;
         private Vector3 patrolHome;
+        private bool hasLeash;
+        private float leashMinX;
+        private float leashMaxX;
         private bool preparing;
         private bool attackArmed;
         private float beatMoveTimer;
@@ -208,7 +211,18 @@ namespace Gstarr.Combat
             return best;
         }
 
+        public bool HasLeash => hasLeash;
+
         public Vector2 AimPoint => body != null && body.enabled ? body.bounds.center : (Vector2)transform.position;
+
+        /// <summary>이 방 밖으로 나가지 못하게 한다. 보스는 자기 경기장 경계를 쓴다.</summary>
+        public void SetLeash(float minX, float maxX)
+        {
+            if (kind == EnemyKind.Boss || hasLeash) return;
+            leashMinX = minX;
+            leashMaxX = maxX;
+            hasLeash = true;
+        }
 
         private bool IsAimTarget =>
             state != State.Dead
@@ -265,7 +279,10 @@ namespace Gstarr.Combat
             ApplyHitbox();
         }
 
-        /// <summary>종류마다 다른 히트박스. 발밑은 스프라이트 바닥에 맞춘다.</summary>
+        private const float SharedWidth = 0.9f;
+        private const float SharedHeight = 1.9f;
+
+        /// <summary>보스 외 적은 모두 0.9 x 1.9. 발밑은 스프라이트 바닥에 맞춘다.</summary>
         private void ApplyHitbox()
         {
             Bounds art = sprite != null && sprite.sprite != null
@@ -276,32 +293,18 @@ namespace Gstarr.Combat
             var material = body != null ? body.sharedMaterial : null;
             if (body != null) DestroyImmediate(body);
 
-            switch (kind)
+            if (kind == EnemyKind.Boss)
             {
-                case EnemyKind.BeatChaser:
-                    body = AddBox(new Vector2(1.25f, 0.78f), new Vector2(midX, foot + 0.39f), material);
-                    break;
-                case EnemyKind.RangedBeat:
-                    body = AddBox(new Vector2(0.48f, 1.55f), new Vector2(midX, foot + 0.78f), material);
-                    break;
-                case EnemyKind.RangedHalfBeat:
-                    body = AddCircle(0.36f, art.center, material);
-                    break;
-                case EnemyKind.Flyer:
-                    body = AddCircle(0.55f, art.center, material);
-                    break;
-                case EnemyKind.Mole:
-                    body = AddBox(new Vector2(1.5f, 0.4f), new Vector2(midX, foot + 0.2f), material);
-                    break;
-                default:
-                    var capsule = gameObject.AddComponent<CapsuleCollider2D>();
-                    capsule.direction = CapsuleDirection2D.Vertical;
-                    capsule.size = new Vector2(1.2f, 1.9f);
-                    capsule.offset = new Vector2(midX, foot + 0.95f);
-                    capsule.sharedMaterial = material;
-                    body = capsule;
-                    break;
+                var capsule = gameObject.AddComponent<CapsuleCollider2D>();
+                capsule.direction = CapsuleDirection2D.Vertical;
+                capsule.size = new Vector2(1.2f, 1.9f);
+                capsule.offset = new Vector2(midX, foot + 0.95f);
+                capsule.sharedMaterial = material;
+                body = capsule;
+                return;
             }
+
+            body = AddBox(new Vector2(SharedWidth, SharedHeight), new Vector2(midX, foot + SharedHeight * 0.5f), material);
         }
 
         private BoxCollider2D AddBox(Vector2 size, Vector2 offset, PhysicsMaterial2D material)
@@ -311,15 +314,6 @@ namespace Gstarr.Combat
             box.offset = offset;
             box.sharedMaterial = material;
             return box;
-        }
-
-        private CircleCollider2D AddCircle(float radius, Vector3 center, PhysicsMaterial2D material)
-        {
-            var circle = gameObject.AddComponent<CircleCollider2D>();
-            circle.radius = radius;
-            circle.offset = center;
-            circle.sharedMaterial = material;
-            return circle;
         }
 
         private void OnEnable() => All.Add(this);
@@ -481,7 +475,11 @@ namespace Gstarr.Combat
 
         private void FixedUpdate()
         {
-            if (IsDead || state != State.Combat || GamePause.BlocksGameplay || rb == null) return;
+            if (IsDead || state != State.Combat || GamePause.BlocksGameplay || rb == null)
+            {
+                ClampLeash();
+                return;
+            }
             if (kind == EnemyKind.Boss) return;
             if (kind == EnemyKind.BeatChaser || kind == EnemyKind.Flyer)
             {
@@ -493,10 +491,16 @@ namespace Gstarr.Combat
                             ? Vector2.zero
                             : new Vector2(0f, rb.linearVelocity.y);
                 }
+                ClampLeash();
                 return;
             }
-            if (kind == EnemyKind.Mole && UpdateMole()) return;
+            if (kind == EnemyKind.Mole && UpdateMole())
+            {
+                ClampLeash();
+                return;
+            }
             MoveGroundEnemy();
+            ClampLeash();
         }
 
         private void LateUpdate()
@@ -519,6 +523,7 @@ namespace Gstarr.Combat
             }
 
             UpdateMoleVisuals();
+            ClampLeash();
         }
 
         private void BindConductor()
@@ -681,10 +686,49 @@ namespace Gstarr.Combat
 
         private bool CanMoveSafely(int direction)
         {
+            if (!RoomAhead(direction)) return false;
             if (WallAhead(direction)) return false;
             Vector2 edge = (Vector2)body.bounds.center
                 + new Vector2(direction * (body.bounds.extents.x + WallProbe), -body.bounds.extents.y + 0.03f);
             return Physics2D.Raycast(edge, Vector2.down, GroundProbe, groundMask).collider != null;
+        }
+
+        private bool RoomAhead(int direction)
+        {
+            if (!hasLeash || direction == 0) return true;
+            float pad = body != null && body.enabled ? body.bounds.extents.x : 0.45f;
+            float x = transform.position.x + direction * (pad + 0.2f);
+            return x >= leashMinX + pad && x <= leashMaxX - pad;
+        }
+
+        private void ClampLeash()
+        {
+            if (!hasLeash || kind == EnemyKind.Boss || rb == null) return;
+            float pad = body != null && body.enabled ? body.bounds.extents.x : 0.45f;
+            float min = leashMinX + pad;
+            float max = leashMaxX - pad;
+            if (max <= min)
+            {
+                float mid = (leashMinX + leashMaxX) * 0.5f;
+                min = mid;
+                max = mid;
+            }
+
+            var pos = rb.position;
+            float x = pos.x;
+            if (x < min || x > max)
+            {
+                pos.x = Mathf.Clamp(x, min, max);
+                rb.position = pos;
+                transform.position = new Vector3(pos.x, pos.y, transform.position.z);
+            }
+
+            var velocity = rb.linearVelocity;
+            if ((rb.position.x <= min + 0.02f && velocity.x < 0f) || (rb.position.x >= max - 0.02f && velocity.x > 0f))
+            {
+                velocity.x = 0f;
+                rb.linearVelocity = velocity;
+            }
         }
 
         private bool IsGrounded()
@@ -704,9 +748,13 @@ namespace Gstarr.Combat
 
         private void StepFlyer()
         {
-            if (player != null && Vector2.Distance(player.position, transform.position) <= detectionRange)
+            bool seePlayer = player != null
+                && PlayerInsideLeash()
+                && Vector2.Distance(player.position, transform.position) <= detectionRange;
+            if (seePlayer)
             {
                 Vector2 delta = (Vector2)player.position + Vector2.up * 1.2f - (Vector2)transform.position;
+                if (!RoomAhead(delta.x >= 0f ? 1 : -1)) delta.x = 0f;
                 rb.linearVelocity = delta.sqrMagnitude > 1.1f * 1.1f
                     ? delta.normalized * moveSpeed
                     : Vector2.zero;
@@ -715,10 +763,18 @@ namespace Gstarr.Combat
             }
 
             float homeDelta = transform.position.x - patrolHome.x;
-            if (Mathf.Abs(homeDelta) >= FlyerPatrolWidth) patrolDirection *= -1;
+            if (Mathf.Abs(homeDelta) >= FlyerPatrolWidth || !RoomAhead(patrolDirection)) patrolDirection *= -1;
+            if (!RoomAhead(patrolDirection)) patrolDirection *= -1;
             float returnY = Mathf.Clamp(patrolHome.y - transform.position.y, -1f, 1f);
             rb.linearVelocity = new Vector2(patrolDirection * moveSpeed * 0.65f, returnY * moveSpeed * 0.35f);
             Face(patrolDirection);
+        }
+
+        private bool PlayerInsideLeash()
+        {
+            if (!hasLeash || player == null) return true;
+            float x = player.position.x;
+            return x >= leashMinX && x <= leashMaxX;
         }
 
         private bool UpdateMole()

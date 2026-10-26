@@ -102,9 +102,16 @@ namespace Gstarr.Game
 
             BuildGameOver(root);
             BuildCutscene(root);
+
+            countdownDim = UIFactory.CreateImage("CountdownBlack", root, Color.black);
+            UIFactory.Stretch(countdownDim.rectTransform);
+            countdownDim.raycastTarget = false;
+            countdownDim.enabled = false;
+            countdownText.transform.SetAsLastSibling();
         }
 
         private Text countdownText;
+        private Image countdownDim;
         private string lastCount;
         private float countPop;
 
@@ -138,6 +145,18 @@ namespace Gstarr.Game
             var c = countdownText.color;
             c.a = label == "GO!" ? Mathf.Clamp01((float)(0.6 - t) / 0.25f) : 1f;
             countdownText.color = c;
+
+            bool black = label == "1" || label == "2" || label == "3";
+            if (countdownDim != null)
+            {
+                countdownDim.enabled = black;
+                countdownDim.color = Color.black;
+                if (black)
+                {
+                    countdownDim.transform.SetAsLastSibling();
+                    countdownText.transform.SetAsLastSibling();
+                }
+            }
         }
 
         private void Start()
@@ -200,10 +219,19 @@ namespace Gstarr.Game
 
             if (conductor != null && conductor.IsReady) conductor.Pause();
             GamePause.SetPaused(true);
-            yield return PlayCutscene(
+            // 잠드는 인트로 (SleepIntro.cs). 예전 정지 컷신으로 돌리려면 아래를 PlayCutscene(...) 으로 바꾸면 된다.
+            cutsceneActive = true;
+            yield return SleepIntro.Play(
+                introCutscene,
                 "에이든의 음악 시간",
-                "오후 3시 42분, 에이든은 졸음을 참으려 눈을 비볐다.\n하지만 선생님의 피아노 소리가 자장가처럼 들려왔다.\n결국 책상에 엎드린 순간, 교실은 괴물들이 사는 꿈속으로 변했다.",
-                introCutscene);
+                new[]
+                {
+                    "오후 3시 42분, 에이든은 졸음을 참으려 눈을 비볐다.",
+                    "하지만 선생님의 피아노 소리가 자장가처럼 들려왔다.",
+                    "결국 책상에 엎드린 순간, 교실은 괴물들이 사는 꿈속으로 변했다."
+                },
+                conductor != null ? conductor.CountdownInterval : 0.5f);
+            cutsceneActive = false;
             GamePause.SetPaused(false);
             if (conductor != null) conductor.Resume();
             ShowHint("공중에서 점프를 한 번 더 누르면 더블 점프! 공격과 아이템은 박자에 맞춰 쓰세요.", 4f);
@@ -398,14 +426,28 @@ namespace Gstarr.Game
 
         private IEnumerator PlayEndingCutscene(bool cleared)
         {
-            yield return PlayCutscene(
-                cleared ? "아무도 몰랐어!" : "수업 중 들켜버렸다!",
-                cleared
-                    ? "딩동댕동, 수업 종이 울리고 친구들이 하나둘 교실을 나섰다.\n선생님도 에이든이 잠든 줄 모른 채 악보를 정리했다.\n에이든은 끝까지 들키지 않고, 포근한 꿈속에서 새근새근 잠들어 있었다."
-                    : "선생님의 “에이든, 일어나렴!” 하는 목소리에 에이든은 화들짝 고개를 들었다.\n잠든 모습을 본 친구들의 시선이 한꺼번에 에이든에게 쏠렸다.\n얼굴이 새빨개진 에이든은 아무 말도 못 한 채 고개를 푹 숙였다.",
-                cleared ? clearCutscene : gameOverCutscene);
-            yield return null;
+            cutsceneActive = true;
+            if (cleared)
+            {
+                yield return SleepIntro.PlayClear(ShowResultPanel);
+            }
+            else
+            {
+                yield return SleepIntro.PlayCaught(
+                    gameOverCutscene,
+                    new[]
+                    {
+                        "선생님의 “에이든, 일어나렴!” 하는 목소리에 에이든은 화들짝 고개를 들었다.",
+                        "잠든 모습을 본 친구들의 시선이 한꺼번에 에이든에게 쏠렸다.",
+                        "얼굴이 새빨개진 에이든은 아무 말도 못 한 채 고개를 푹 숙였다."
+                    },
+                    ShowResultPanel);
+            }
+            cutsceneActive = false;
+        }
 
+        private void ShowResultPanel()
+        {
             gameOverPanel.SetAsLastSibling();
             gameOverPanel.gameObject.SetActive(true);
             gameOverGroup.alpha = 1f;

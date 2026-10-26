@@ -38,6 +38,12 @@ namespace Gstarr.Combat
             return false;
         }
 
+        private void Awake()
+        {
+            var renderer = GetComponent<TilemapRenderer>();
+            if (renderer != null) renderer.enabled = false;
+        }
+
         private void Start()
         {
             var requests = new List<SpawnRequest>();
@@ -45,8 +51,14 @@ namespace Gstarr.Combat
             foreach (var tilemap in tilemaps)
             {
                 tilemap.CompressBounds();
+                bool placed = false;
+                var cells = new List<Vector3Int>();
                 foreach (var cell in tilemap.cellBounds.allPositionsWithin)
+                    cells.Add(cell);
+
+                for (int i = 0; i < cells.Count; i++)
                 {
+                    var cell = cells[i];
                     if (tilemap.GetTile(cell) is not EnemyTile tile) continue;
                     Vector3 bottom = tilemap.CellToWorld(cell);
                     Vector3 center = tilemap.GetCellCenterWorld(cell);
@@ -55,12 +67,17 @@ namespace Gstarr.Combat
                         Kind = tile.Kind,
                         Position = new Vector3(center.x, bottom.y, center.z)
                     });
+                    tilemap.SetTileFlags(cell, TileFlags.None);
+                    tilemap.SetColor(cell, Color.clear);
                     tilemap.SetTile(cell, null);
+                    placed = true;
                 }
-            }
 
-            foreach (var tilemap in tilemaps)
+                if (!placed) continue;
                 tilemap.RefreshAllTiles();
+                var renderer = tilemap.GetComponent<TilemapRenderer>();
+                if (renderer != null) renderer.enabled = false;
+            }
 
             foreach (var request in requests)
             {

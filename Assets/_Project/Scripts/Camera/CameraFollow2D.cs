@@ -26,6 +26,19 @@ namespace Gstarr.CameraSystem
         private float previousSize;
         private float shakeTime;
         private float shakeMagnitude;
+        private bool frameActive;
+        private float frameMinX;
+        private float frameMaxX;
+        private float frameY;
+
+        /// <summary>문과 문 사이 구간에 카메라를 고정한다. 구간이 화면보다 넓으면 그 안에서만 따라간다.</summary>
+        public void SetFrame(float minX, float maxX, float focusY)
+        {
+            frameActive = true;
+            frameMinX = minX;
+            frameMaxX = maxX;
+            frameY = focusY;
+        }
 
         public void PushForward(float seconds) => forwardBoost = Mathf.Max(forwardBoost, seconds);
 
@@ -79,19 +92,32 @@ namespace Gstarr.CameraSystem
             }
             if (target == null) return;
 
-            if (forwardBoost > 0f) forwardBoost -= Time.deltaTime;
-            float facing = forwardBoost > 0f ? 1f : Mathf.Sign(target.localScale.x);
-            float ahead = lookAheadDistance * (forwardBoost > 0f ? 3.2f : 1f);
-            lookAhead = Mathf.SmoothDamp(lookAhead, facing * ahead, ref lookAheadVelocity, lookAheadSmoothTime);
+            Vector3 desired;
+            if (frameActive && cam != null && cam.orthographic)
+            {
+                float halfW = cam.orthographicSize * cam.aspect;
+                float span = frameMaxX - frameMinX;
+                float x = span <= halfW * 2f
+                    ? (frameMinX + frameMaxX) * 0.5f
+                    : Mathf.Clamp(target.position.x, frameMinX + halfW, frameMaxX - halfW);
+                desired = new Vector3(x, frameY, transform.position.z);
+            }
+            else
+            {
+                if (forwardBoost > 0f) forwardBoost -= Time.deltaTime;
+                float facing = forwardBoost > 0f ? 1f : Mathf.Sign(target.localScale.x);
+                float ahead = lookAheadDistance * (forwardBoost > 0f ? 3.2f : 1f);
+                lookAhead = Mathf.SmoothDamp(lookAhead, facing * ahead, ref lookAheadVelocity, lookAheadSmoothTime);
 
-            Vector3 desired = new Vector3(
-                target.position.x + offset.x + lookAhead,
-                target.position.y + offset.y,
-                transform.position.z);
+                desired = new Vector3(
+                    target.position.x + offset.x + lookAhead,
+                    target.position.y + offset.y,
+                    transform.position.z);
+            }
 
             Vector3 pos = Vector3.SmoothDamp(transform.position, desired, ref velocity, smoothTime);
 
-            if (useBounds && cam != null && cam.orthographic)
+            if (useBounds && !frameActive && cam != null && cam.orthographic)
             {
                 float halfH = cam.orthographicSize;
                 float halfW = halfH * cam.aspect;

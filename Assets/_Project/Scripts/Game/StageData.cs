@@ -44,6 +44,8 @@ namespace Gstarr.Game
         public bool IsPlayable => music != null && (HasBpm(out _) || beatChart != null);
         [Tooltip("비우면 GameAssets.defaultStageScene 사용")]
         public string sceneName;
+        [Tooltip("보스 방에 들어간 동안 재생할 곡. 박자는 스테이지 곡에 맞춘다")]
+        public AudioClip bossMusic;
 
         public string SceneName
         {

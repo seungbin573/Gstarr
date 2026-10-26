@@ -298,15 +298,14 @@ namespace Gstarr.Combat
                     AimShot(PlayerBodyCenter(), 0);
                     break;
                 case Pattern.Orbit:
-                    sweepDuration = 4.8f;
-                    sweepStart = 90f;
-                    beamLength = OuterReach();
+                    sweepDuration = phase == 1 ? 1.45f : 1.15f;
+                    sweepStart = 0f;
+                    beamLength = 2.6f;
                     break;
                 default:
-                    sweepDuration = 5.8f;
-                    sweepStart = 0f;
-                    ringRadius = Mathf.Clamp(cell.x * 3.1f, cell.x * 2.2f, InnerReach() * 0.8f);
-                    beamLength = ringRadius;
+                    sweepDuration = phase == 1 ? 1.25f : 1.0f;
+                    sweepStart = 180f;
+                    beamLength = 2.4f;
                     break;
             }
 
@@ -378,6 +377,7 @@ namespace Gstarr.Combat
         {
             Vector2 origin = home;
             Vector2 aim = target - origin;
+            aim.y = Mathf.Clamp(aim.y, -0.35f, 0.55f);
             if (aim.sqrMagnitude < 0.01f) aim = new Vector2(facing, 0f);
             float dist = Mathf.Clamp(aim.magnitude, cell.x * 3f, cell.x * 8f);
             Vector2 dir = aim.normalized;
@@ -450,22 +450,23 @@ namespace Gstarr.Combat
             if (circleWarning != null) circleWarning.enabled = false;
             HideBeams();
 
-            if (pattern == Pattern.Orbit)
+            if (pattern == Pattern.Orbit || pattern == Pattern.Ring)
             {
-                float angle = sweepStart + 360f * Sweep01();
-                ShowBeam(0, home, angle, beamLength, 1.05f, damaging);
-                Face(Mathf.Cos(angle * Mathf.Deg2Rad) >= 0f ? 1 : -1);
+                SweepFlatLane(pattern == Pattern.Orbit ? 0.85f : 1.45f, pattern == Pattern.Orbit ? 0.72f : 0.55f, damaging, pattern == Pattern.Orbit);
                 return;
             }
+        }
 
-            float gap = sweepStart + 360f * Sweep01();
-            for (int i = 0; i < 8; i++)
-            {
-                float angle = sweepStart + i * 45f;
-                if (Mathf.Abs(Mathf.DeltaAngle(angle, gap)) < 52f) continue;
-                ShowBeam(i, home, angle, beamLength, 0.82f, damaging);
-            }
-            Face(Mathf.Cos(gap * Mathf.Deg2Rad) >= 0f ? 1 : -1);
+        /// <summary>평지에서 좌우로만 지나가는 바닥 파동.</summary>
+        private void SweepFlatLane(float lift, float thickness, bool damaging, bool leftToRight)
+        {
+            float left = hasArenaBounds ? arenaMinX + 0.7f : home.x - cell.x * 4f;
+            float right = hasArenaBounds && !float.IsPositiveInfinity(arenaMaxX) ? arenaMaxX - 0.7f : home.x + cell.x * 4f;
+            float x = Mathf.Lerp(leftToRight ? left : right, leftToRight ? right : left, Sweep01());
+            float y = arenaFloorY > float.NegativeInfinity ? arenaFloorY + lift : home.y + lift * 0.35f;
+            y = Mathf.Clamp(y, home.y - cell.y, home.y + cell.y * 1.15f);
+            ShowBeam(0, new Vector2(x, y), 0f, beamLength, thickness, damaging);
+            Face(leftToRight ? 1 : -1);
         }
 
         private float Sweep01() => sweepDuration <= 0.01f ? 1f : Mathf.Clamp01(sweepTime / sweepDuration);
@@ -611,7 +612,7 @@ namespace Gstarr.Combat
             float minY = home.y - cell.y * 2f;
             if (arenaFloorY > float.NegativeInfinity)
                 minY = Mathf.Max(minY, arenaFloorY + 0.6f);
-            point.y = Mathf.Clamp(point.y, minY, home.y + cell.y * 8f);
+            point.y = Mathf.Clamp(point.y, minY, home.y + cell.y * 1.15f);
             return point;
         }
 
@@ -638,7 +639,7 @@ namespace Gstarr.Combat
             float minY = home.y - cell.y * 2f;
             if (arenaFloorY > float.NegativeInfinity)
                 minY = Mathf.Max(minY, arenaFloorY + 0.6f);
-            float clampedY = Mathf.Clamp(body.position.y, minY, home.y + cell.y * 8f);
+            float clampedY = Mathf.Clamp(body.position.y, minY, home.y + cell.y * 1.15f);
             if (Mathf.Abs(clampedX - body.position.x) < 0.001f && Mathf.Abs(clampedY - body.position.y) < 0.001f)
                 return;
             body.position = new Vector2(clampedX, clampedY);

@@ -96,6 +96,10 @@ namespace Gstarr.Game
         private bool dying;
         private float deathTime;
         private bool wasGrounded = true;
+        private Sprite fittedSprite;
+        private Collider2D fittedCollider;
+        private Vector2 fitScale = Vector2.one;
+        private Vector2 fitOffset;
 
         private void Awake()
         {
@@ -150,6 +154,7 @@ namespace Gstarr.Game
             if (visual == null || source == null) return;
 
             if (source.sprite != visual.sprite) visual.sprite = source.sprite;
+            FitEnemyToCollider();
             visual.flipX = source.flipX;
             visual.flipY = source.flipY;
             visual.sortingOrder = source.sortingOrder;
@@ -178,9 +183,51 @@ namespace Gstarr.Game
             var hidden = source.color;
             hidden.a = 0f;
             source.color = hidden;
-            visual.transform.localScale = new Vector3(squashX, squashY, 1f);
+            visual.transform.localScale = new Vector3(fitScale.x * squashX, fitScale.y * squashY, 1f);
             float facing = transform.localScale.x >= 0f ? 1f : -1f;
-            visual.transform.localPosition = new Vector3(kick * facing, Bob(), 0f);
+            visual.transform.localPosition = new Vector3(fitOffset.x + kick * facing, fitOffset.y + Bob(), 0f);
+        }
+
+        /// <summary>임시 그림을 적 콜라이더 박스에 딱 맞춘다. 플레이어는 그대로 둔다.</summary>
+        private void FitEnemyToCollider()
+        {
+            if (player != null || visual == null || visual.sprite == null) return;
+            var col = GetComponent<Collider2D>();
+            if (col == null) return;
+            if (visual.sprite == fittedSprite && col == fittedCollider) return;
+            if (!TryColliderBox(col, out float width, out float height, out float centerX, out float centerY)) return;
+
+            Bounds art = visual.sprite.bounds;
+            if (art.size.x < 0.0001f || art.size.y < 0.0001f) return;
+
+            float sx = width / art.size.x;
+            float sy = height / art.size.y;
+            fittedSprite = visual.sprite;
+            fittedCollider = col;
+            fitScale = new Vector2(sx, sy);
+            fitOffset = new Vector2(centerX - art.center.x * sx, centerY - art.center.y * sy);
+        }
+
+        private static bool TryColliderBox(Collider2D col, out float width, out float height, out float centerX, out float centerY)
+        {
+            switch (col)
+            {
+                case BoxCollider2D box:
+                    width = box.size.x;
+                    height = box.size.y;
+                    centerX = box.offset.x;
+                    centerY = box.offset.y;
+                    return true;
+                case CapsuleCollider2D capsule:
+                    width = capsule.size.x;
+                    height = capsule.size.y;
+                    centerX = capsule.offset.x;
+                    centerY = capsule.offset.y;
+                    return true;
+                default:
+                    width = height = centerX = centerY = 0f;
+                    return false;
+            }
         }
 
         private void TickPose()

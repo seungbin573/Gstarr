@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Gstarr.Combat;
 using Gstarr.Game;
+using Gstarr.Rhythm;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -27,7 +28,15 @@ namespace Gstarr.World
 
         private readonly List<ArenaRoom> rooms = new List<ArenaRoom>();
         private readonly HashSet<BossActor> configuredBosses = new HashSet<BossActor>();
+        private readonly List<DoorGate> gates = new List<DoorGate>();
         private Collider2D playerBody;
+        private CameraSystem.CameraFollow2D cameraFollow;
+
+        private void Awake()
+        {
+            var renderer = GetComponent<TilemapRenderer>();
+            if (renderer != null) renderer.enabled = false;
+        }
 
         public void AssignArt(Sprite door, Sprite frame, Sprite lamp)
         {
@@ -76,7 +85,7 @@ namespace Gstarr.World
             xs.Sort();
             int tilesTall = Mathf.Max(1, heightInTiles);
 
-            var gates = new List<DoorGate>();
+            gates.Clear();
             for (int i = 0; i < xs.Count; i++)
             {
                 var column = byColumn[xs[i]];
@@ -113,7 +122,11 @@ namespace Gstarr.World
             ConfigureBosses();
 
             for (int i = 0; i < cells.Count; i++)
+            {
+                tilemap.SetTileFlags(cells[i], TileFlags.None);
                 tilemap.SetTile(cells[i], null);
+            }
+            tilemap.RefreshAllTiles();
         }
 
         private void ConfigureBosses()
@@ -166,6 +179,73 @@ namespace Gstarr.World
 
             for (int i = 0; i < rooms.Count; i++)
                 rooms[i].Tick(playerBody.bounds);
+            AssignLeashes();
+            UpdateCameraFrame(playerBody.bounds);
+        }
+
+        private void AssignLeashes()
+        {
+            if (gates.Count == 0) return;
+            var enemies = Object.FindObjectsByType<EnemyActor>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            for (int i = 0; i < enemies.Length; i++)
+            {
+                var enemy = enemies[i];
+                if (enemy == null || enemy.HasLeash || enemy.IsBoss) continue;
+                float x = enemy.transform.position.x;
+                ArenaRoom room = null;
+                for (int r = 0; r < rooms.Count; r++)
+                {
+                    if (!rooms[r].Contains(x)) continue;
+                    room = rooms[r];
+                    break;
+                }
+
+                if (room != null) enemy.SetLeash(room.FrameMin, room.FrameMax);
+                else if (x < gates[0].MinX) enemy.SetLeash(gates[0].MinX - 30f, gates[0].MinX);
+                else enemy.SetLeash(gates[gates.Count - 1].MaxX, gates[gates.Count - 1].MaxX + 8f);
+            }
+        }
+
+        private void UpdateCameraFrame(Bounds player)
+        {
+            if (gates.Count == 0 || rooms.Count == 0) return;
+            if (cameraFollow == null)
+            {
+                var cam = Camera.main;
+                if (cam == null) return;
+                cameraFollow = cam.GetComponent<CameraSystem.CameraFollow2D>();
+                if (cameraFollow == null) return;
+            }
+
+            float x = player.center.x;
+            int index = -1;
+            for (int i = 0; i < rooms.Count; i++)
+                if (x >= rooms[i].FrameMin) index = i;
+
+            if (index < 0)
+            {
+                // 첫 문 앞에서 카메라를 플레이어 쪽에 두면 왼쪽 절반이 빈다. 스테이지가 보이도록 오른쪽으로 늘린다.
+                cameraFollow.SetFrame(gates[0].MinX - 12f, gates[0].MinX + 14f, gates[0].FloorY + 2.6f);
+                UpdateBossMusic(x);
+                return;
+            }
+
+            cameraFollow.SetFrame(rooms[index].FrameMin, rooms[index].FrameMax, rooms[index].FrameY + 2.6f);
+            UpdateBossMusic(x);
+        }
+
+        private void UpdateBossMusic(float x)
+        {
+            var stage = StageSession.Current;
+            var conductor = RhythmConductor.Instance;
+            if (stage == null || conductor == null) return;
+            bool inBossRoom = false;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                if (!rooms[i].HasBoss) continue;
+                if (x >= rooms[i].FrameMin && x <= rooms[i].FrameMax) inBossRoom = true;
+            }
+            conductor.SetBossTheme(stage.bossMusic, inBossRoom);
         }
     }
 
@@ -235,6 +315,10 @@ namespace Gstarr.World
         }
 
         public bool Contains(float x) => x >= innerMin && x <= innerMax;
+        public bool HasBoss => anchored.Count > 0;
+        public float FrameMin => innerMin;
+        public float FrameMax => innerMax;
+        public float FrameY => floorY;
 
         public float DistanceTo(float x)
         {
@@ -367,25 +451,10 @@ namespace Gstarr.World
             block.shutterSprite = doorSprite;
             block.speed = frameH / 0.12f;
 
-            if (frameSprite != null)
-            {
-                var frame = NewSprite("Frame", go.transform, frameSprite, 6);
-                ApplyBottomCenter(frame.transform, frameSprite, targetW, frameH, 0f);
-            }
-
             var shutterGo = NewSprite("Shutter", go.transform, doorSprite, 7);
             block.shutter = shutterGo.transform;
             block.SetShutterBottom(frameH);
             shutterGo.GetComponent<SpriteRenderer>().enabled = false;
-
-            if (lampSprite != null)
-            {
-                const float lampSize = 0.28f;
-                var lampGo = NewSprite("Lamp", go.transform, lampSprite, 8);
-                ApplyCenter(lampGo.transform, lampSprite, lampSize, lampSize, new Vector2(0f, frameH - lampSize * 0.35f));
-                block.lamp = lampGo.GetComponent<SpriteRenderer>();
-                block.lamp.color = new Color(0.35f, 0.95f, 0.45f);
-            }
 
             block.body = go.AddComponent<BoxCollider2D>();
             block.body.size = new Vector2(targetW, frameH);
@@ -412,7 +481,6 @@ namespace Gstarr.World
 
         public void PlaySlam()
         {
-            GameAudio.Play(GameAudio.Id.Door, 0.9f);
             CombatFeel.Shake(0.08f, 0.08f);
         }
 
@@ -424,7 +492,7 @@ namespace Gstarr.World
             bool closed = shutterBottom < openY * 0.08f;
             if (body != null) body.enabled = closed && !passageClear;
             var renderer = shutter.GetComponent<SpriteRenderer>();
-            if (renderer != null) renderer.enabled = shutterBottom < openY - 0.02f;
+            if (renderer != null) renderer.enabled = false;
         }
 
         private void SetShutterBottom(float bottom)
