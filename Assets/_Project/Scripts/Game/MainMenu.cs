@@ -34,6 +34,14 @@ namespace Gstarr.Game
 
             var bg = UIFactory.CreateImage("Background", root, new Color(0.06f, 0.05f, 0.1f, 1f));
             UIFactory.Stretch(bg.rectTransform);
+            var menuArt = Gstarr.Items.GameAssets.Instance;
+            if (menuArt != null && menuArt.menuBackground != null)
+            {
+                bg.sprite = menuArt.menuBackground;
+                bg.color = Color.white;
+                bg.type = Image.Type.Simple;
+                bg.preserveAspect = false;
+            }
 
             BuildMain();
             BuildStages();
@@ -100,6 +108,15 @@ namespace Gstarr.Game
             var titleText = UIFactory.CreateText("Title", mainPanel, title, 150, style: FontStyle.BoldAndItalic);
             UIFactory.Place(titleText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(-330f, 220f), new Vector2(1000f, 200f));
             titleText.color = new Color(1f, 0.6f, 0.25f);
+            var logo = Gstarr.Items.GameAssets.Instance != null ? Gstarr.Items.GameAssets.Instance.titleLogo : null;
+            if (logo != null)
+            {
+                titleText.gameObject.SetActive(false);
+                var logoImage = UIFactory.CreateImage("TitleLogo", mainPanel, Color.white);
+                logoImage.sprite = logo;
+                logoImage.preserveAspect = true;
+                UIFactory.Place(logoImage.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(-330f, 220f), new Vector2(1000f, 200f));
+            }
 
             var list = UIFactory.Place(UIFactory.CreateRect("Buttons", mainPanel), new Vector2(0.5f, 0.5f), new Vector2(-330f, -100f), new Vector2(420f, 220f));
             UIFactory.AddVerticalLayout(list, 24f);

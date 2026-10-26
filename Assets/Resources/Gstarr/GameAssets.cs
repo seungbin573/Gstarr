@@ -33,6 +33,16 @@ namespace Gstarr.Items
         public Sprite enemySprite;
         [Tooltip("적 종류별 스프라이트. 순서: 일반, 박자 원거리, 반박 원거리, 비행")]
         public Sprite[] enemySprites = new Sprite[4];
+        [Tooltip("보스. Assets/arts/character/boss.png")]
+        public Sprite bossSprite;
+        [Tooltip("두더지. Assets/arts/character/enemy5.png")]
+        public Sprite moleSprite;
+        [Tooltip("메인 메뉴 제목. Assets/arts/UI/TitleLogo.png")]
+        public Sprite titleLogo;
+        [Tooltip("메인 메뉴 배경. Assets/arts/UI/MenuBackground.png")]
+        public Sprite menuBackground;
+        [Tooltip("체력 칸. Assets/arts/UI/Heart.png")]
+        public Sprite heartSprite;
 
         [Header("Glory Kill")]
         [Tooltip("글로리 킬 노트. 순서: 위(X), 오른쪽(A), 아래(B), 왼쪽(Y). PNG를 바꾸면 모양이 바뀐다.")]

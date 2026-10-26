@@ -20,13 +20,19 @@ namespace Gstarr.UI
             var root = (RectTransform)canvas.transform;
 
             fills = new Image[Segments];
+            var heart = Gstarr.Items.GameAssets.Instance != null ? Gstarr.Items.GameAssets.Instance.heartSprite : null;
             for (int i = 0; i < Segments; i++)
             {
-                var back = Gstarr.Game.UIFactory.CreateImage("Pip" + i, root, new Color(0.08f, 0.08f, 0.1f, 0.9f));
+                var back = Gstarr.Game.UIFactory.CreateImage("Pip" + i, root, new Color(0.08f, 0.08f, 0.1f, heart != null ? 0f : 0.9f));
                 Gstarr.Game.UIFactory.Place(back.rectTransform, new Vector2(0f, 1f), new Vector2(36f + i * 58f, -32f), new Vector2(50f, 28f));
                 back.rectTransform.pivot = new Vector2(0f, 1f);
 
-                var fill = Gstarr.Game.UIFactory.CreateImage("Fill", back.transform, new Color(0.92f, 0.22f, 0.28f, 1f));
+                var fill = Gstarr.Game.UIFactory.CreateImage("Fill", back.transform, heart != null ? Color.white : new Color(0.92f, 0.22f, 0.28f, 1f));
+                if (heart != null)
+                {
+                    fill.sprite = heart;
+                    fill.preserveAspect = true;
+                }
                 var rt = fill.rectTransform;
                 rt.anchorMin = Vector2.zero;
                 rt.anchorMax = Vector2.one;
@@ -52,7 +58,15 @@ namespace Gstarr.UI
         {
             int shown = max <= 0 ? 0 : Mathf.Clamp(Mathf.RoundToInt(current / (float)max * Segments), 0, Segments);
             for (int i = 0; i < fills.Length; i++)
-                fills[i].enabled = i < shown;
+            {
+                bool alive = i < shown;
+                if (fills[i].sprite != null)
+                {
+                    fills[i].enabled = true;
+                    fills[i].color = alive ? Color.white : new Color(1f, 1f, 1f, 0.28f);
+                }
+                else fills[i].enabled = alive;
+            }
         }
     }
 }

@@ -134,6 +134,9 @@ namespace Gstarr.EditorTools
                 so => so.FindProperty("iconTint").colorValue = new Color(1f, 0.55f, 0.45f));
             CreateItemIfMissing<InvulnerabilityPotionItem>(InvulnerabilityPotionPath, "Invulnerability Potion", "Assets/arts/Items/Potion.png", ItemCategory.Effect,
                 so => so.FindProperty("iconTint").colorValue = new Color(0.5f, 0.85f, 1f));
+            AssignDedicatedIcon(DamagePotionPath, "Assets/arts/Items/DamagePotion.png");
+            AssignDedicatedIcon(InvulnerabilityPotionPath, "Assets/arts/Items/InvulnerabilityPotion.png");
+            AssignDedicatedIcon(FlashbangPath, "Assets/arts/Items/Flashbang.png");
 
             var gameAssets = AssetDatabase.LoadAssetAtPath<GameAssets>(GameAssetsPath);
             if (gameAssets != null)
@@ -179,6 +182,19 @@ namespace Gstarr.EditorTools
             so.FindProperty("category").enumValueIndex = (int)category;
             extra?.Invoke(so);
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AssignDedicatedIcon(string itemPath, string iconPath)
+        {
+            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(iconPath);
+            var item = AssetDatabase.LoadAssetAtPath<ItemData>(itemPath);
+            if (sprite == null || item == null) return;
+            var so = new SerializedObject(item);
+            var icon = so.FindProperty("icon");
+            if (icon.objectReferenceValue == sprite) return;
+            icon.objectReferenceValue = sprite;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(item);
         }
 
         /// <summary>모든 ItemData 에 대해 ItemTile 을 만들고 Items 팔레트를 갱신. (전투 = 첫 줄, 효과 = 둘째 줄)</summary>

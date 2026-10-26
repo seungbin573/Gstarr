@@ -67,7 +67,7 @@ namespace Gstarr.Game
         // ───────────────────────── 진입점 ─────────────────────────
 
         /// <summary>인트로 전체를 재생하고 끝나면 스스로 사라진다.</summary>
-        public static IEnumerator Play(Sprite classroom, string title, string[] lines, float beatInterval)
+        public static IEnumerator Play(Sprite classroom, string title, string[] lines, float beatInterval, System.Action onWake = null)
         {
             string scene = SceneManager.GetActiveScene().name;
             bool shortVersion = seenScene == scene;
@@ -83,6 +83,8 @@ namespace Gstarr.Game
             else
                 yield return intro.StartCoroutine(intro.RunFull(lines ?? new string[0]));
 
+            onWake?.Invoke();
+            yield return intro.StartCoroutine(intro.WakeForCountdown());
             Destroy(go);
         }
 
@@ -98,15 +100,15 @@ namespace Gstarr.Game
             Destroy(go);
         }
 
-        /// <summary>클리어. 눈을 뜨고 해냈다는 느낌만 짧게 보여 준 뒤 결과 화면으로 넘긴다.</summary>
-        public static IEnumerator PlayClear(System.Action reveal)
+        /// <summary>클리어. 눈을 뜨면 해냈다는 컷신이 나오고, 그 다음 결과 화면으로 넘긴다.</summary>
+        public static IEnumerator PlayClear(Sprite image, string[] lines, System.Action reveal)
         {
             var go = new GameObject("SleepIntro");
             var intro = go.AddComponent<SleepIntro>();
-            intro.Build(null, "");
-            yield return intro.StartCoroutine(intro.RunClear());
+            intro.Build(image, "해냈다!");
+            yield return intro.StartCoroutine(intro.RunClear(lines ?? new string[0]));
             reveal?.Invoke();
-            yield return intro.StartCoroutine(FadeGroup(intro.rootGroup, 1f, 0f, intro.skipped ? 0.25f : 0.7f));
+            yield return intro.StartCoroutine(FadeGroup(intro.rootGroup, 1f, 0f, intro.skipped ? 0.25f : 0.55f));
             Destroy(go);
         }
 
@@ -167,8 +169,7 @@ namespace Gstarr.Game
                 yield return ShowCenter(SleepText, 0.5f, 1.0f, 0.5f);
             }
 
-            // 3. 꿈속에서 눈을 뜬다
-            yield return WakeInDream(skipped ? 0.8f : 1f);
+            // 3. 눈은 감긴 채로 넘긴다. 3, 2, 1 은 Play 가 이어서 맞춘다.
         }
 
         private IEnumerator RunCaught(string[] lines)
@@ -196,28 +197,39 @@ namespace Gstarr.Game
             yield return FadeImage(cover, 0f, 1f, skipped ? 0.2f : 0.85f);
         }
 
-        private IEnumerator RunClear()
+        private IEnumerator RunClear(string[] lines)
         {
             photoStill = true;
-            sceneLayer.gameObject.SetActive(false);
+            sceneLayer.gameObject.SetActive(true);
             caption.alpha = 0f;
-            vignette.color = new Color(0f, 0f, 0f, 0.15f);
-            dreamTint.color = new Color(1f, 0.78f, 0.35f, 0.42f);
+            fadeBlack.color = Color.clear;
+            vignette.color = new Color(1f, 0.72f, 0.28f, 0.18f);
+            dreamTint.color = new Color(1f, 0.78f, 0.35f, 0.28f);
+            if (titleText != null) titleText.color = new Color(1f, 0.84f, 0.35f);
             centerText.fontSize = 96;
             centerText.color = new Color(1f, 0.84f, 0.4f, 0f);
             SetLids(1f);
 
-            yield return AnimateLid(1f, 0f, skipped ? 0.15f : 0.95f, EaseOut);
-            StartCoroutine(FadeImage(dreamTint, dreamTint.color.a, 0f, skipped ? 0.2f : 1.3f));
-            if (skipped) yield break;
+            yield return AnimateLid(1f, 0f, skipped ? 0.15f : 0.75f, EaseOut);
+            StartCoroutine(FadeImage(dreamTint, dreamTint.color.a, 0f, skipped ? 0.15f : 0.8f));
+            if (skipped)
+            {
+                yield return FadeImage(cover, 0f, 1f, 0.15f);
+                yield break;
+            }
 
             centerText.text = "해냈다!";
-            yield return FadeText(centerText, 0f, 1f, 0.35f);
-            for (float h = 0f; h < 1.15f && !skipped; h += Time.unscaledDeltaTime)
-            {
-                if (SkipPressed() || AdvancePressed()) skipped = true;
-                yield return null;
-            }
+            yield return FadeText(centerText, 0f, 1f, 0.25f);
+            yield return Wait(0.7f);
+            yield return FadeText(centerText, 1f, 0f, 0.25f);
+            centerText.text = "";
+
+            yield return FadeGroup(caption, 0f, 1f, 0.25f);
+            int n = lines.Length;
+            for (int i = 0; i < n && !skipped; i++)
+                yield return TypeLine(lines[i], i == n - 1);
+
+            yield return FadeImage(cover, 0f, 1f, skipped ? 0.2f : 0.7f);
         }
 
         private IEnumerator RunShort()
@@ -226,8 +238,64 @@ namespace Gstarr.Game
             caption.alpha = 0f;
             fadeBlack.color = Color.clear;
             SetLids(1f);
-            yield return Wait(0.2f);
-            yield return WakeInDream(0.7f);
+            yield break;
+        }
+
+        private IEnumerator WakeForCountdown()
+        {
+            sceneLayer.gameObject.SetActive(false);
+            caption.alpha = 0f;
+            fadeBlack.color = Color.clear;
+            SetLids(1f);
+            var conductor = Gstarr.Rhythm.RhythmConductor.Instance;
+            int beats = conductor != null ? Mathf.Max(1, conductor.CountdownBeats) : 3;
+            float beat = beatInterval;
+            double duration = beat * beats;
+            PlaySfx(dreamClip, 0.55f);
+            dreamTint.color = WithAlpha(DreamColor, 0.55f);
+            vignette.color = WithAlpha(DreamColor * 0.35f, 0.85f);
+            centerText.fontSize = 200;
+            centerText.fontStyle = FontStyle.BoldAndItalic;
+            centerText.color = Color.white;
+            centerText.rectTransform.SetAsLastSibling();
+
+            float waited = 0f;
+            while (waited < duration + 0.75f)
+            {
+                double song = conductor != null ? conductor.SongTime : waited - duration;
+                float p = duration <= 0.01 ? 1f : Mathf.Clamp01((float)((song + duration) / duration));
+                SetLids(LidForCountdown(p));
+                dreamTint.color = WithAlpha(DreamColor, Mathf.Lerp(0.55f, 0f, p));
+                vignette.color = WithAlpha(DreamColor * 0.35f, Mathf.Lerp(0.85f, 0f, p));
+                string label = "";
+                if (song < 0)
+                {
+                    int k = Mathf.CeilToInt((float)(-song / Mathf.Max(0.05f, beat)));
+                    if (k >= 1 && k <= beats) label = k.ToString();
+                }
+                centerText.text = label;
+                centerText.color = new Color(1f, 1f, 1f, label.Length > 0 ? 1f : 0f);
+                if (song >= 0) break;
+                if (SkipPressed())
+                {
+                    conductor?.SkipOpeningCountdown();
+                    break;
+                }
+                waited += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            SetLids(0f);
+            centerText.text = "";
+            dreamTint.color = WithAlpha(DreamColor, 0f);
+            vignette.color = WithAlpha(DreamColor * 0.35f, 0f);
+        }
+
+        private static float LidForCountdown(float p)
+        {
+            if (p < 0.34f) return Mathf.Lerp(1f, 0.42f, EaseOut(p / 0.34f));
+            if (p < 0.62f) return Mathf.Lerp(0.42f, 0.68f, (p - 0.34f) / 0.28f);
+            return Mathf.Lerp(0.68f, 0f, EaseOut((p - 0.62f) / 0.38f));
         }
 
         private IEnumerator WakeInDream(float speed)

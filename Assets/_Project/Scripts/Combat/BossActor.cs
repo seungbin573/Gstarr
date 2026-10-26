@@ -55,9 +55,7 @@ namespace Gstarr.Combat
         private SpriteRenderer shotVisual;
         private float sweepTime;
         private float sweepDuration = 3.4f;
-        private float sweepStart = 90f;
         private float beamLength = 8f;
-        private float ringRadius = 4f;
         private float hurtCooldown;
         private const float EntranceHold = 2.2f;
 
@@ -262,6 +260,7 @@ namespace Gstarr.Combat
             arrived = false;
             attackTimer = phase == 1 ? phaseOneAttackInterval : attackInterval;
             transform.localScale = baseScale;
+            transform.rotation = Quaternion.identity;
             SetWarningsVisible(false);
             patternCursor = (patternCursor + 1) % 4;
         }
@@ -299,12 +298,10 @@ namespace Gstarr.Combat
                     break;
                 case Pattern.Orbit:
                     sweepDuration = phase == 1 ? 1.45f : 1.15f;
-                    sweepStart = 0f;
                     beamLength = 2.6f;
                     break;
                 default:
                     sweepDuration = phase == 1 ? 1.25f : 1.0f;
-                    sweepStart = 180f;
                     beamLength = 2.4f;
                     break;
             }
@@ -425,7 +422,7 @@ namespace Gstarr.Combat
                 shotVisual.enabled = true;
                 shotVisual.transform.position = pos;
                 shotVisual.transform.localScale = Vector3.one * 0.42f;
-                shotVisual.color = new Color(1f, 0.35f, 0.2f, 0.95f);
+                shotVisual.color = new Color(1f, 0.92f, 0.55f, 0.95f);
             }
             HideBeams();
             if (hurtCooldown <= 0f && player != null && Vector2.Distance(pos, PlayerBodyCenter()) <= 0.5f)
@@ -452,21 +449,23 @@ namespace Gstarr.Combat
 
             if (pattern == Pattern.Orbit || pattern == Pattern.Ring)
             {
-                SweepFlatLane(pattern == Pattern.Orbit ? 0.85f : 1.45f, pattern == Pattern.Orbit ? 0.72f : 0.55f, damaging, pattern == Pattern.Orbit);
+                bool downbeat = pattern == Pattern.Orbit;
+                SweepFlatLane(downbeat ? 0.72f : 1.55f, downbeat ? 0.34f : 0.28f, damaging, downbeat, downbeat ? -32f : 24f);
                 return;
             }
         }
 
-        /// <summary>평지에서 좌우로만 지나가는 바닥 파동.</summary>
-        private void SweepFlatLane(float lift, float thickness, bool damaging, bool leftToRight)
+        /// <summary>지휘봉이 바닥을 가르거나, 들어 올린 채로 지나간다.</summary>
+        private void SweepFlatLane(float lift, float thickness, bool damaging, bool leftToRight, float angle)
         {
             float left = hasArenaBounds ? arenaMinX + 0.7f : home.x - cell.x * 4f;
             float right = hasArenaBounds && !float.IsPositiveInfinity(arenaMaxX) ? arenaMaxX - 0.7f : home.x + cell.x * 4f;
             float x = Mathf.Lerp(leftToRight ? left : right, leftToRight ? right : left, Sweep01());
             float y = arenaFloorY > float.NegativeInfinity ? arenaFloorY + lift : home.y + lift * 0.35f;
             y = Mathf.Clamp(y, home.y - cell.y, home.y + cell.y * 1.15f);
-            ShowBeam(0, new Vector2(x, y), 0f, beamLength, thickness, damaging);
+            ShowBeam(0, new Vector2(x, y), angle, beamLength, thickness, damaging);
             Face(leftToRight ? 1 : -1);
+            transform.rotation = Quaternion.Euler(0f, 0f, angle * 0.65f);
         }
 
         private float Sweep01() => sweepDuration <= 0.01f ? 1f : Mathf.Clamp01(sweepTime / sweepDuration);
@@ -537,12 +536,14 @@ namespace Gstarr.Combat
         private void PoseMark()
         {
             float t = 1f - Mathf.Clamp01(attackTimer / MarkTime);
-            float squash = Mathf.Lerp(1f, 0.7f, t);
-            transform.localScale = new Vector3(baseScale.x, baseScale.y * squash, baseScale.z);
+            float lift = Mathf.Lerp(0f, 1f, t);
+            transform.localScale = new Vector3(baseScale.x, baseScale.y * Mathf.Lerp(1f, 1.08f, lift), baseScale.z);
+            transform.rotation = Quaternion.Euler(0f, 0f, -facing * 28f * lift);
         }
 
         private void PoseDash()
         {
+            transform.rotation = Quaternion.identity;
             transform.localScale = new Vector3(baseScale.x * 1.18f, baseScale.y * 0.86f, baseScale.z);
         }
 

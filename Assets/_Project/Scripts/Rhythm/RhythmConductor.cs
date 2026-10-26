@@ -135,6 +135,45 @@ namespace Gstarr.Rhythm
             else { source.UnPause(); cueSource.UnPause(); }
         }
 
+        /// <summary>눈 뜨는 장면과 함께 3, 2, 1 을 지금 시작한다. 눈이 뜨는 순간 곡이 시작한다.</summary>
+        public void StartCountdownNow(int beats)
+        {
+            if (!IsReady || source == null) return;
+            float beat = Mathf.Max(0.05f, CountdownInterval);
+            int count = Mathf.Max(1, beats);
+            double delay = count * beat;
+            IsPaused = false;
+            double now = UnityEngine.Time.realtimeSinceStartupAsDouble;
+            realStart = now + delay;
+            dspStart = AudioSettings.dspTime + delay;
+            SongTime = -delay;
+            countdownReleaseAt = now + delay;
+            nextBeat = 0;
+            nextHalfBeat = 0;
+            source.Stop();
+            cueSource.Stop();
+            source.PlayScheduled(dspStart);
+            Gstarr.Game.GamePause.SetCountdown(true);
+        }
+
+        /// <summary>눈 뜨는 카운트를 건너뛰면 곡을 바로 시작한다.</summary>
+        public void SkipOpeningCountdown()
+        {
+            if (!IsReady || source == null || SongTime >= 0) return;
+            IsPaused = false;
+            double now = UnityEngine.Time.realtimeSinceStartupAsDouble;
+            realStart = now;
+            dspStart = AudioSettings.dspTime;
+            SongTime = 0;
+            countdownReleaseAt = now;
+            nextBeat = FirstBeatAtOrAfter(0);
+            nextHalfBeat = FirstHalfBeatAtOrAfter(0);
+            source.Stop();
+            source.time = 0f;
+            source.Play();
+            Gstarr.Game.GamePause.SetCountdown(false);
+        }
+
         public BeatChart Chart { get; private set; }
         /// <summary>음악 시작 기준 누적 시간 (루프해도 계속 증가). 시작 전에는 음수.</summary>
         public double SongTime { get; private set; }

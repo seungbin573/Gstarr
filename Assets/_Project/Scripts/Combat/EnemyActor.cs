@@ -53,6 +53,9 @@ namespace Gstarr.Combat
         private bool preparing;
         private bool attackArmed;
         private float beatMoveTimer;
+        private bool lunging;
+        private bool lungeHit;
+        private float lungeTimer;
 
         private bool moleInitialized;
         private bool moleBuried;
@@ -89,6 +92,10 @@ namespace Gstarr.Combat
         private static Sprite ArtFor(EnemyKind enemyKind)
         {
             var assets = Gstarr.Items.GameAssets.Instance;
+            if (enemyKind == EnemyKind.Boss && assets != null && assets.bossSprite != null)
+                return assets.bossSprite;
+            if (enemyKind == EnemyKind.Mole && assets != null && assets.moleSprite != null)
+                return assets.moleSprite;
             int index = enemyKind switch
             {
                 EnemyKind.RangedBeat => 1,
@@ -330,6 +337,7 @@ namespace Gstarr.Combat
         {
             if (!beatBound || conductor == null) return;
             conductor.Beat -= OnBeat;
+            conductor.HalfBeat -= OnHalfBeat;
             beatBound = false;
         }
 
@@ -483,6 +491,12 @@ namespace Gstarr.Combat
             if (kind == EnemyKind.Boss) return;
             if (kind == EnemyKind.BeatChaser || kind == EnemyKind.Flyer)
             {
+                if (kind == EnemyKind.BeatChaser && lunging)
+                {
+                    StepLunge();
+                    ClampLeash();
+                    return;
+                }
                 if (beatMoveTimer > 0f)
                 {
                     beatMoveTimer -= Time.fixedDeltaTime;
@@ -534,6 +548,7 @@ namespace Gstarr.Combat
             conductor = current;
             if (conductor == null) return;
             conductor.Beat += OnBeat;
+            conductor.HalfBeat += OnHalfBeat;
             beatBound = true;
         }
 
@@ -546,6 +561,8 @@ namespace Gstarr.Combat
                 StepFlyer();
                 beatMoveTimer = BeatStepDuration();
             }
+
+            if (kind == EnemyKind.RangedHalfBeat) return;
 
             // 짝수 박은 예고, 홀수 박에 공격. 보고 나서 한 박 뒤에 친다.
             bool attackTurn = (beat & 1) == 1;
@@ -568,7 +585,7 @@ namespace Gstarr.Combat
             switch (kind)
             {
                 case EnemyKind.BeatChaser:
-                    if (strike && IsPlayerInMeleeRange()) AttackMelee();
+                    if (strike) Lunge();
                     else if (!IsPlayerInMeleeRange())
                     {
                         MoveGroundEnemy();
@@ -579,17 +596,37 @@ namespace Gstarr.Combat
                     if (strike) AttackMelee();
                     break;
                 case EnemyKind.RangedBeat:
-                case EnemyKind.RangedHalfBeat:
+                    if (strike) FireLane();
+                    break;
                 case EnemyKind.Flyer:
-                    if (strike) FireRanged();
+                    if (strike) FireFromAbove();
                     break;
             }
+        }
+
+        private void OnHalfBeat(long index)
+        {
+            if (state != State.Combat || kind != EnemyKind.RangedHalfBeat || GamePause.BlocksGameplay) return;
+            if ((index & 1) == 0)
+            {
+                attackArmed = CanWindUp();
+                preparing = attackArmed;
+                return;
+            }
+
+            preparing = false;
+            if (!attackArmed) return;
+            attackArmed = false;
+            FireSnap();
         }
 
         private bool CanWindUp()
         {
             if (player == null) return false;
-            if (kind == EnemyKind.BeatChaser || kind == EnemyKind.Mole)
+            if (kind == EnemyKind.BeatChaser)
+                return Mathf.Abs(player.position.x - transform.position.x) <= detectionRange * 0.9f
+                    && Mathf.Abs(player.position.y - transform.position.y) <= 1.8f;
+            if (kind == EnemyKind.Mole)
                 return (kind != EnemyKind.Mole || moleActive) && IsPlayerInMeleeRange();
             return Vector2.Distance(player.position, transform.position) <= detectionRange;
         }
@@ -830,6 +867,7 @@ namespace Gstarr.Combat
                     body.enabled = true;
                     rb.bodyType = RigidbodyType2D.Dynamic;
                     rb.gravityScale = 4f;
+                    ShockOnEmerge();
                 }
                 return true;
             }
@@ -948,6 +986,54 @@ namespace Gstarr.Combat
             }
         }
 
+        private void Lunge()
+        {
+            if (player == null || rb == null) return;
+            float dx = player.position.x - transform.position.x;
+            Face(dx);
+            if (IsPlayerInMeleeRange())
+            {
+                AttackMelee();
+                return;
+            }
+
+            if (Mathf.Abs(dx) > detectionRange || Mathf.Abs(player.position.y - transform.position.y) > 1.8f || !RoomAhead(dx >= 0f ? 1 : -1))
+            {
+                MoveGroundEnemy();
+                beatMoveTimer = BeatStepDuration();
+                return;
+            }
+
+            lunging = true;
+            lungeHit = false;
+            lungeTimer = 0.32f;
+            rb.linearVelocity = new Vector2(Mathf.Sign(dx) * moveSpeed * 2.6f, rb.linearVelocity.y);
+            Gstarr.Game.GameAudio.Play(Gstarr.Game.GameAudio.Id.Dash, 0.7f);
+        }
+
+        private void StepLunge()
+        {
+            lungeTimer -= Time.fixedDeltaTime;
+            if (!lungeHit && IsPlayerInMeleeRange())
+            {
+                lungeHit = true;
+                AttackMelee();
+            }
+
+            if (lungeTimer > 0f && RoomAhead(rb.linearVelocity.x >= 0f ? 1 : -1)) return;
+            lunging = false;
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+        }
+
+        private void ShockOnEmerge()
+        {
+            if (player == null) return;
+            if (Mathf.Abs(player.position.x - moleSurfacePosition.x) > 1.15f) return;
+            if (Mathf.Abs(player.position.y - moleSurfacePosition.y) > 1.4f) return;
+            Gstarr.Game.GameAudio.Play(Gstarr.Game.GameAudio.Id.EnemySwing, 0.8f);
+            player.GetComponentInParent<Health>()?.TakeDamage(attackDamage, new Vector2(Mathf.Sign(player.position.x - moleSurfacePosition.x), 0.8f));
+        }
+
         private void AttackMelee()
         {
             if (kind == EnemyKind.Mole && !moleActive) return;
@@ -973,6 +1059,52 @@ namespace Gstarr.Combat
             return player != null
                    && Mathf.Abs(player.position.x - transform.position.x) <= attackRange
                    && Mathf.Abs(player.position.y - transform.position.y) <= 1.6f;
+        }
+
+        private void FireLane()
+        {
+            if (player == null) return;
+            Face(player.position.x - transform.position.x);
+            Vector2 origin = (Vector2)transform.position + new Vector2(Facing() * 0.55f, 0.35f);
+            LaunchShot(origin, new Vector2(Facing(), 0f), 11f, new Color(1f, 0.45f, 0.15f), 0.28f);
+        }
+
+        private void FireSnap()
+        {
+            if (player == null) return;
+            Vector2 origin = (Vector2)transform.position + new Vector2(Facing() * 0.4f, 0.55f);
+            Vector2 aim = ((Vector2)player.position + Vector2.up * 0.35f - origin);
+            LaunchShot(origin, aim, 13.5f, new Color(0.55f, 0.95f, 1f), 0.14f);
+        }
+
+        private void FireFromAbove()
+        {
+            if (player == null) return;
+            Vector2 origin = (Vector2)transform.position + Vector2.down * 0.2f;
+            Vector2 aim = ((Vector2)player.position - origin);
+            LaunchShot(origin, aim, 8.5f, new Color(0.75f, 0.85f, 1f), 0.18f);
+        }
+
+        private void LaunchShot(Vector2 origin, Vector2 direction, float speed, Color color, float scale, bool audible = true)
+        {
+            if (direction.sqrMagnitude < 0.01f) direction = new Vector2(Facing(), 0f);
+            direction.Normalize();
+            RaycastHit2D wall = Physics2D.Raycast(origin, direction, detectionRange, groundMask);
+            if (wall.collider != null && player != null && Vector2.Distance(origin, wall.point) < Vector2.Distance(origin, player.position) - 0.2f)
+                return;
+
+            if (audible) Gstarr.Game.GameAudio.Play(Gstarr.Game.GameAudio.Id.EnemyShot);
+            GetComponent<Gstarr.Game.SpriteMotion>()?.AttackPose();
+            var shot = new GameObject("EnemyProjectile");
+            shot.transform.position = origin;
+            shot.transform.localScale = Vector3.one * scale;
+            var shotSprite = shot.AddComponent<SpriteRenderer>();
+            shotSprite.sprite = sprite != null ? sprite.sprite : Art;
+            shotSprite.color = color;
+            shotSprite.sortingOrder = 6;
+            var projectile = shot.AddComponent<Projectile>();
+            int playerLayer = player != null ? player.gameObject.layer : 0;
+            projectile.Launch(direction * speed, attackDamage, detectionRange, 1 << playerLayer, gameObject);
         }
 
         private void FireRanged()

@@ -84,6 +84,9 @@ namespace Gstarr.Game
             UIFactory.Place(titleText.rectTransform, new Vector2(0.5f, 1f), new Vector2(-barSize.x * 0.5f + 300f, -48f), new Vector2(600f, 30f));
             timeText = UIFactory.CreateText("SongTime", root, "", 24, TextAnchor.UpperRight, FontStyle.Normal);
             UIFactory.Place(timeText.rectTransform, new Vector2(0.5f, 1f), new Vector2(barSize.x * 0.5f - 150f, -48f), new Vector2(300f, 30f));
+            bg.gameObject.SetActive(false);
+            titleText.gameObject.SetActive(false);
+            timeText.gameObject.SetActive(false);
 
             countdownText = UIFactory.CreateText("Countdown", root, "", 220, style: FontStyle.BoldAndItalic);
             UIFactory.Place(countdownText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 60f), new Vector2(900f, 300f));
@@ -106,7 +109,8 @@ namespace Gstarr.Game
             countdownDim = UIFactory.CreateImage("CountdownBlack", root, Color.black);
             UIFactory.Stretch(countdownDim.rectTransform);
             countdownDim.raycastTarget = false;
-            countdownDim.enabled = false;
+            countdownDim.enabled = true;
+            countdownText.text = "";
             countdownText.transform.SetAsLastSibling();
         }
 
@@ -114,13 +118,32 @@ namespace Gstarr.Game
         private Image countdownDim;
         private string lastCount;
         private float countPop;
+        private bool coverUntilWake = true;
+        private bool wakeOwnsCountdown;
 
         // 음악 시작 전 박자에 맞춰 3, 2, 1, 음악 시작 순간 GO!
         private void UpdateCountdown(float dt)
         {
             string label = "";
-            double t = conductor.SongTime;
-            float beat = conductor.CountdownInterval;
+            double t = conductor != null ? conductor.SongTime : -1;
+            float beat = conductor != null ? conductor.CountdownInterval : 0.5f;
+            if (wakeOwnsCountdown)
+            {
+                if (countdownDim != null) countdownDim.enabled = false;
+                countdownText.text = "";
+                return;
+            }
+            if (coverUntilWake)
+            {
+                if (countdownDim != null)
+                {
+                    countdownDim.enabled = true;
+                    countdownDim.color = Color.black;
+                    countdownDim.transform.SetAsLastSibling();
+                }
+                countdownText.text = "";
+                return;
+            }
             if (t < 0)
             {
                 int k = Mathf.CeilToInt((float)(-t / beat));
@@ -230,11 +253,23 @@ namespace Gstarr.Game
                     "하지만 선생님의 피아노 소리가 자장가처럼 들려왔다.",
                     "결국 책상에 엎드린 순간, 교실은 괴물들이 사는 꿈속으로 변했다."
                 },
-                conductor != null ? conductor.CountdownInterval : 0.5f);
+                conductor != null ? conductor.CountdownInterval : 0.5f,
+                BeginWakeCountdown);
+            wakeOwnsCountdown = false;
+            coverUntilWake = false;
             cutsceneActive = false;
             GamePause.SetPaused(false);
-            if (conductor != null) conductor.Resume();
             ShowHint("공중에서 점프를 한 번 더 누르면 더블 점프! 공격과 아이템은 박자에 맞춰 쓰세요.", 4f);
+        }
+
+        private void BeginWakeCountdown()
+        {
+            coverUntilWake = false;
+            wakeOwnsCountdown = true;
+            if (countdownDim != null) countdownDim.enabled = false;
+            GamePause.SetPaused(false);
+            if (conductor != null && conductor.IsReady)
+                conductor.StartCountdownNow(conductor.CountdownBeats);
         }
 
         private IEnumerator PlayCutscene(string title, string body, Sprite image)
@@ -429,7 +464,15 @@ namespace Gstarr.Game
             cutsceneActive = true;
             if (cleared)
             {
-                yield return SleepIntro.PlayClear(ShowResultPanel);
+                yield return SleepIntro.PlayClear(
+                    clearCutscene,
+                    new[]
+                    {
+                        "딩동댕동, 수업 종이 울리고 친구들이 하나둘 교실을 나섰다.",
+                        "선생님도 에이든이 잠든 줄 모른 채 악보를 정리했다.",
+                        "에이든은 끝까지 들키지 않고, 포근한 꿈속에서 새근새근 잠들어 있었다."
+                    },
+                    ShowResultPanel);
             }
             else
             {
