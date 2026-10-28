@@ -204,6 +204,7 @@ namespace Gstarr.Player
             }
 
             moveInput = moveAction.ReadValue<Vector2>();
+            IgnoreDpadMove();
             if (Mathf.Abs(moveInput.x) < stickDeadZone) moveInput.x = 0f;
             if (Mathf.Abs(moveInput.y) < stickDeadZone) moveInput.y = 0f;
 
@@ -271,7 +272,19 @@ namespace Gstarr.Player
 
         private void CheckGround()
         {
-            IsGrounded = rb.IsTouching(groundFilter) && rb.linearVelocity.y <= 0.01f;
+            IsGrounded = false;
+            if (rb.linearVelocity.y <= 0.08f)
+            {
+                var contacts = new ContactPoint2D[8];
+                int count = rb.GetContacts(groundFilter, contacts);
+                float minUp = Mathf.Cos(maxGroundAngle * Mathf.Deg2Rad);
+                for (int i = 0; i < count; i++)
+                {
+                    if (contacts[i].normal.y < minUp) continue;
+                    IsGrounded = true;
+                    break;
+                }
+            }
 
             if (IsGrounded)
                 isJumping = false;
@@ -368,6 +381,26 @@ namespace Gstarr.Player
             v.x = Mathf.Clamp(v.x, -moveSpeed, moveSpeed);
             if (v.y > 0f) v.y *= 0.5f;
             rb.linearVelocity = v;
+        }
+
+        /// <summary>십자키는 아이템 선택 전용. 스틱이나 방향키로만 움직인다.</summary>
+        private void IgnoreDpadMove()
+        {
+            var pad = Gamepad.current;
+            if (pad == null) return;
+            Vector2 dpad = pad.dpad.ReadValue();
+            if (dpad.sqrMagnitude < 0.04f) return;
+
+            var keyboard = Keyboard.current;
+            bool arrows = keyboard != null && (keyboard.upArrowKey.isPressed || keyboard.downArrowKey.isPressed
+                || keyboard.leftArrowKey.isPressed || keyboard.rightArrowKey.isPressed);
+            if (arrows) return;
+
+            if ((moveInput - dpad).sqrMagnitude < 0.04f)
+            {
+                Vector2 stick = pad.leftStick.ReadValue();
+                moveInput = stick.sqrMagnitude > 0.04f ? stick : Vector2.zero;
+            }
         }
 
         private void UpdateFacingVisual()

@@ -178,7 +178,7 @@ namespace Gstarr.World
             }
 
             for (int i = 0; i < rooms.Count; i++)
-                rooms[i].Tick(playerBody.bounds);
+                rooms[i].Tick(playerBody);
             AssignLeashes();
             UpdateCameraFrame(playerBody.bounds);
         }
@@ -258,20 +258,6 @@ namespace Gstarr.World
         public float OpeningHeight;
         private int lockCount;
 
-        public bool SteppedOn(Bounds player)
-        {
-            if (player.max.x < MinX + 0.02f || player.min.x > MaxX - 0.02f) return false;
-            float feet = player.min.y;
-            return feet >= FloorY - 0.35f && feet <= FloorY + OpeningHeight;
-        }
-
-        public void NotePlayer(Bounds player)
-        {
-            bool onDoor = SteppedOn(player);
-            for (int i = 0; i < Blocks.Count; i++)
-                Blocks[i].SetPassageClear(onDoor);
-        }
-
         public void Lock()
         {
             lockCount++;
@@ -341,15 +327,15 @@ namespace Gstarr.World
             boss.SetEncounterActive(locked);
         }
 
-        public void Tick(Bounds player)
+        public void Tick(Collider2D player)
         {
-            if (cleared) return;
+            if (player == null || cleared) return;
 
-            left.NotePlayer(player);
-            right?.NotePlayer(player);
-            bool onDoor = left.SteppedOn(player) || (right != null && right.SteppedOn(player));
-            if (!locked && onDoor)
-                TryLock();
+            var bounds = player.bounds;
+            if (!locked && HasEntered(bounds))
+                TryLock(player);
+            if (locked)
+                KeepInside(player, force: false);
 
             if (locked && AllDead())
             {
@@ -360,7 +346,18 @@ namespace Gstarr.World
             }
         }
 
-        private void TryLock()
+        /// <summary>문 칸을 스치거나 문 위에 선 것은 입장이 아니다. 문 안쪽 바닥에 들어온 것만 잠근다.</summary>
+        private bool HasEntered(Bounds player)
+        {
+            float x = player.center.x;
+            if (x <= innerMin + 0.12f) return false;
+            if (right != null && x >= innerMax - 0.12f) return false;
+
+            float feet = player.min.y;
+            return feet > floorY - 0.2f && feet < floorY + left.OpeningHeight - 0.4f;
+        }
+
+        private void TryLock(Collider2D player)
         {
             occupants.Clear();
             for (int i = 0; i < anchored.Count; i++)
@@ -387,6 +384,8 @@ namespace Gstarr.World
             }
 
             locked = true;
+            KeepInside(player, force: true);
+            Physics2D.SyncTransforms();
             left.Lock();
             right?.Lock();
             StageHUD.HideAdvance();
@@ -395,6 +394,35 @@ namespace Gstarr.World
                 var boss = occupants[i] != null ? occupants[i].GetComponent<BossActor>() : null;
                 if (boss != null) boss.SetEncounterActive(true);
             }
+        }
+
+        private void KeepInside(Collider2D player, bool force)
+        {
+            float half = player.bounds.extents.x;
+            float min = innerMin + half + 0.08f;
+            float max = right != null ? innerMax - half - 0.08f : float.PositiveInfinity;
+            if (min > max) min = max = (innerMin + innerMax) * 0.5f;
+
+            var body = player.attachedRigidbody;
+            float x = body != null ? body.position.x : player.transform.position.x;
+            // 문에 닿아 있는 것은 그대로 둔다. 문을 통과해 밖으로 나갔을 때만 끌어온다.
+            if (!force && x >= min - 0.2f && x <= max + 0.2f) return;
+
+            float clamped = Mathf.Clamp(x, min, max);
+            if (Mathf.Abs(clamped - x) < 0.001f) return;
+
+            if (body != null)
+            {
+                body.position = new Vector2(clamped, body.position.y);
+                var velocity = body.linearVelocity;
+                if (clamped > x && velocity.x < 0f) velocity.x = 0f;
+                if (clamped < x && velocity.x > 0f) velocity.x = 0f;
+                body.linearVelocity = velocity;
+            }
+
+            var position = player.transform.position;
+            position.x = clamped;
+            player.transform.position = position;
         }
 
         private bool AllDead()
@@ -413,7 +441,7 @@ namespace Gstarr.World
 
         private Transform shutter;
         private Sprite shutterSprite;
-        private BoxCollider2D body;
+        private Collider2D body;
         private SpriteRenderer lamp;
         private float openY;
         private float targetY;
@@ -421,7 +449,7 @@ namespace Gstarr.World
         private float shutterWidth;
         private float shutterHeight;
         private float speed;
-        private bool passageClear;
+        private bool sealedDoor;
 
         public static DoorBlock Create(
             Tilemap tilemap, Vector3Int bottomCell, int heightTiles,
@@ -438,9 +466,8 @@ namespace Gstarr.World
             go.transform.SetParent(parent, false);
             go.transform.position = corner + new Vector3(targetW * 0.5f, 0f, 0f);
 
-            int ground = LayerMask.NameToLayer("Ground");
-            if (ground < 0) ground = 0;
-            go.layer = ground;
+            // 바닥 레이어에 두면 부딪힌 순간 땅으로 인식되어 벽에 붙는다.
+            go.layer = 0;
 
             var block = go.AddComponent<DoorBlock>();
             block.openY = frameH;
@@ -456,10 +483,14 @@ namespace Gstarr.World
             block.SetShutterBottom(frameH);
             shutterGo.GetComponent<SpriteRenderer>().enabled = false;
 
-            block.body = go.AddComponent<BoxCollider2D>();
-            block.body.size = new Vector2(targetW, frameH);
-            block.body.offset = new Vector2(0f, frameH * 0.5f);
-            block.body.enabled = false;
+            // 바닥 이음새와 윗면에 걸리지 않는 세로 벽. 점프로는 위에 올라설 수 없다.
+            var box = go.AddComponent<BoxCollider2D>();
+            float wallHeight = frameH + 1.1f;
+            box.size = new Vector2(Mathf.Max(0.45f, targetW * 0.72f), wallHeight);
+            box.offset = new Vector2(0f, 0.18f + wallHeight * 0.5f);
+            box.sharedMaterial = new PhysicsMaterial2D("DoorSlip") { friction = 0f, bounciness = 0f };
+            box.enabled = false;
+            block.body = box;
             return block;
         }
 
@@ -467,6 +498,8 @@ namespace Gstarr.World
         {
             targetY = 0f;
             speed = openY / 0.16f;
+            sealedDoor = true;
+            if (body != null) body.enabled = true;
             if (lamp != null) lamp.color = new Color(1f, 0.28f, 0.22f);
         }
 
@@ -474,10 +507,10 @@ namespace Gstarr.World
         {
             targetY = openY;
             speed = openY / 0.2f;
+            sealedDoor = false;
+            if (body != null) body.enabled = false;
             if (lamp != null) lamp.color = new Color(0.35f, 0.95f, 0.45f);
         }
-
-        public void SetPassageClear(bool clear) => passageClear = clear;
 
         public void PlaySlam()
         {
@@ -489,8 +522,7 @@ namespace Gstarr.World
             if (shutter == null) return;
             shutterBottom = Mathf.MoveTowards(shutterBottom, targetY, speed * Time.deltaTime);
             SetShutterBottom(shutterBottom);
-            bool closed = shutterBottom < openY * 0.08f;
-            if (body != null) body.enabled = closed && !passageClear;
+            if (body != null) body.enabled = sealedDoor;
             var renderer = shutter.GetComponent<SpriteRenderer>();
             if (renderer != null) renderer.enabled = false;
         }

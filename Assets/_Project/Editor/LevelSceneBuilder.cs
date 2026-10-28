@@ -382,8 +382,8 @@ namespace Gstarr.EditorTools
                 if (importer != null)
                 {
                     importer.GetSourceTextureWidthAndHeight(out _, out int height);
-                    // 적과 같이 키가 약 1.5 유닛. 그림을 바꿔도 다시 맞춘다.
-                    float ppu = Mathf.Max(1f, Mathf.Round(height / 1.5f));
+                    // 키가 약 1.7 유닛. 발은 히트박스 바닥에 맞춘다.
+                    float ppu = Mathf.Max(1f, Mathf.Round(height / 1.7f));
                     if (importer.userData != "gstarr-player" || !Mathf.Approximately(importer.spritePixelsPerUnit, ppu))
                     {
                         importer.textureType = TextureImporterType.Sprite;

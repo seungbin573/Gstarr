@@ -1,299 +1,334 @@
-using System;
+using System.Collections.Generic;
+using Gstarr.Game;
 using Gstarr.Items;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Gstarr.UI
 {
     /// <summary>
-    /// 아이템을 바꿀 때 플레이어 옆에 슬롯 캐러셀을 띄움 (야숨 화살 교체 UI 스타일).
-    /// 전투 아이템은 옆쪽 세로, 효과 아이템은 머리 위 가로로 슬라이드.
+    /// 오른쪽 위 아이템 리본. 고른 칸은 빛나고, 나머지는 작게 떠 있다.
+    /// 전투는 십자키 위/아래, 효과는 왼쪽/오른쪽.
     /// </summary>
     public class EquipmentSelectorView : MonoBehaviour
     {
         public const string ArtFolder = "Assets/arts";
 
+        private static readonly Color CombatAccent = new Color(1f, 0.78f, 0.45f);
+        private static readonly Color EffectAccent = new Color(0.78f, 0.62f, 1f);
+
         [SerializeField] private Sprite slotSprite;
-        [Tooltip("전투 아이템 (위/아래) 세로 슬롯 위치")]
-        [SerializeField] private Vector2 combatOffset = new Vector2(1.5f, 0.2f);
-        [Tooltip("효과 아이템 (좌/우) 가로 슬롯 위치")]
-        [SerializeField] private Vector2 effectOffset = new Vector2(0f, 1.9f);
-        [SerializeField] private float slotSpacing = 1.35f;
-        [SerializeField] private float iconSize = 0.9f;
-        [Tooltip("마지막 교체 후 UI가 떠 있는 시간")]
-        [SerializeField] private float showDuration = 1.2f;
-        [SerializeField] private float fadeDuration = 0.15f;
-        [SerializeField] private float slideSharpness = 18f;
-        [SerializeField] private int sortingOrder = 50;
         [SerializeField] private Color selectedTint = new Color(1f, 0.92f, 0.55f);
 
+        private const int SortingOrder = 112;
+        private const float SlotSize = 62f;
+        private const float SlotGap = 10f;
+
         private PlayerInventory inventory;
-        private Transform root;
-        private Carousel combatCarousel;
-        private Carousel effectCarousel;
-        private Font font;
+        private Row combat;
+        private Row effect;
+        private Sprite glowSprite;
+        private Sprite ribbonSprite;
+        private readonly List<Object> generated = new List<Object>();
 
         private void Awake()
         {
             inventory = GetComponent<PlayerInventory>();
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-
             if (slotSprite == null && GameAssets.Instance != null)
                 slotSprite = GameAssets.Instance.slotSprite;
 
-            root = new GameObject("ItemSelector").transform;
+            glowSprite = MakeGlow();
+            ribbonSprite = MakeRibbon();
 
-            if (inventory == null)
-            {
-                Debug.LogWarning("[EquipmentSelectorView] PlayerInventory 가 없어 아이템 UI를 표시할 수 없습니다.", this);
-                return;
-            }
-            if (slotSprite == null)
-                Debug.LogWarning("[EquipmentSelectorView] Slot Sprite 가 비어있습니다 (Assets/arts/UI/Slot.png).", this);
-
-            combatCarousel = CreateCarousel(ItemCategory.Combat, "CombatItems", combatOffset, Vector2.down);
-            effectCarousel = CreateCarousel(ItemCategory.Effect, "EffectItems", effectOffset, Vector2.right);
-        }
-
-        private Carousel CreateCarousel(ItemCategory category, string name, Vector2 offset, Vector2 axis)
-        {
-            return new Carousel(this, name, offset, axis,
-                () => inventory.GetItems(category).Count,
-                i => inventory.GetItems(category)[i].item.Icon,
-                i => inventory.GetItems(category)[i].item.IconTint,
-                i => inventory.GetItems(category)[i].item.DisplayName,
-                i => inventory.GetItems(category)[i].count);
-        }
-
-        private void Start()
-        {
-            if (inventory == null) return;
-            // 시작 시 보유 아이템을 잠깐 보여줌
-            combatCarousel?.Show(inventory.GetSelectedIndex(ItemCategory.Combat), 0);
-            effectCarousel?.Show(inventory.GetSelectedIndex(ItemCategory.Effect), 0);
+            var canvas = UIFactory.CreateCanvas(transform, "ItemHud", SortingOrder);
+            var root = (RectTransform)canvas.transform;
+            combat = BuildRow(root, ItemCategory.Combat, "전투", "▲\n▼", CombatAccent, new Vector2(-28f, -16f));
+            effect = BuildRow(root, ItemCategory.Effect, "효과", "◀   ▶", EffectAccent, new Vector2(-28f, -148f));
         }
 
         private void OnEnable()
         {
-            if (inventory != null) inventory.SelectionChanged += OnItemChanged;
+            if (inventory != null) inventory.SelectionChanged += OnSelectionChanged;
         }
 
         private void OnDisable()
         {
-            if (inventory != null) inventory.SelectionChanged -= OnItemChanged;
+            if (inventory != null) inventory.SelectionChanged -= OnSelectionChanged;
         }
 
         private void OnDestroy()
         {
-            if (root != null) Destroy(root.gameObject);
+            for (int i = generated.Count - 1; i >= 0; i--)
+            {
+                if (generated[i] != null) Destroy(generated[i]);
+            }
         }
 
-        private void OnItemChanged(ItemCategory category, int index, int delta)
-        {
-            var shown = category == ItemCategory.Combat ? combatCarousel : effectCarousel;
-            var other = category == ItemCategory.Combat ? effectCarousel : combatCarousel;
-            if (shown == null) return;
+        private void Start() => RefreshAll();
 
-            // 획득 등 목록만 바뀐 경우: 이미 떠 있을 때만 갱신
-            if (delta == 0 && inventory.ActiveCategory != category)
+        private void OnSelectionChanged(ItemCategory category, int index, int delta)
+        {
+            var row = category == ItemCategory.Combat ? combat : effect;
+            if (row != null && delta != 0)
             {
-                shown.SetCenter(index);
-                return;
+                row.punch = 1f;
+                row.direction = delta;
             }
-            shown.Show(index, delta);
-            other?.HideImmediate();
+            RefreshAll();
         }
 
         private void LateUpdate()
         {
-            root.position = transform.position;
-            float dt = Time.deltaTime;
-            combatCarousel?.Tick(dt);
-            effectCarousel?.Tick(dt);
+            if (inventory == null) return;
+            float dt = Time.unscaledDeltaTime;
+            Tick(combat, dt);
+            Tick(effect, dt);
         }
+
+        private void RefreshAll()
+        {
+            if (inventory == null) return;
+            Sync(combat);
+            Sync(effect);
+        }
+
+        private Row BuildRow(RectTransform root, ItemCategory category, string title, string arrows, Color accent, Vector2 pos)
+        {
+            var rowRoot = UIFactory.CreateRect(category + "Row", root);
+            UIFactory.Place(rowRoot, new Vector2(1f, 1f), pos, new Vector2(620f, 124f));
+
+            var ribbon = UIFactory.CreateImage("Ribbon", rowRoot, accent);
+            ribbon.sprite = ribbonSprite;
+            UIFactory.Stretch(ribbon.rectTransform);
+
+            var label = UIFactory.CreateText("Label", rowRoot, title, 24, TextAnchor.MiddleRight, FontStyle.BoldAndItalic);
+            UIFactory.Place(label.rectTransform, new Vector2(1f, 1f), new Vector2(-10f, -2f), new Vector2(120f, 32f));
+            var hint = UIFactory.CreateText("Hint", rowRoot, arrows, 16, TextAnchor.MiddleCenter, FontStyle.Bold);
+            UIFactory.Place(hint.rectTransform, new Vector2(1f, 0.5f), new Vector2(-14f, -4f), new Vector2(72f, 52f));
+            hint.color = accent;
+
+            var name = UIFactory.CreateText("Name", rowRoot, "", 22, TextAnchor.MiddleRight, FontStyle.BoldAndItalic);
+            UIFactory.Place(name.rectTransform, new Vector2(1f, 0f), new Vector2(-96f, 2f), new Vector2(360f, 30f));
+            TintOutline(name, new Color(0.12f, 0.04f, 0.22f, 0.95f));
+
+            return new Row
+            {
+                category = category,
+                root = rowRoot,
+                ribbon = ribbon,
+                label = label,
+                hint = hint,
+                name = name,
+                accent = accent
+            };
+        }
+
+        private void Tick(Row row, float dt)
+        {
+            if (row == null) return;
+            int count = inventory.GetItems(row.category).Count;
+            if (count != row.slots.Count) Sync(row);
+            row.punch = Mathf.MoveTowards(row.punch, 0f, dt * 2.2f);
+            ApplyVisuals(row, dt);
+        }
+
+        private void Sync(Row row)
+        {
+            var items = inventory.GetItems(row.category);
+            for (int i = 0; i < row.slots.Count; i++)
+                Destroy(row.slots[i].root.gameObject);
+            row.slots.Clear();
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                float fromRight = 108f + (items.Count - 1 - i) * (SlotSize + SlotGap);
+                var pos = new Vector2(-fromRight, 8f);
+                var slotRoot = UIFactory.CreateRect("Slot" + i, row.root);
+                UIFactory.Place(slotRoot, new Vector2(1f, 0.5f), pos, new Vector2(SlotSize, SlotSize));
+
+                var glow = UIFactory.CreateImage("Glow", slotRoot, row.accent);
+                glow.sprite = glowSprite;
+                var glowRt = glow.rectTransform;
+                glowRt.anchorMin = new Vector2(-0.55f, -0.55f);
+                glowRt.anchorMax = new Vector2(1.55f, 1.55f);
+                glowRt.offsetMin = glowRt.offsetMax = Vector2.zero;
+
+                var frame = UIFactory.CreateImage("Frame", slotRoot, Color.white);
+                if (slotSprite != null) frame.sprite = slotSprite;
+                UIFactory.Stretch(frame.rectTransform);
+
+                var icon = UIFactory.CreateImage("Icon", frame.transform, Color.white);
+                icon.preserveAspect = true;
+                var iconRt = icon.rectTransform;
+                iconRt.anchorMin = Vector2.zero;
+                iconRt.anchorMax = Vector2.one;
+                iconRt.offsetMin = new Vector2(10f, 10f);
+                iconRt.offsetMax = new Vector2(-10f, -10f);
+
+                var count = UIFactory.CreateText("Count", frame.transform, "", 18, TextAnchor.LowerRight, FontStyle.Bold);
+                UIFactory.Place(count.rectTransform, new Vector2(1f, 0f), new Vector2(-2f, 0f), new Vector2(36f, 22f));
+
+                row.slots.Add(new Slot { root = slotRoot, frame = frame, glow = glow, icon = icon, count = count, rest = pos, scale = 0.82f });
+            }
+
+            ApplyVisuals(row, 1f);
+        }
+
+        private void ApplyVisuals(Row row, float dt)
+        {
+            var items = inventory.GetItems(row.category);
+            int selected = items.Count == 0 ? 0 : Mathf.Clamp(inventory.GetSelectedIndex(row.category), 0, items.Count - 1);
+            bool active = inventory.ActiveCategory == row.category;
+            float time = Time.unscaledTime;
+            float breathe = 0.5f + 0.5f * Mathf.Sin(time * 2.4f);
+
+            float ribbonAlpha = active ? 0.72f : 0.28f;
+            row.ribbon.color = new Color(row.accent.r, row.accent.g, row.accent.b, ribbonAlpha);
+            row.label.color = active ? Color.Lerp(row.accent, Color.white, 0.35f) : new Color(1f, 1f, 1f, 0.45f);
+            var hint = row.accent;
+            hint.a = active ? 0.45f + 0.4f * breathe : 0.22f;
+            row.hint.color = hint;
+            float hintNudge = active ? Mathf.Sin(time * 3.2f) * 3f : 0f;
+            row.hint.rectTransform.anchoredPosition = new Vector2(-14f, -4f + (row.category == ItemCategory.Combat ? hintNudge : 0f));
+            if (row.category == ItemCategory.Effect)
+                row.hint.rectTransform.anchoredPosition = new Vector2(-14f + hintNudge, -4f);
+
+            if (items.Count == 0)
+            {
+                row.name.text = "없음";
+                row.name.color = new Color(1f, 1f, 1f, 0.35f);
+                return;
+            }
+
+            var stack = items[selected];
+            row.name.text = stack.item != null ? stack.item.DisplayName : "";
+            var nameColor = Color.Lerp(row.accent, Color.white, 0.55f + 0.45f * row.punch);
+            nameColor.a = active ? 1f : 0.7f;
+            row.name.color = nameColor;
+
+            for (int i = 0; i < row.slots.Count && i < items.Count; i++)
+            {
+                bool on = i == selected;
+                var slot = row.slots[i];
+                var item = items[i].item;
+                slot.icon.sprite = item != null ? item.Icon : null;
+                slot.icon.enabled = slot.icon.sprite != null;
+
+                var tint = item != null ? item.IconTint : Color.white;
+                tint.a = on ? 1f : 0.55f;
+                slot.icon.color = tint;
+
+                slot.frame.color = on ? Color.Lerp(selectedTint, Color.white, 0.25f * breathe) : new Color(0.72f, 0.68f, 0.82f, 0.55f);
+                slot.glow.enabled = on;
+                if (on)
+                {
+                    var glow = row.accent;
+                    glow.a = (active ? 0.55f : 0.28f) + 0.22f * breathe;
+                    slot.glow.color = glow;
+                    slot.glow.rectTransform.localScale = Vector3.one * (1f + 0.08f * breathe);
+                }
+
+                float target = on ? 1.16f + 0.14f * row.punch : 0.78f;
+                float follow = dt >= 1f ? 1f : 1f - Mathf.Exp(-14f * dt);
+                slot.scale = Mathf.Lerp(slot.scale, target, follow);
+                slot.root.localScale = Vector3.one * slot.scale;
+
+                float lift = on ? 8f + 3f * breathe : Mathf.Sin(time * 1.3f + i * 1.7f) * 2f - 4f;
+                slot.root.anchoredPosition = slot.rest + new Vector2(0f, lift);
+                float tilt = on ? -row.direction * 10f * row.punch : 0f;
+                slot.root.localRotation = Quaternion.Euler(0f, 0f, tilt);
+
+                int n = items[i].count;
+                slot.count.text = n > 1 ? n.ToString() : "";
+                slot.count.color = on ? Color.white : new Color(1f, 1f, 1f, 0.7f);
+            }
+        }
+
+        private static void TintOutline(Text text, Color color)
+        {
+            var outline = text.GetComponent<Outline>();
+            if (outline != null) outline.effectColor = color;
+        }
+
+        private Sprite MakeGlow()
+        {
+            const int size = 64;
+            var tex = NewTexture(size);
+            var px = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float dx = (x + 0.5f) / size * 2f - 1f;
+                float dy = (y + 0.5f) / size * 2f - 1f;
+                float d = Mathf.Clamp01(1f - Mathf.Sqrt(dx * dx + dy * dy));
+                byte a = (byte)(d * d * 255f);
+                px[y * size + x] = new Color32(255, 255, 255, a);
+            }
+            tex.SetPixels32(px);
+            tex.Apply();
+            return NewSprite(tex);
+        }
+
+        private Sprite MakeRibbon()
+        {
+            const int width = 128;
+            const int height = 32;
+            var tex = NewTexture(width, height);
+            var px = new Color32[width * height];
+            for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+            {
+                float along = Mathf.SmoothStep(0f, 1f, x / (float)(width - 1));
+                float across = 1f - Mathf.Abs(y / (float)(height - 1) * 2f - 1f);
+                across = Mathf.SmoothStep(0f, 1f, across);
+                byte a = (byte)(along * across * 255f);
+                px[y * width + x] = new Color32(255, 255, 255, a);
+            }
+            tex.SetPixels32(px);
+            tex.Apply();
+            return NewSprite(tex);
+        }
+
+        private Texture2D NewTexture(int width, int height = 0)
+        {
+            if (height <= 0) height = width;
+            var tex = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            tex.wrapMode = TextureWrapMode.Clamp;
+            generated.Add(tex);
+            return tex;
+        }
+
+        private Sprite NewSprite(Texture2D tex)
+        {
+            var sprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+            generated.Add(sprite);
+            return sprite;
+        }
+
+        private class Row
+        {
+            public ItemCategory category;
+            public RectTransform root;
+            public Image ribbon;
+            public Text label;
+            public Text hint;
+            public Text name;
+            public Color accent;
+            public readonly List<Slot> slots = new List<Slot>();
+            public float punch;
+            public int direction = 1;
+        }
+
         private class Slot
         {
-            public Transform transform;
-            public SpriteRenderer frame;
-            public SpriteRenderer icon;
-            public TextMesh count;
-        }
-
-        private class Carousel
-        {
-            private const int Range = 2;
-
-            private readonly EquipmentSelectorView view;
-            private readonly Transform root;
-            private readonly Vector2 axis;
-            private readonly Func<int> getCount;
-            private readonly Func<int, Sprite> getIcon;
-            private readonly Func<int, Color> getTint;
-            private readonly Func<int, string> getName;
-            private readonly Func<int, int> getStack;
-            private readonly Slot[] slots = new Slot[Range * 2 + 1];
-            private readonly TextMesh nameLabel;
-
-            private int center;
-            private float scroll;
-            private float showTimer;
-            private float visibility;
-
-            public Carousel(EquipmentSelectorView view, string name, Vector2 offset, Vector2 axis,
-                Func<int> getCount, Func<int, Sprite> getIcon, Func<int, Color> getTint,
-                Func<int, string> getName, Func<int, int> getStack)
-            {
-                this.view = view;
-                this.axis = axis;
-                this.getCount = getCount;
-                this.getIcon = getIcon;
-                this.getTint = getTint;
-                this.getName = getName;
-                this.getStack = getStack;
-
-                root = new GameObject(name).transform;
-                root.SetParent(view.root, false);
-                root.localPosition = offset;
-
-                for (int i = 0; i < slots.Length; i++)
-                    slots[i] = CreateSlot(i);
-
-                // 가로 캐러셀은 아래, 세로 캐러셀은 오른쪽에 이름 표시
-                bool horizontal = Mathf.Abs(axis.x) > 0.5f;
-                nameLabel = view.CreateText(root, "Name",
-                    horizontal ? new Vector2(0f, -0.85f) : new Vector2(0.85f, 0f),
-                    horizontal ? TextAnchor.UpperCenter : TextAnchor.MiddleLeft, 0.045f);
-
-                root.gameObject.SetActive(false);
-            }
-
-            private Slot CreateSlot(int i)
-            {
-                var go = new GameObject($"Slot{i}");
-                go.transform.SetParent(root, false);
-
-                var frame = go.AddComponent<SpriteRenderer>();
-                frame.sprite = view.slotSprite;
-                frame.sortingOrder = view.sortingOrder;
-
-                var iconGo = new GameObject("Icon");
-                iconGo.transform.SetParent(go.transform, false);
-                var icon = iconGo.AddComponent<SpriteRenderer>();
-                icon.sortingOrder = view.sortingOrder + 1;
-
-                var count = view.CreateText(go.transform, "Count", new Vector2(0.5f, -0.25f), TextAnchor.LowerRight, 0.035f);
-
-                return new Slot { transform = go.transform, frame = frame, icon = icon, count = count };
-            }
-
-            public void Show(int newIndex, int delta)
-            {
-                center = newIndex;
-                scroll = Mathf.Clamp(scroll + delta, -Range, Range);
-                showTimer = view.showDuration;
-            }
-
-            public void SetCenter(int index)
-            {
-                center = index;
-                scroll = 0f;
-            }
-
-            public void HideImmediate()
-            {
-                showTimer = 0f;
-                visibility = 0f;
-                scroll = 0f;
-                root.gameObject.SetActive(false);
-            }
-
-            public void Tick(float dt)
-            {
-                showTimer -= dt;
-                float target = showTimer > 0f ? 1f : 0f;
-                visibility = Mathf.MoveTowards(visibility, target, dt / Mathf.Max(0.01f, view.fadeDuration));
-
-                bool visible = visibility > 0f;
-                if (root.gameObject.activeSelf != visible) root.gameObject.SetActive(visible);
-                if (!visible) return;
-
-                scroll = Mathf.Lerp(scroll, 0f, 1f - Mathf.Exp(-view.slideSharpness * dt));
-                if (Mathf.Abs(scroll) < 0.001f) scroll = 0f;
-
-                int n = getCount();
-                for (int k = -Range; k <= Range; k++)
-                    UpdateSlot(slots[k + Range], k, n);
-
-                nameLabel.text = n > 0 ? getName(Mod(center, n)) : "Empty";
-                nameLabel.color = new Color(1f, 1f, 1f, visibility * Mathf.Clamp01(1f - Mathf.Abs(scroll) * 2f));
-            }
-
-            private void UpdateSlot(Slot slot, int k, int n)
-            {
-                float pos = k + scroll;
-                float dist = Mathf.Abs(pos);
-                float alpha = Mathf.Clamp01(1.6f - dist) * visibility;
-
-                // 빈 목록이면 가운데 빈 슬롯만, 1개면 양 옆 복제 숨김
-                if ((n == 0 || n == 1) && k != 0) alpha = 0f;
-
-                bool shown = alpha > 0.001f;
-                slot.transform.gameObject.SetActive(shown);
-                if (!shown) return;
-
-                float scale = Mathf.Lerp(1.15f, 0.75f, Mathf.Clamp01(dist));
-                slot.transform.localPosition = axis * (pos * view.slotSpacing);
-                slot.transform.localScale = Vector3.one * scale;
-
-                Color tint = Color.Lerp(view.selectedTint, Color.white, Mathf.Clamp01(dist));
-                tint.a = alpha;
-                slot.frame.color = tint;
-
-                if (n == 0)
-                {
-                    slot.icon.enabled = false;
-                    slot.count.text = "";
-                    return;
-                }
-
-                int idx = Mod(center + k, n);
-                Sprite sprite = getIcon(idx);
-                slot.icon.enabled = sprite != null;
-                if (sprite != null)
-                {
-                    slot.icon.sprite = sprite;
-                    Vector2 size = sprite.bounds.size;
-                    float fit = view.iconSize / Mathf.Max(0.01f, Mathf.Max(size.x, size.y));
-                    slot.icon.transform.localScale = Vector3.one * fit;
-                    Color iconTint = getTint(idx);
-                    iconTint.a *= alpha;
-                    slot.icon.color = iconTint;
-                }
-
-                int stack = getStack(idx);
-                slot.count.text = stack > 1 ? stack.ToString() : "";
-                slot.count.color = new Color(1f, 1f, 1f, alpha);
-            }
-
-            private static int Mod(int a, int n) => ((a % n) + n) % n;
-        }
-
-        private TextMesh CreateText(Transform parent, string name, Vector2 localPos, TextAnchor anchor, float characterSize)
-        {
-            var go = new GameObject(name);
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = localPos;
-
-            var tm = go.AddComponent<TextMesh>();
-            tm.font = font;
-            tm.fontSize = 64;
-            tm.characterSize = characterSize;
-            tm.anchor = anchor;
-            tm.alignment = TextAlignment.Center;
-
-            var mr = go.GetComponent<MeshRenderer>();
-            mr.sharedMaterial = font.material;
-            mr.sortingOrder = sortingOrder + 2;
-            return tm;
+            public RectTransform root;
+            public Image frame;
+            public Image glow;
+            public Image icon;
+            public Text count;
+            public Vector2 rest;
+            public float scale;
         }
 
 #if UNITY_EDITOR
