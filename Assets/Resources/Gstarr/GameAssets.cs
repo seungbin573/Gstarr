@@ -41,7 +41,7 @@ namespace Gstarr.Items
         public Sprite titleLogo;
         [Tooltip("메인 메뉴 배경. Assets/arts/UI/MenuBackground.png")]
         public Sprite menuBackground;
-        [Tooltip("체력 칸. Assets/arts/UI/Heart.png")]
+        [Tooltip("체력 바. Assets/arts/UI/heartbar.png (0~5칸이 위에서부터 세로로 있음)")]
         public Sprite heartSprite;
 
         [Header("Glory Kill")]

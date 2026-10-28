@@ -379,18 +379,22 @@ namespace Gstarr.EditorTools
                 if (!File.Exists(path)) continue;
                 AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
                 var importer = AssetImporter.GetAtPath(path) as TextureImporter;
-                if (importer != null && importer.userData != "gstarr-player")
+                if (importer != null)
                 {
                     importer.GetSourceTextureWidthAndHeight(out _, out int height);
-                    importer.textureType = TextureImporterType.Sprite;
-                    importer.spriteImportMode = SpriteImportMode.Single;
-                    // 캐릭터 키가 약 1.5 유닛이 되도록
-                    importer.spritePixelsPerUnit = Mathf.Max(1f, Mathf.Round(height / 1.5f));
-                    importer.filterMode = FilterMode.Point;
-                    importer.textureCompression = TextureImporterCompression.Uncompressed;
-                    importer.mipmapEnabled = false;
-                    importer.userData = "gstarr-player";
-                    importer.SaveAndReimport();
+                    // 적과 같이 키가 약 1.5 유닛. 그림을 바꿔도 다시 맞춘다.
+                    float ppu = Mathf.Max(1f, Mathf.Round(height / 1.5f));
+                    if (importer.userData != "gstarr-player" || !Mathf.Approximately(importer.spritePixelsPerUnit, ppu))
+                    {
+                        importer.textureType = TextureImporterType.Sprite;
+                        importer.spriteImportMode = SpriteImportMode.Single;
+                        importer.spritePixelsPerUnit = ppu;
+                        importer.filterMode = FilterMode.Point;
+                        importer.textureCompression = TextureImporterCompression.Uncompressed;
+                        importer.mipmapEnabled = false;
+                        importer.userData = "gstarr-player";
+                        importer.SaveAndReimport();
+                    }
                 }
                 var sprite = AssetDatabase.LoadAllAssetsAtPath(path).OfType<Sprite>().FirstOrDefault();
                 if (sprite != null) return sprite;

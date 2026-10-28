@@ -28,7 +28,7 @@ namespace Gstarr.EditorTools
             changed |= Assign(ref assets.moleSprite, "Assets/arts/character/enemy5.png");
             changed |= Assign(ref assets.titleLogo, "Assets/arts/UI/TitleLogo.png");
             changed |= Assign(ref assets.menuBackground, "Assets/arts/UI/MenuBackground.png");
-            changed |= Assign(ref assets.heartSprite, "Assets/arts/UI/Heart.png");
+            changed |= Assign(ref assets.heartSprite, "Assets/arts/UI/heartbar.png");
             if (!changed) return;
 
             EditorUtility.SetDirty(assets);

@@ -39,6 +39,7 @@ MonoBehaviour:
   - {fileID: 21300000, guid: 2b379a7ba848409c991687a3ca271486, type: 3}
   - {fileID: 21300000, guid: dfd40f5ecbab43e8b20722c374db3b1e, type: 3}
   - {fileID: 21300000, guid: 9f56ab5b323e44468f1a201839828bcc, type: 3}
+  heartSprite: {fileID: 21300000, guid: b7e4c2a91f6d4e38a0c5d9b28e41f6a3, type: 3}
   gloryNoteSprites:
   - {fileID: 21300000, guid: a1c4e8b27f3d4a61b9e0c5d84f17a201, type: 3}
   - {fileID: 21300000, guid: b2d5f9c38e4e4b72c0f1d6e95a28b312, type: 3}
