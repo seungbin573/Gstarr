@@ -29,13 +29,92 @@ namespace Gstarr.World
         private readonly List<ArenaRoom> rooms = new List<ArenaRoom>();
         private readonly HashSet<BossActor> configuredBosses = new HashSet<BossActor>();
         private readonly List<DoorGate> gates = new List<DoorGate>();
+        private static readonly List<Vector2> doorBarriers = new List<Vector2>();
+        private static ArenaDoorSpawner active;
+
+        public static bool HasUnopenedRooms
+        {
+            get
+            {
+                if (active == null) return false;
+                for (int i = 0; i < active.rooms.Count; i++)
+                    if (!active.rooms[i].IsOpened) return true;
+                return false;
+            }
+        }
+
+        /// <summary>fromX에서 toX로 갈 때 문 칸을 넘지 못하게 막는다. x는 문 바깥쪽 가장자리다.</summary>
+        public static float LimitCrossing(float fromX, float toX, float padding)
+        {
+            if (doorBarriers.Count == 0 || Mathf.Abs(toX - fromX) < 0.0001f) return toX;
+            float stop = toX;
+            if (toX > fromX)
+            {
+                for (int i = 0; i < doorBarriers.Count; i++)
+                {
+                    float edge = doorBarriers[i].x - padding;
+                    if (fromX < edge && stop > edge) stop = edge;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < doorBarriers.Count; i++)
+                {
+                    float edge = doorBarriers[i].y + padding;
+                    if (fromX > edge && stop < edge) stop = edge;
+                }
+            }
+            return stop;
+        }
+
+        /// <summary>두 위치 사이에 문 칸이 있으면 원거리 적이 서로를 보면 안 된다.</summary>
+        public static bool SeparatedByDoor(float a, float b)
+        {
+            float left = Mathf.Min(a, b);
+            float right = Mathf.Max(a, b);
+            for (int i = 0; i < doorBarriers.Count; i++)
+            {
+                float doorL = doorBarriers[i].x;
+                float doorR = doorBarriers[i].y;
+                if (doorR > left + 0.08f && doorL < right - 0.08f) return true;
+            }
+            return false;
+        }
+
+        /// <summary>발사 방향에서 다음 문까지의 거리. 탄이 문을 넘어가지 않게 한다.</summary>
+        public static float RangeUntilDoor(float originX, float directionX, float maxRange)
+        {
+            if (Mathf.Abs(directionX) < 0.02f) return maxRange;
+            float range = maxRange;
+            for (int i = 0; i < doorBarriers.Count; i++)
+            {
+                if (directionX > 0f)
+                {
+                    float doorL = doorBarriers[i].x;
+                    if (doorL > originX + 0.05f) range = Mathf.Min(range, doorL - originX);
+                }
+                else
+                {
+                    float doorR = doorBarriers[i].y;
+                    if (doorR < originX - 0.05f) range = Mathf.Min(range, originX - doorR);
+                }
+            }
+            return range;
+        }
+
         private Collider2D playerBody;
         private CameraSystem.CameraFollow2D cameraFollow;
 
         private void Awake()
         {
+            active = this;
             var renderer = GetComponent<TilemapRenderer>();
             if (renderer != null) renderer.enabled = false;
+        }
+
+        private void OnDestroy()
+        {
+            if (active == this) active = null;
         }
 
         public void AssignArt(Sprite door, Sprite frame, Sprite lamp)
@@ -47,6 +126,7 @@ namespace Gstarr.World
 
         private void Start()
         {
+            doorBarriers.Clear();
             var tilemap = GetComponent<Tilemap>();
             tilemap.CompressBounds();
 
@@ -104,19 +184,34 @@ namespace Gstarr.World
                 gate.FloorY = corner.y;
                 gate.OpeningHeight = tilemap.cellSize.y * tilesTall;
                 gates.Add(gate);
+                doorBarriers.Add(new Vector2(gate.MinX, gate.MaxX));
             }
 
             if (gates.Count == 1)
             {
-                rooms.Add(new ArenaRoom(gates[0], null, gates[0].MaxX, float.PositiveInfinity, gates[0].FloorY));
+                AddRoom(new ArenaRoom(gates[0], null, gates[0].MaxX, gates[0].MaxX + 24f, gates[0].FloorY));
             }
             else
             {
                 for (int i = 0; i < gates.Count - 1; i++)
                 {
                     float floor = Mathf.Min(gates[i].FloorY, gates[i + 1].FloorY);
-                    rooms.Add(new ArenaRoom(gates[i], gates[i + 1], gates[i].MaxX, gates[i + 1].MinX, floor));
+                    AddRoom(new ArenaRoom(gates[i], gates[i + 1], gates[i].MaxX, gates[i + 1].MinX, floor));
                 }
+            }
+
+            if (RunCheckpoint.TryConsume(gameObject.scene.name, out Vector3 stand, out float floorY, out int clearedThrough))
+            {
+                for (int i = 0; i <= clearedThrough && i < rooms.Count; i++)
+                    rooms[i].MarkCleared();
+                int next = clearedThrough + 1;
+                if (next < rooms.Count) OpenRoom(next);
+                ResumePlayer(stand);
+                CreateBeacon(stand.x, floorY);
+            }
+            else if (rooms.Count > 0)
+            {
+                OpenRoom(0);
             }
 
             ConfigureBosses();
@@ -127,6 +222,156 @@ namespace Gstarr.World
                 tilemap.SetTile(cells[i], null);
             }
             tilemap.RefreshAllTiles();
+        }
+
+        private void AddRoom(ArenaRoom room)
+        {
+            room.Assign(rooms.Count, OnRoomCleared);
+            rooms.Add(room);
+        }
+
+        private void OnRoomCleared(ArenaRoom room)
+        {
+            if (room.HostsBoss)
+            {
+                var player = GameObject.FindGameObjectWithTag("Player");
+                float standY = player != null ? player.transform.position.y : room.FrameY + 2.2f;
+                var stand = new Vector3(room.BossPoint.x, standY, 0f);
+                RunCheckpoint.Save(gameObject.scene.name, stand, room.FrameY, room.Index);
+                CreateBeacon(room.BossPoint.x, room.FrameY);
+                StageHUD.ShowHint("보스를 쓰러뜨렸습니다. 이곳에 세이브 지점을 남깁니다. 이후 죽으면 여기서 이어 할 수 있고, 점수는 0이 됩니다.", 5.5f);
+            }
+
+            int next = room.Index + 1;
+            bool more = next < rooms.Count;
+            if (more) OpenRoom(next);
+            StageHUD.AnnounceRoomClear(more);
+        }
+
+        private void OpenRoom(int index)
+        {
+            if (index < 0 || index >= rooms.Count) return;
+            var room = rooms[index];
+            if (room.IsOpened) return;
+            room.MarkOpened();
+
+            float span = room.FrameMax - room.FrameMin;
+            bool wide = span >= 19f;
+            bool bossRoom = index == 4 && rooms.Count >= 5;
+            if (bossRoom)
+            {
+                SpawnInto(room, EnemyKind.Boss, 0.55f, 0f);
+                return;
+            }
+
+            if (!wide)
+            {
+                SpawnInto(room, NarrowKind(index), 0.55f, NarrowKind(index) == EnemyKind.Flyer ? 4f : 0f);
+                return;
+            }
+
+            var pair = WidePair(index);
+            SpawnInto(room, pair.a, 0.14f, pair.a == EnemyKind.Flyer ? 4f : 0f);
+            SpawnInto(room, pair.b, 0.9f, pair.b == EnemyKind.Flyer ? 4f : 0f);
+        }
+
+        private static EnemyKind NarrowKind(int index)
+        {
+            EnemyKind[] kinds =
+            {
+                EnemyKind.BeatChaser,
+                EnemyKind.Mole,
+                EnemyKind.Flyer,
+                EnemyKind.Hopper,
+                EnemyKind.RangedHalfBeat
+            };
+            return kinds[Mathf.Abs(index) % kinds.Length];
+        }
+
+        private static (EnemyKind a, EnemyKind b) WidePair(int index)
+        {
+            (EnemyKind a, EnemyKind b)[] pairs =
+            {
+                (EnemyKind.RangedBeat, EnemyKind.Mole),
+                (EnemyKind.Flyer, EnemyKind.Hopper),
+                (EnemyKind.BeatChaser, EnemyKind.RangedHalfBeat),
+                (EnemyKind.Hopper, EnemyKind.RangedBeat),
+                (EnemyKind.RangedHalfBeat, EnemyKind.Mole),
+                (EnemyKind.Flyer, EnemyKind.BeatChaser)
+            };
+            return pairs[Mathf.Abs(index) % pairs.Length];
+        }
+
+        private static void SpawnInto(ArenaRoom room, EnemyKind kind, float along, float lift)
+        {
+            float x = Mathf.Lerp(room.FrameMin + 1.2f, room.FrameMax - 1.2f, along);
+            var position = new Vector3(x, room.FrameY + lift, 0f);
+            EnemyActor actor = kind == EnemyKind.Boss
+                ? EnemyActor.SpawnBoss(position)
+                : EnemyActor.Spawn(null, position, kind);
+            if (kind == EnemyKind.Boss) room.NoteBoss(position);
+            actor.WaitForPlayerMove();
+        }
+
+        private static void ResumePlayer(Vector3 stand)
+        {
+            var player = GameObject.FindGameObjectWithTag("Player");
+            if (player == null) return;
+            player.transform.position = stand;
+            var body = player.GetComponent<Rigidbody2D>();
+            if (body != null)
+            {
+                body.position = stand;
+                body.linearVelocity = Vector2.zero;
+            }
+
+            var camera = Camera.main;
+            if (camera != null)
+            {
+                var follow = camera.GetComponent<CameraSystem.CameraFollow2D>();
+                if (follow != null) follow.SnapTo(new Vector3(stand.x, stand.y + 1.5f, camera.transform.position.z));
+                else
+                {
+                    var camPos = camera.transform.position;
+                    camera.transform.position = new Vector3(stand.x, stand.y + 1.5f, camPos.z);
+                }
+            }
+        }
+
+        private static Sprite beaconSprite;
+
+        private static void CreateBeacon(float x, float floorY)
+        {
+            var go = new GameObject("SaveBeacon");
+            go.transform.position = new Vector3(x, floorY, 0f);
+            var renderer = go.AddComponent<SpriteRenderer>();
+            renderer.sprite = BeaconSprite();
+            renderer.color = new Color(1f, 0.82f, 0.28f);
+            renderer.sortingOrder = 8;
+            go.AddComponent<SaveBeacon>();
+        }
+
+        private static Sprite BeaconSprite()
+        {
+            if (beaconSprite != null) return beaconSprite;
+            const int size = 16;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Point;
+            var clear = new Color(0f, 0f, 0f, 0f);
+            for (int y = 0; y < size; y++)
+            {
+                for (int px = 0; px < size; px++)
+                {
+                    int dx = Mathf.Abs(px - 7);
+                    int dy = Mathf.Abs(y - 6);
+                    bool diamond = dx + dy <= 6 && y > 2;
+                    bool pole = px >= 7 && px <= 8 && y <= 6;
+                    tex.SetPixel(px, y, diamond || pole ? Color.white : clear);
+                }
+            }
+            tex.Apply();
+            beaconSprite = Sprite.Create(tex, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0f), 16f);
+            return beaconSprite;
         }
 
         private void ConfigureBosses()
@@ -245,6 +490,15 @@ namespace Gstarr.World
                 if (!rooms[i].HasBoss) continue;
                 if (x >= rooms[i].FrameMin && x <= rooms[i].FrameMax) inBossRoom = true;
             }
+            if (RunCheckpoint.SuppressBossTheme)
+            {
+                if (!inBossRoom) RunCheckpoint.ReleaseBossTheme();
+                else
+                {
+                    conductor.SetBossTheme(stage.bossMusic, false);
+                    return;
+                }
+            }
             conductor.SetBossTheme(stage.bossMusic, inBossRoom);
         }
     }
@@ -288,8 +542,10 @@ namespace Gstarr.World
         private readonly float floorY;
         private readonly List<EnemyActor> occupants = new List<EnemyActor>();
         private readonly List<EnemyActor> anchored = new List<EnemyActor>();
+        private System.Action<ArenaRoom> onCleared;
         private bool locked;
         private bool cleared;
+        private bool opened;
 
         public ArenaRoom(DoorGate left, DoorGate right, float innerMin, float innerMax, float floorY)
         {
@@ -300,8 +556,34 @@ namespace Gstarr.World
             this.floorY = floorY;
         }
 
+        public int Index { get; private set; }
+        public bool IsOpened => opened;
+        public bool HostsBoss { get; private set; }
+        public Vector3 BossPoint { get; private set; }
+
+        public void Assign(int index, System.Action<ArenaRoom> cleared)
+        {
+            Index = index;
+            onCleared = cleared;
+        }
+
+        public void MarkOpened() => opened = true;
+
+        public void MarkCleared()
+        {
+            cleared = true;
+            opened = true;
+            locked = false;
+        }
+
+        public void NoteBoss(Vector3 point)
+        {
+            HostsBoss = true;
+            BossPoint = point;
+        }
+
         public bool Contains(float x) => x >= innerMin && x <= innerMax;
-        public bool HasBoss => anchored.Count > 0;
+        public bool HasBoss => anchored.Count > 0 || HostsBoss;
         public float FrameMin => innerMin;
         public float FrameMax => innerMax;
         public float FrameY => floorY;
@@ -342,7 +624,7 @@ namespace Gstarr.World
                 cleared = true;
                 left.Unlock();
                 right?.Unlock();
-                StageHUD.AnnounceRoomClear();
+                onCleared?.Invoke(this);
             }
         }
 
@@ -571,5 +853,19 @@ namespace Gstarr.World
             return go;
         }
 
+    }
+
+    /// <summary>보스 자리에 남는 세이브 표식. 위아래로 살짝 뜬다.</summary>
+    internal class SaveBeacon : MonoBehaviour
+    {
+        private Vector3 origin;
+
+        private void Awake() => origin = transform.position;
+
+        private void Update()
+        {
+            float bob = Mathf.Sin(Time.time * 2.4f) * 0.12f;
+            transform.position = origin + Vector3.up * (0.15f + bob);
+        }
     }
 }

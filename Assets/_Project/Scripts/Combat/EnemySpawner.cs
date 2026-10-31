@@ -26,10 +26,8 @@ namespace Gstarr.Combat
 
             Vector3 origin = player.transform.position;
             EnemyActor.Spawn(null, origin + new Vector3(9f, 0.2f, 0f), EnemyKind.BeatChaser);
-            EnemyActor.Spawn(null, origin + new Vector3(19f, 0.2f, 0f), EnemyKind.RangedBeat);
-            EnemyActor.Spawn(null, origin + new Vector3(25f, 0.2f, 0f), EnemyKind.RangedHalfBeat);
-            EnemyActor.Spawn(null, origin + new Vector3(31f, 3f, 0f), EnemyKind.Flyer);
-            EnemyActor.Spawn(null, origin + new Vector3(38f, 0.2f, 0f), EnemyKind.Mole);
+            EnemyActor.Spawn(null, origin + new Vector3(22f, 0.2f, 0f), EnemyKind.RangedBeat);
+            EnemyActor.Spawn(null, origin + new Vector3(36f, 0.2f, 0f), EnemyKind.Mole);
         }
     }
 }

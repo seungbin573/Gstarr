@@ -42,6 +42,17 @@ namespace Gstarr.CameraSystem
 
         public void PushForward(float seconds) => forwardBoost = Mathf.Max(forwardBoost, seconds);
 
+        public void SnapTo(Vector3 worldPosition)
+        {
+            var position = transform.position;
+            position.x = worldPosition.x;
+            position.y = worldPosition.y;
+            transform.position = position;
+            velocity = Vector3.zero;
+            lookAhead = 0f;
+            lookAheadVelocity = 0f;
+        }
+
         public void Shake(float magnitude, float duration)
         {
             shakeMagnitude = Mathf.Max(shakeMagnitude, magnitude);

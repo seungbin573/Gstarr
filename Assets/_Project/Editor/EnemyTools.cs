@@ -67,10 +67,11 @@ namespace Gstarr.EditorTools
                 EnemyKind.RangedHalfBeat,
                 EnemyKind.Flyer,
                 EnemyKind.Mole,
-                EnemyKind.Boss
+                EnemyKind.Boss,
+                EnemyKind.Hopper
             };
-            string[] names = { "BeatChaser", "RangedBeat", "RangedHalfBeat", "Flyer", "Mole", "Boss" };
-            string[] icons = { "enemy1", "enemy2", "enemy3", "enemy4", "enemy1", "enemy1" };
+            string[] names = { "BeatChaser", "RangedBeat", "RangedHalfBeat", "Flyer", "Mole", "Boss", "Hopper" };
+            string[] icons = { "enemy1", "enemy2", "enemy3", "enemy4", "enemy1", "enemy1", "enemy1" };
             Color[] tints =
             {
                 Color.white,
@@ -78,7 +79,8 @@ namespace Gstarr.EditorTools
                 Color.white,
                 Color.white,
                 new Color(0.75f, 0.75f, 0.75f),
-                new Color(1f, 0.65f, 0.45f)
+                new Color(1f, 0.65f, 0.45f),
+                new Color(0.45f, 0.95f, 0.4f)
             };
             var palette = new TileBase[kinds.Length];
             var tiles = new EnemyTile[kinds.Length];

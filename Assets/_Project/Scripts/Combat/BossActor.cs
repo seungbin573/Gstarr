@@ -103,6 +103,12 @@ namespace Gstarr.Combat
                 SetWarningsVisible(false);
                 return;
             }
+            if (enemyActor != null && enemyActor.HoldsStill)
+            {
+                motion = Motion.Idle;
+                SetWarningsVisible(false);
+                return;
+            }
             FindPlayer();
             if (player == null) return;
             var playerHealth = player.GetComponent<Health>();
@@ -118,6 +124,12 @@ namespace Gstarr.Combat
         private void FixedUpdate()
         {
             if (body == null) return;
+            if (enemyActor != null && enemyActor.HoldsStill)
+            {
+                KeepHovering();
+                Hold(HoverPoint());
+                return;
+            }
             KeepHovering();
             if (motion == Motion.Move && waypointIndex < waypoints.Count)
                 FlyToward(waypoints[waypointIndex], MoveSpeed);

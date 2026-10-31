@@ -70,7 +70,7 @@ namespace Gstarr.EditorTools
             CreateParallaxBackground(new Vector3(-2f, 2f, 0f));
             EnemyActor.Spawn(null, new Vector3(8f, 0.5f, 0f), EnemyKind.BeatChaser);
             EnemyActor.Spawn(null, new Vector3(18f, 0.5f, 0f), EnemyKind.RangedBeat);
-            EnemyActor.Spawn(null, new Vector3(30f, 0.5f, 0f), EnemyKind.RangedHalfBeat);
+            EnemyActor.Spawn(null, new Vector3(48f, 0.5f, 0f), EnemyKind.RangedHalfBeat);
             var doorTile = DoorTools.GetOrCreateTile();
             var doors = DoorTools.EnsureDoorTilemap(grid.transform);
             DoorTools.PaintDoor(doors, doorTile, 12, -1);
@@ -253,31 +253,41 @@ namespace Gstarr.EditorTools
             EditorUtility.SetDirty(follow);
         }
 
-        private const string BackgroundSpritePath = "Assets/arts/picture/background.png";
+        private static readonly string[] BackgroundSpritePaths =
+        {
+            "Assets/arts/picture/background_forest.png",
+            "Assets/arts/picture/background_ball.png",
+            "Assets/arts/picture/background_forest_snow.png",
+            "Assets/arts/picture/background_church.png",
+        };
 
         private static void CreateParallaxBackground(Vector3 viewCenter)
         {
-            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(BackgroundSpritePath);
-            if (sprite == null)
+            var sprites = new Sprite[BackgroundSpritePaths.Length];
+            for (int i = 0; i < BackgroundSpritePaths.Length; i++)
+                sprites[i] = AssetDatabase.LoadAssetAtPath<Sprite>(BackgroundSpritePaths[i]);
+
+            if (sprites[0] == null)
             {
-                Debug.LogWarning("[Level Builder] Assets/arts/picture/background.png 스프라이트를 찾지 못했습니다.");
+                Debug.LogWarning("[Level Builder] Assets/arts/picture/background_forest.png 스프라이트를 찾지 못했습니다.");
                 return;
             }
 
             var go = new GameObject("Parallax Background");
             go.transform.position = viewCenter;
             var renderer = go.AddComponent<SpriteRenderer>();
-            renderer.sprite = sprite;
+            renderer.sprite = sprites[0];
             renderer.sortingOrder = -100;
 
-            float height = sprite.bounds.size.y;
+            float height = sprites[0].bounds.size.y;
             if (height > 0.001f)
             {
                 float scale = 6f * 2f * 1.2f / height;
                 go.transform.localScale = new Vector3(scale, scale, 1f);
             }
 
-            go.AddComponent<ParallaxBackground>();
+            var parallax = go.AddComponent<ParallaxBackground>();
+            parallax.Configure(sprites);
         }
 
         private static TilesetImporter.Result CreatePlaceholderTileset()

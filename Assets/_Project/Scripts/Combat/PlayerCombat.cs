@@ -72,7 +72,7 @@ namespace Gstarr.Combat
             {
                 name = "Pistol", type = WeaponType.Ranged, damage = 1, fireInterval = 0.18f,
                 holdOffset = new Vector2(0.55f, -0.05f), muzzleOffset = new Vector2(0.9f, 0.08f),
-                projectileSpeed = 26f, range = 16f, pellets = 1
+                projectileSpeed = 14f, range = 9f, pellets = 1
             },
             new Weapon
             {

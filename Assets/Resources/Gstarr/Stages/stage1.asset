@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Gstarr.Game.StageData
   order: 1
   displayName: STAGE 1
-  music: {fileID: 8300000, guid: 22a941c2c06b2364e95671090fc2a969, type: 3}
+  music: {fileID: 8300000, guid: 2df90ad73acb1474b94670960dd0cb46, type: 3}
   musicCues: []
   beatChart: {fileID: 0}
   gloryChart: {fileID: 0}

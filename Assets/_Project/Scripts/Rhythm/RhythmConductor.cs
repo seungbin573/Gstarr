@@ -89,6 +89,11 @@ namespace Gstarr.Rhythm
         private double cueSwitchTime;
         private bool bossThemeOn;
         private float bossFade;
+        private float storyDuck = 1f;
+        private float storyDuckTarget = 1f;
+
+        /// <summary>이야기 중에는 곡을 끄지 않고 소리만 잠시 낮춘다.</summary>
+        public void DuckForStory(bool ducked) => storyDuckTarget = ducked ? 0.22f : 1f;
 
         /// <summary>보스 방에서는 다른 곡을 내고, 박자 시계는 스테이지 곡을 유지한다.</summary>
         public void SetBossTheme(AudioClip clip, bool enabled)
@@ -135,6 +140,73 @@ namespace Gstarr.Rhythm
             else { source.UnPause(); cueSource.UnPause(); }
         }
 
+        public void CapturePlayback(out double songTime, out bool heardBoss, out float bossTime)
+        {
+            songTime = SongTime;
+            heardBoss = bossThemeOn && cueSource != null && cueSource.isPlaying;
+            bossTime = heardBoss && cueSource.clip != null ? cueSource.time : 0f;
+        }
+
+        /// <summary>죽은 시점의 박자와 그 자리의 곡으로 맞춘다.</summary>
+        public void SeekTo(double songTime, bool heardBoss, float bossTime)
+        {
+            if (!IsReady || source == null) return;
+            if (songTime < 0) songTime = 0;
+            IsPaused = false;
+            SongTime = songTime;
+            double now = UnityEngine.Time.realtimeSinceStartupAsDouble;
+            realStart = now - songTime;
+            dspStart = AudioSettings.dspTime - songTime;
+            countdownReleaseAt = now;
+            nextBeat = FirstBeatAtOrAfter(songTime + 0.0001);
+            nextHalfBeat = FirstHalfBeatAtOrAfter(songTime + 0.0001);
+            nextMusicCue = 0;
+            cueScheduled = false;
+            activeSource = 0;
+            bossThemeOn = false;
+            bossFade = 0f;
+            Gstarr.Game.GamePause.SetCountdown(false);
+
+            AudioClip clip = music;
+            double clipPos = loopLength > 0.01 ? songTime % loopLength : songTime;
+            if (musicCues != null)
+            {
+                for (int i = 0; i < musicCues.Length; i++)
+                {
+                    var cue = musicCues[i];
+                    if (cue == null || cue.loop == null)
+                    {
+                        nextMusicCue = i + 1;
+                        continue;
+                    }
+                    if (songTime < cue.atSeconds)
+                    {
+                        nextMusicCue = i;
+                        break;
+                    }
+                    clip = cue.loop;
+                    clipPos = songTime - cue.atSeconds;
+                    nextMusicCue = i + 1;
+                }
+            }
+            if (clip != null && clip.length > 0.05f) clipPos %= clip.length;
+
+            source.Stop();
+            cueSource.Stop();
+            source.clip = clip != null ? clip : music;
+            source.loop = loop || clip != music;
+            source.time = (float)Math.Max(0, clipPos);
+            source.Play();
+
+            if (!heardBoss) return;
+            var stage = Gstarr.Game.StageSession.Current;
+            if (stage == null || stage.bossMusic == null) return;
+            SetBossTheme(stage.bossMusic, true);
+            if (cueSource.clip != null)
+                cueSource.time = Mathf.Clamp(bossTime, 0f, Mathf.Max(0.01f, cueSource.clip.length - 0.05f));
+            bossFade = 1f;
+        }
+
         /// <summary>눈 뜨는 장면과 함께 3, 2, 1 을 지금 시작한다. 눈이 뜨는 순간 곡이 시작한다.</summary>
         public void StartCountdownNow(int beats)
         {
@@ -154,6 +226,18 @@ namespace Gstarr.Rhythm
             cueSource.Stop();
             source.PlayScheduled(dspStart);
             Gstarr.Game.GamePause.SetCountdown(true);
+        }
+
+        /// <summary>처음 이야기가 시작될 때 곡을 틀거나, 이미 나오던 곡을 다시 이어 튼다.</summary>
+        public void BeginWithStory()
+        {
+            if (!IsReady || source == null) return;
+            if (IsPaused && SongTime >= 0)
+            {
+                Resume();
+                return;
+            }
+            if (SongTime < 0) SkipOpeningCountdown();
         }
 
         /// <summary>눈 뜨는 카운트를 건너뛰면 곡을 바로 시작한다.</summary>
@@ -305,8 +389,9 @@ namespace Gstarr.Rhythm
             float musicVol = volume * Gstarr.Game.GameSettings.MusicVolume;
             float target = bossThemeOn ? 1f : 0f;
             bossFade = Mathf.MoveTowards(bossFade, target, Time.unscaledDeltaTime / 0.45f);
-            source.volume = musicVol * (1f - bossFade);
-            cueSource.volume = musicVol * bossFade;
+            storyDuck = Mathf.MoveTowards(storyDuck, storyDuckTarget, Time.unscaledDeltaTime / 0.55f);
+            source.volume = musicVol * (1f - bossFade) * storyDuck;
+            cueSource.volume = musicVol * bossFade * storyDuck;
             if (!bossThemeOn && bossFade <= 0.001f && cueSource.isPlaying) cueSource.Stop();
 
             // dspTime 은 오디오 버퍼 단위로만 갱신되므로 실시간 시계로 부드럽게 진행하고 dsp 에 천천히 맞춤.

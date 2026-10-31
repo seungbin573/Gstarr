@@ -11,11 +11,22 @@ namespace Gstarr.Game
 
         public static void Play(StageData stage)
         {
+            RunCheckpoint.Forget();
             Current = stage;
             Load(stage.SceneName);
         }
 
-        public static void Retry() => Load(SceneManager.GetActiveScene().name);
+        public static void Retry()
+        {
+            RunCheckpoint.Forget();
+            Load(SceneManager.GetActiveScene().name);
+        }
+
+        public static void ContinueFromCheckpoint()
+        {
+            RunCheckpoint.ArmContinue();
+            Load(SceneManager.GetActiveScene().name);
+        }
 
         public static void ToMainMenu()
         {

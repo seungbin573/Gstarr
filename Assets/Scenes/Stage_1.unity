@@ -256,8 +256,8 @@ MonoBehaviour:
     meleeSize: {x: 1.6, y: 1.2}
     meleeReach: 0.9
     projectileSprite: {fileID: 21300000, guid: a50131348c326f74ebe5637e52cedfab, type: 3}
-    projectileSpeed: 26
-    range: 16
+    projectileSpeed: 14
+    range: 9
     pellets: 1
     spreadAngle: 0
     recoil: 0
@@ -2111,16 +2111,6 @@ Tilemap:
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
       m_AllTileFlags: 3
-  - first: {x: 42, y: -2, z: 0}
-    second:
-      serializedVersion: 2
-      m_TileIndex: 2
-      m_TileSpriteIndex: 1
-      m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
-      m_TileObjectToInstantiateIndex: 65535
-      dummyAlignment: 0
-      m_AllTileFlags: 3
   - first: {x: 54, y: -2, z: 0}
     second:
       serializedVersion: 2
@@ -2136,16 +2126,6 @@ Tilemap:
       serializedVersion: 2
       m_TileIndex: 1
       m_TileSpriteIndex: 0
-      m_TileMatrixIndex: 0
-      m_TileColorIndex: 1
-      m_TileObjectToInstantiateIndex: 65535
-      dummyAlignment: 0
-      m_AllTileFlags: 3
-  - first: {x: 64, y: -1, z: 0}
-    second:
-      serializedVersion: 2
-      m_TileIndex: 4
-      m_TileSpriteIndex: 3
       m_TileMatrixIndex: 0
       m_TileColorIndex: 1
       m_TileObjectToInstantiateIndex: 65535
@@ -9442,10 +9422,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a7c4e91b2d6f48e0b3c15a9d7e4f2081, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Gstarr.CameraSystem.ParallaxBackground
-  followX: 0.4
-  followY: 0.45
   sortingOrder: -100
-  coveragePadding: 1.2
+  backgrounds:
+  - {fileID: 21300000, guid: 0aef53cd50bb7c14ca941ba3f1d56464, type: 3}
+  - {fileID: 21300000, guid: 8cad18aac81fbdc4d99f94492ade2b03, type: 3}
+  - {fileID: 21300000, guid: 617dc8fe72f94aa46a359de39950ef3d, type: 3}
+  - {fileID: 21300000, guid: ede2c23388a94df4591551c0bb56c4e1, type: 3}
+  giantScale: 1.15
+  segmentDistance: 56
+  fadeDuration: 0.8
 --- !u!212 &1946741854
 SpriteRenderer:
   serializedVersion: 2
@@ -9495,12 +9480,12 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: -100
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 21300000, guid: 71af817822d2f9e45a406c6ef80e4394, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 0aef53cd50bb7c14ca941ba3f1d56464, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 8.5, y: 4.64}
+  m_Size: {x: 32, y: 18}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1

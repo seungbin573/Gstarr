@@ -109,7 +109,8 @@ namespace Gstarr.Combat
                 GetComponent<SpriteMotion>()?.PlayDeath();
                 if (enemy != null)
                 {
-                    if (EnemyActor.CountAlive() == 0) StageHUD.ShowGameClear();
+                    if (EnemyActor.CountAlive() == 0 && !Gstarr.World.ArenaDoorSpawner.HasUnopenedRooms)
+                        StageHUD.ShowGameClear();
                 }
                 else if (playerHit) StageHUD.ShowGameOver();
                 if (destroyOnDeath)

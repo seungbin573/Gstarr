@@ -5,16 +5,10 @@ using UnityEngine.SceneManagement;
 
 namespace Gstarr.Combat
 {
-    /// <summary>Enemies 타일맵에 배치한 적 타일을 씬 시작 때 실제 적으로 바꾼다.</summary>
+    /// <summary>타일맵에 그려 둔 적 그림은 지운다. 실제 적은 방이 열릴 때 나온다.</summary>
     [RequireComponent(typeof(Tilemap))]
     public class EnemyTileSpawner : MonoBehaviour
     {
-        private struct SpawnRequest
-        {
-            public EnemyKind Kind;
-            public Vector3 Position;
-        }
-
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void Register()
         {
@@ -46,7 +40,6 @@ namespace Gstarr.Combat
 
         private void Start()
         {
-            var requests = new List<SpawnRequest>();
             var tilemaps = FindObjectsByType<Tilemap>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var tilemap in tilemaps)
             {
@@ -59,14 +52,7 @@ namespace Gstarr.Combat
                 for (int i = 0; i < cells.Count; i++)
                 {
                     var cell = cells[i];
-                    if (tilemap.GetTile(cell) is not EnemyTile tile) continue;
-                    Vector3 bottom = tilemap.CellToWorld(cell);
-                    Vector3 center = tilemap.GetCellCenterWorld(cell);
-                    requests.Add(new SpawnRequest
-                    {
-                        Kind = tile.Kind,
-                        Position = new Vector3(center.x, bottom.y, center.z)
-                    });
+                    if (tilemap.GetTile(cell) is not EnemyTile) continue;
                     tilemap.SetTileFlags(cell, TileFlags.None);
                     tilemap.SetColor(cell, Color.clear);
                     tilemap.SetTile(cell, null);
@@ -77,12 +63,6 @@ namespace Gstarr.Combat
                 tilemap.RefreshAllTiles();
                 var renderer = tilemap.GetComponent<TilemapRenderer>();
                 if (renderer != null) renderer.enabled = false;
-            }
-
-            foreach (var request in requests)
-            {
-                if (request.Kind == EnemyKind.Boss) EnemyActor.SpawnBoss(request.Position);
-                else EnemyActor.Spawn(null, request.Position, request.Kind);
             }
         }
     }

@@ -62,12 +62,17 @@ namespace Gstarr.Game
         private bool metronomeOn;
         private float beatInterval = 0.5f;
         private bool skipped;
+        private string dreamTitle;
+        private string[] dreamLines;
+        private Sprite dreamImage;
         private Coroutine blinkRoutine;
 
         // ───────────────────────── 진입점 ─────────────────────────
 
         /// <summary>인트로 전체를 재생하고 끝나면 스스로 사라진다.</summary>
-        public static IEnumerator Play(Sprite classroom, string title, string[] lines, float beatInterval, System.Action onWake = null)
+        public static IEnumerator Play(
+            Sprite classroom, string title, string[] lines, float beatInterval, System.Action onWake = null,
+            string dreamTitle = null, string[] dreamLines = null, Sprite dreamImage = null)
         {
             string scene = SceneManager.GetActiveScene().name;
             bool shortVersion = seenScene == scene;
@@ -76,6 +81,9 @@ namespace Gstarr.Game
             var go = new GameObject("SleepIntro");
             var intro = go.AddComponent<SleepIntro>();
             intro.beatInterval = Mathf.Clamp(beatInterval, 0.25f, 1.2f);
+            intro.dreamTitle = dreamTitle;
+            intro.dreamLines = dreamLines;
+            intro.dreamImage = dreamImage;
             intro.Build(classroom, title);
 
             if (shortVersion)
@@ -130,6 +138,9 @@ namespace Gstarr.Game
 
         private IEnumerator RunFull(string[] lines)
         {
+            // 이야기가 시작되는 순간 곡을 튼다. 눈 뜨는 카운트에서 다시 시작하지 않는다.
+            Gstarr.Rhythm.RhythmConductor.Instance?.BeginWithStory();
+
             // 0. 어둠에서 교실이 밝아진다
             SetLids(0f);
             sceneLayer.gameObject.SetActive(true);
@@ -169,7 +180,37 @@ namespace Gstarr.Game
                 yield return ShowCenter(SleepText, 0.5f, 1.0f, 0.5f);
             }
 
+            // 잠든 뒤의 꿈 대사는 같은 자막으로 이어 가고, 그 다음 눈이 뜨이며 곡이 시작한다.
+            if (!skipped && dreamLines != null && dreamLines.Length > 0)
+                yield return ContinueDream();
+
             // 3. 눈은 감긴 채로 넘긴다. 3, 2, 1 은 Play 가 이어서 맞춘다.
+        }
+
+        private IEnumerator ContinueDream()
+        {
+            PlaySfx(dreamClip, 0.4f);
+            if (dreamImage != null)
+            {
+                photoStill = true;
+                sceneLayer.gameObject.SetActive(true);
+                photo.sprite = dreamImage;
+                photo.color = new Color(0.82f, 0.86f, 0.95f, 1f);
+                photo.rectTransform.localScale = Vector3.one;
+                fadeBlack.color = Color.black;
+                yield return FadeImage(fadeBlack, 1f, 0.28f, 0.9f);
+                yield return AnimateLid(1f, 0.18f, 1.15f, EaseOut);
+            }
+
+            if (titleText != null) titleText.text = string.IsNullOrEmpty(dreamTitle) ? "" : dreamTitle;
+            yield return FadeGroup(caption, caption.alpha, 1f, 0.35f);
+            for (int i = 0; i < dreamLines.Length && !skipped; i++)
+                yield return TypeLine(dreamLines[i], i == dreamLines.Length - 1);
+
+            yield return FadeGroup(caption, caption.alpha, 0f, skipped ? 0.15f : 0.4f);
+            yield return AnimateLid(lid, 1f, skipped ? 0.2f : 0.55f, EaseInOut);
+            sceneLayer.gameObject.SetActive(false);
+            photoStill = false;
         }
 
         private IEnumerator RunCaught(string[] lines)
@@ -258,6 +299,25 @@ namespace Gstarr.Game
             centerText.fontStyle = FontStyle.BoldAndItalic;
             centerText.color = Color.white;
             centerText.rectTransform.SetAsLastSibling();
+
+            if (conductor != null && conductor.SongTime >= 0)
+            {
+                const float open = 0.9f;
+                for (float t = 0f; t < open; t += Time.unscaledDeltaTime)
+                {
+                    float p = Mathf.Clamp01(t / open);
+                    SetLids(Mathf.Lerp(1f, 0f, p));
+                    dreamTint.color = WithAlpha(DreamColor, Mathf.Lerp(0.55f, 0f, p));
+                    vignette.color = WithAlpha(DreamColor * 0.35f, Mathf.Lerp(0.85f, 0f, p));
+                    centerText.text = "";
+                    yield return null;
+                }
+                SetLids(0f);
+                centerText.text = "";
+                dreamTint.color = WithAlpha(DreamColor, 0f);
+                vignette.color = WithAlpha(DreamColor * 0.35f, 0f);
+                yield break;
+            }
 
             float waited = 0f;
             while (waited < duration + 0.75f)

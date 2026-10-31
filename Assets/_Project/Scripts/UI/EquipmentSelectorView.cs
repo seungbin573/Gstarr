@@ -42,8 +42,8 @@ namespace Gstarr.UI
 
             var canvas = UIFactory.CreateCanvas(transform, "ItemHud", SortingOrder);
             var root = (RectTransform)canvas.transform;
-            combat = BuildRow(root, ItemCategory.Combat, "전투", "▲\n▼", CombatAccent, new Vector2(-28f, -16f));
-            effect = BuildRow(root, ItemCategory.Effect, "효과", "◀   ▶", EffectAccent, new Vector2(-28f, -148f));
+            combat = BuildRow(root, ItemCategory.Combat, "전투", "▲\n▼", CombatAccent, new Vector2(-28f, -188f));
+            effect = BuildRow(root, ItemCategory.Effect, "효과", "◀   ▶", EffectAccent, new Vector2(-28f, -320f));
         }
 
         private void OnEnable()
