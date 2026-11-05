@@ -231,12 +231,12 @@ MonoBehaviour:
   slashSprite: {fileID: 21300000, guid: f619d063a2adfa44eb344a2123a5797b, type: 3}
   weaponSortingOrder: 6
   weapons:
-  - name: Sword
+  - name: Cutter
     type: 0
     damage: 3
     fireInterval: 0.3
-    sprite: {fileID: 21300000, guid: 1c86e7ca40b1aff43b80c248f9aca78d, type: 3}
-    holdOffset: {x: 0.7, y: -0.1}
+    sprite: {fileID: 0}
+    holdOffset: {x: 0.1, y: -0.28}
     muzzleOffset: {x: 0, y: 0}
     meleeSize: {x: 2, y: 1.5}
     meleeReach: 1
@@ -250,9 +250,9 @@ MonoBehaviour:
     type: 1
     damage: 1
     fireInterval: 0.18
-    sprite: {fileID: 21300000, guid: 57d2676a0c1f7394aa51cc2bc8c511e6, type: 3}
-    holdOffset: {x: 0.55, y: -0.05}
-    muzzleOffset: {x: 0.9, y: 0.08}
+    sprite: {fileID: 0}
+    holdOffset: {x: 0.12, y: -0.26}
+    muzzleOffset: {x: 0.72, y: 0.04}
     meleeSize: {x: 1.6, y: 1.2}
     meleeReach: 0.9
     projectileSprite: {fileID: 21300000, guid: a50131348c326f74ebe5637e52cedfab, type: 3}
@@ -261,13 +261,13 @@ MonoBehaviour:
     pellets: 1
     spreadAngle: 0
     recoil: 0
-  - name: Shotgun
+  - name: Slingshot
     type: 2
     damage: 1
     fireInterval: 0.7
-    sprite: {fileID: 21300000, guid: 6a1e5b4fb3a80ea41a5fd9e6635665be, type: 3}
-    holdOffset: {x: 0.6, y: -0.08}
-    muzzleOffset: {x: 1.15, y: 0.02}
+    sprite: {fileID: 0}
+    holdOffset: {x: 0.08, y: -0.3}
+    muzzleOffset: {x: 0.32, y: 0.42}
     meleeSize: {x: 1.6, y: 1.2}
     meleeReach: 0.9
     projectileSprite: {fileID: 21300000, guid: 2684cff080227a341b793ba4c3543b8f, type: 3}
@@ -434,7 +434,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 5
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 21300000, guid: 20e8e1f39435fce44a8c56483ca9d81e, type: 3}
+  m_Sprite: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -442,7 +442,7 @@ SpriteRenderer:
   m_Size: {x: 1.5703125, y: 1.5}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_SpriteSortPoint: 0
 --- !u!4 &18807945
 Transform:

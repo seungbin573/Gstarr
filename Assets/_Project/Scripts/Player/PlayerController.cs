@@ -119,6 +119,7 @@ namespace Gstarr.Player
             ApplyTallHitbox();
             airJumpsLeft = extraAirJumps;
             if (GetComponent<SpriteMotion>() == null) gameObject.AddComponent<SpriteMotion>();
+            if (GetComponent<PlayerPuppet>() == null) gameObject.AddComponent<PlayerPuppet>();
         }
 
         /// <summary>발 위치는 유지한 채, 몸통을 세로로 긴 직사각형으로 바꾼다.</summary>

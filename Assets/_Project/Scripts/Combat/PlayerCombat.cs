@@ -32,6 +32,8 @@ namespace Gstarr.Combat
         public Vector2 holdOffset;
         [Tooltip("탄이 나가는 위치")]
         public Vector2 muzzleOffset;
+        [Tooltip("들고 있을 때의 기본 각도. 오른쪽이 앞이다.")]
+        public float restAngle;
 
         [Header("근접")]
         public Vector2 meleeSize = new Vector2(1.6f, 1.2f);
@@ -64,20 +66,20 @@ namespace Gstarr.Combat
         {
             new Weapon
             {
-                name = "Sword", type = WeaponType.Melee, damage = 3, fireInterval = 0.3f,
-                holdOffset = new Vector2(0.7f, -0.1f),
+                name = "Cutter", type = WeaponType.Melee, damage = 3, fireInterval = 0.3f,
+                holdOffset = new Vector2(0.1f, -0.28f),
                 meleeSize = new Vector2(2f, 1.5f), meleeReach = 1f
             },
             new Weapon
             {
                 name = "Pistol", type = WeaponType.Ranged, damage = 1, fireInterval = 0.18f,
-                holdOffset = new Vector2(0.55f, -0.05f), muzzleOffset = new Vector2(0.9f, 0.08f),
+                holdOffset = new Vector2(0.12f, -0.26f), muzzleOffset = new Vector2(0.72f, 0.04f),
                 projectileSpeed = 14f, range = 9f, pellets = 1
             },
             new Weapon
             {
-                name = "Shotgun", type = WeaponType.Shotgun, damage = 1, fireInterval = 0.7f,
-                holdOffset = new Vector2(0.6f, -0.08f), muzzleOffset = new Vector2(1.15f, 0.02f),
+                name = "Slingshot", type = WeaponType.Shotgun, damage = 1, fireInterval = 0.7f,
+                holdOffset = new Vector2(0.08f, -0.3f), muzzleOffset = new Vector2(0.32f, 0.42f),
                 projectileSpeed = 20f, range = 7f, pellets = 3, spreadAngle = 30f, recoil = 4.8f
             }
         };
@@ -146,6 +148,7 @@ namespace Gstarr.Combat
             if (GetComponent<EquipmentSelectorView>() == null) gameObject.AddComponent<EquipmentSelectorView>();
 
             SetupInput();
+            ApplyArt();
             CreateWeaponVisual();
         }
 
@@ -183,6 +186,27 @@ namespace Gstarr.Combat
             }
         }
 
+        private void ApplyArt()
+        {
+            const string folder = "Assets/arts/character/player/";
+            if (weapons == null || weapons.Length < 3) return;
+
+            weapons[0].name = "Cutter";
+            weapons[0].sprite = PlayerArt.LoadTrimmed(folder + "무제320_20261104173934.png", new Vector2(0.84f, 0.14f), 1.05f);
+            weapons[0].holdOffset = new Vector2(0.04f, -0.02f);
+            weapons[0].restAngle = -105f;
+
+            weapons[1].name = "Pistol";
+            weapons[1].sprite = PlayerArt.LoadTrimmed(folder + "무제320_20261104173759.png", new Vector2(0.22f, 0.42f), 1.15f);
+            weapons[1].holdOffset = new Vector2(0.06f, 0.02f);
+            weapons[1].muzzleOffset = new Vector2(0.72f, 0.04f);
+
+            weapons[2].name = "Slingshot";
+            weapons[2].sprite = PlayerArt.LoadTrimmed(folder + "무제320_20261104173326.png", new Vector2(0.48f, 0.08f), 0.78f);
+            weapons[2].holdOffset = new Vector2(0.02f, 0f);
+            weapons[2].muzzleOffset = new Vector2(0.32f, 0.42f);
+        }
+
         private void CreateWeaponVisual()
         {
             weaponPivot = new GameObject("WeaponPivot").transform;
@@ -196,7 +220,7 @@ namespace Gstarr.Combat
             if (playerRenderer != null)
             {
                 weaponRenderer.sortingLayerID = playerRenderer.sortingLayerID;
-                weaponRenderer.sortingOrder = Mathf.Max(weaponSortingOrder, playerRenderer.sortingOrder + 1);
+                weaponRenderer.sortingOrder = playerRenderer.sortingOrder + 8;
             }
             else
             {
@@ -235,6 +259,9 @@ namespace Gstarr.Combat
 
         private void Start()
         {
+            var puppet = GetComponent<PlayerPuppet>();
+            if (puppet != null && puppet.WeaponHand != null)
+                weaponPivot.SetParent(puppet.WeaponHand, false);
             ApplyWeaponVisual();
         }
 
@@ -334,7 +361,7 @@ namespace Gstarr.Combat
 
             // 부모(플레이어)의 localScale.x 반전으로 좌우가 자동으로 뒤집히므로 오른쪽 기준으로만 계산
             weaponPivot.localPosition = w.holdOffset + new Vector2(-recoilKick, LiftHeight * lift);
-            weaponPivot.localRotation = Quaternion.Euler(0f, 0f, angle + aimAngle);
+            weaponPivot.localRotation = Quaternion.Euler(0f, 0f, w.restAngle + angle + aimAngle);
             weaponPivot.localScale = Vector3.one * (1f + LiftScalePop * lift);
         }
 
@@ -374,7 +401,7 @@ namespace Gstarr.Combat
             }
 
             weaponPivot.localPosition = w.holdOffset;
-            weaponPivot.localRotation = Quaternion.Euler(0f, 0f, weaponAngle);
+            weaponPivot.localRotation = Quaternion.Euler(0f, 0f, w.restAngle + weaponAngle);
             weaponPivot.localScale = Vector3.one * weaponScale;
 
             if (heldItemRenderer != null)
@@ -549,20 +576,17 @@ namespace Gstarr.Combat
                 switch (w.type)
                 {
                     case WeaponType.Melee:
-                        if (w.sprite == null) w.sprite = LoadArt("Weapons/Sword.png");
-                        if (w.holdOffset == Vector2.zero) w.holdOffset = new Vector2(0.7f, -0.1f);
+                        w.holdOffset = new Vector2(0.1f, -0.28f);
                         break;
                     case WeaponType.Ranged:
-                        if (w.sprite == null) w.sprite = LoadArt("Weapons/Pistol.png");
                         if (w.projectileSprite == null) w.projectileSprite = LoadArt("Projectiles/Bullet.png");
-                        if (w.holdOffset == Vector2.zero) w.holdOffset = new Vector2(0.55f, -0.05f);
-                        if (w.muzzleOffset == Vector2.zero) w.muzzleOffset = new Vector2(0.9f, 0.08f);
+                        w.holdOffset = new Vector2(0.12f, -0.26f);
+                        w.muzzleOffset = new Vector2(0.72f, 0.04f);
                         break;
                     case WeaponType.Shotgun:
-                        if (w.sprite == null) w.sprite = LoadArt("Weapons/Shotgun.png");
                         if (w.projectileSprite == null) w.projectileSprite = LoadArt("Projectiles/Pellet.png");
-                        if (w.holdOffset == Vector2.zero) w.holdOffset = new Vector2(0.6f, -0.08f);
-                        if (w.muzzleOffset == Vector2.zero) w.muzzleOffset = new Vector2(1.15f, 0.02f);
+                        w.holdOffset = new Vector2(0.08f, -0.3f);
+                        w.muzzleOffset = new Vector2(0.32f, 0.42f);
                         break;
                 }
             }

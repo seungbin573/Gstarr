@@ -213,6 +213,8 @@ namespace Gstarr.UI
                 var item = items[i].item;
                 slot.icon.sprite = item != null ? item.Icon : null;
                 slot.icon.enabled = slot.icon.sprite != null;
+                float iconScale = item != null && item.DisplayName == "Bomb" ? 2.15f : 1f;
+                slot.icon.rectTransform.localScale = new Vector3(iconScale, iconScale, 1f);
 
                 var tint = item != null ? item.IconTint : Color.white;
                 tint.a = on ? 1f : 0.55f;

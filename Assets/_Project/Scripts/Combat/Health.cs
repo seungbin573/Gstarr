@@ -80,8 +80,7 @@ namespace Gstarr.Combat
             if (InvulnOnHit > 0f)
             {
                 invulnTimer = InvulnOnHit;
-                if (blinkRenderers == null || blinkRenderers.Length == 0)
-                    blinkRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+                blinkRenderers = GetComponentsInChildren<SpriteRenderer>(true);
             }
             else
             {

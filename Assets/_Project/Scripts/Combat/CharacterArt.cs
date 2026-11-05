@@ -98,56 +98,71 @@ namespace Gstarr.Combat
         }
 
         /// <summary>
-        /// idle에서 실제로 칠해진 몸통 높이에 맞춘다. 캔버스 여백은 크기에 넣지 않고, 발은 가장 아래 픽셀에 둔다.
+        /// idle에서 보이는 영역의 면적에 맞춘다. 가로로 긴 돌진을 키만 맞춰 키우지 않고, 발은 가장 아래 픽셀에 둔다.
         /// </summary>
         private static Sprite[] LoadVisible(string[] paths, string referencePath, float scale = 1f)
         {
-            float visible = VisibleWorldHeight(referencePath, scale);
+            var reference = MeasureVisible(referencePath);
+            float sized = BodyHeight * Mathf.Max(0.25f, scale);
             float fallback = ReferencePpu(referencePath) / Mathf.Max(0.25f, scale);
+            float worldBulk = 0f;
+            if (reference.Width > 0 && reference.Height > 0 && reference.CanvasHeight > 0)
+            {
+                float worldHeight = sized * reference.Height / reference.CanvasHeight;
+                float worldWidth = worldHeight * reference.Width / reference.Height;
+                worldBulk = Mathf.Sqrt(worldWidth * worldHeight);
+            }
+
             var frames = new List<Sprite>(paths.Length);
             for (int i = 0; i < paths.Length; i++)
             {
-                int body = OpaqueColumn(paths[i]);
-                float ppu = body > 0 && visible > 0.05f ? body / visible : fallback;
+                var body = MeasureVisible(paths[i]);
+                float ppu = body.Width > 0 && body.Height > 0 && worldBulk > 0.05f
+                    ? Mathf.Sqrt(body.Width * (float)body.Height) / worldBulk
+                    : fallback;
                 var sprite = LoadAnchored(paths[i], ppu);
                 if (sprite != null) frames.Add(sprite);
             }
             return frames.ToArray();
         }
 
-        private static float VisibleWorldHeight(string referencePath, float scale)
+        private struct VisibleSpan
         {
-            int full = PngPixelHeight(referencePath);
-            int body = OpaqueColumn(referencePath);
-            float sized = BodyHeight * Mathf.Max(0.25f, scale);
-            if (full <= 0 || body <= 0) return sized;
-            return sized * body / full;
+            public int Width;
+            public int Height;
+            public int CanvasHeight;
         }
 
-        private static int OpaqueColumn(string assetPath)
+        private static VisibleSpan MeasureVisible(string assetPath)
         {
             var texture = ReadTexture(assetPath);
-            if (texture == null) return 0;
+            if (texture == null) return default;
             var pixels = texture.GetPixels32();
             int w = texture.width;
             int h = texture.height;
             Object.Destroy(texture);
-            if (w < 2 || h < 2 || pixels == null || pixels.Length < w * h) return 0;
-            int maxThick = 0;
-            for (int x = 0; x < w; x++)
+            var span = new VisibleSpan { CanvasHeight = h };
+            if (w < 2 || h < 2 || pixels == null || pixels.Length < w * h) return span;
+
+            int minX = w;
+            int minY = h;
+            int maxX = -1;
+            int maxY = -1;
+            for (int i = 0; i < pixels.Length; i++)
             {
-                int bottom = -1;
-                int top = -1;
-                for (int y = 0; y < h; y++)
-                {
-                    if (pixels[x + y * w].a <= 40) continue;
-                    if (bottom < 0) bottom = y;
-                    top = y;
-                }
-                int thick = bottom < 0 ? 0 : top - bottom + 1;
-                if (thick > maxThick) maxThick = thick;
+                if (pixels[i].a <= 40) continue;
+                int x = i % w;
+                int y = i / w;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
             }
-            return maxThick;
+
+            if (maxX < minX || maxY < minY) return span;
+            span.Width = maxX - minX + 1;
+            span.Height = maxY - minY + 1;
+            return span;
         }
 
         private static float ReferencePpu(string referencePath)

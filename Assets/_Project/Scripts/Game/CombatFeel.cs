@@ -110,9 +110,13 @@ namespace Gstarr.Game
             EnsureVisual();
         }
 
+        public float PoseAlpha { get; private set; } = 1f;
+        public bool PoseVisible { get; private set; } = true;
+
         private void EnsureVisual()
         {
-            if (visual != null || source == null || source.sprite == null) return;
+            if (visual != null || source == null) return;
+            if (source.sprite == null && player == null) return;
 
             var go = new GameObject("BodyVisual");
             go.transform.SetParent(transform, false);
@@ -195,6 +199,8 @@ namespace Gstarr.Game
             }
 
             visual.color = color;
+            PoseAlpha = color.a;
+            PoseVisible = visual.enabled && color.a > 0.02f;
             var hidden = source.color;
             hidden.a = 0f;
             source.color = hidden;
