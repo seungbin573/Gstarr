@@ -138,7 +138,7 @@ namespace Gstarr.Game
 
         private IEnumerator RunFull(string[] lines)
         {
-            // 이야기가 시작되는 순간 곡을 튼다. 눈 뜨는 카운트에서 다시 시작하지 않는다.
+            // 이야기가 시작되는 순간 곡을 튼다. 눈을 떠도 그 재생은 끊지 않는다.
             Gstarr.Rhythm.RhythmConductor.Instance?.BeginWithStory();
 
             // 0. 어둠에서 교실이 밝아진다
@@ -290,7 +290,9 @@ namespace Gstarr.Game
             SetLids(1f);
             var conductor = Gstarr.Rhythm.RhythmConductor.Instance;
             int beats = conductor != null ? Mathf.Max(1, conductor.CountdownBeats) : 3;
-            float beat = beatInterval;
+            float beat = conductor != null && conductor.CountdownInterval > 0.05f
+                ? conductor.CountdownInterval
+                : beatInterval;
             double duration = beat * beats;
             PlaySfx(dreamClip, 0.55f);
             dreamTint.color = WithAlpha(DreamColor, 0.55f);
@@ -298,20 +300,29 @@ namespace Gstarr.Game
             centerText.fontSize = 200;
             centerText.fontStyle = FontStyle.BoldAndItalic;
             centerText.color = Color.white;
+            centerText.rectTransform.sizeDelta = new Vector2(900f, 340f);
             centerText.rectTransform.SetAsLastSibling();
 
-            if (conductor != null && conductor.SongTime >= 0)
+            // 이야기에서 이미 나오던 곡은 멈추지 않는다. 숫자만 그 위에 올린다.
+            if (conductor != null && conductor.IsReady && conductor.SongTime >= 0)
             {
-                const float open = 0.9f;
-                for (float t = 0f; t < open; t += Time.unscaledDeltaTime)
+                float elapsed = 0f;
+                while (elapsed < duration)
                 {
-                    float p = Mathf.Clamp01(t / open);
-                    SetLids(Mathf.Lerp(1f, 0f, p));
+                    float p = duration <= 0.01 ? 1f : Mathf.Clamp01(elapsed / (float)duration);
+                    SetLids(LidForCountdown(p));
                     dreamTint.color = WithAlpha(DreamColor, Mathf.Lerp(0.55f, 0f, p));
                     vignette.color = WithAlpha(DreamColor * 0.35f, Mathf.Lerp(0.85f, 0f, p));
-                    centerText.text = "";
+                    float remain = (float)duration - elapsed;
+                    int k = Mathf.CeilToInt(remain / Mathf.Max(0.05f, beat));
+                    string label = k >= 1 && k <= beats ? k.ToString() : "";
+                    centerText.text = label;
+                    centerText.color = new Color(1f, 1f, 1f, label.Length > 0 ? 1f : 0f);
+                    if (SkipPressed()) break;
+                    elapsed += Time.unscaledDeltaTime;
                     yield return null;
                 }
+
                 SetLids(0f);
                 centerText.text = "";
                 dreamTint.color = WithAlpha(DreamColor, 0f);

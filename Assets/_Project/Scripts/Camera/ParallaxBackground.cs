@@ -16,7 +16,7 @@ namespace Gstarr.CameraSystem
         [SerializeField] private int sortingOrder = -100;
 
         [SerializeField]
-        [Tooltip("이동 순서. 앞쪽부터 forest, ball, forest_snow, church.")]
+        [Tooltip("이동 순서. 뒤틀린 학교, 하늘문, 생일 파티, 키즈카페, 키즈카페 출구, 뒤틀린 통로 1·2·3, 화려한 집, 눈 숲, 눈 숲, 교회.")]
         private Sprite[] backgrounds;
 
         [SerializeField]
@@ -34,14 +34,24 @@ namespace Gstarr.CameraSystem
         [Tooltip("끝에 닿았을 때 다음 배경으로 바뀌는 시간(초).")]
         private float fadeDuration = 0.8f;
 
-        private const float VerticalDrift = 0.45f;
+        [SerializeField]
+        [Tooltip("타일 바닥의 윗면. 배경 그림의 바닥선을 이 높이에 붙인다.")]
+        private float floorWorldY = -2f;
+
+        [SerializeField]
+        [Tooltip("각 배경에서 바닥선이 그림 아래쪽부터 차지하는 비율. 0이면 그림의 맨 아래.")]
+        private float[] floorFromBottom =
+        {
+            0.06f, 0f, 0.14f, 0.26f, 0.22f,
+            0.04f, 0.04f, 0.04f,
+            0.12f, 0.28f, 0.28f, 0.22f,
+        };
 
         private SpriteRenderer source;
         private SpriteRenderer front;
         private SpriteRenderer back;
         private Camera cam;
         private float originX;
-        private float originY;
         private bool hasOrigin;
         private int index;
         private bool resumeApplied;
@@ -94,7 +104,6 @@ namespace Gstarr.CameraSystem
             if (!hasOrigin)
             {
                 originX = RunCheckpoint.ResumedThisLoad ? 3f : cam.transform.position.x;
-                originY = cam.transform.position.y;
                 hasOrigin = true;
             }
 
@@ -195,14 +204,20 @@ namespace Gstarr.CameraSystem
             }
 
             Frame frame = Measure(cam, sprite);
+            float fraction = FloorFraction(sprite);
+            Vector2 size = sprite.bounds.size;
+            float coverageAbove = frame.viewHeight + 6f;
+            float scale = Mathf.Max(
+                coverageAbove / Mathf.Max(0.05f, (1f - fraction) * size.y),
+                frame.viewWidth * Mathf.Max(1f, giantScale) / Mathf.Max(0.05f, size.x));
+            float height = size.y * scale;
+            float width = size.x * scale;
             float cameraX = cam.transform.position.x;
-            float cameraY = cam.transform.position.y;
-            float extraX = Mathf.Max(0f, frame.width - frame.viewWidth);
+            float extraX = Mathf.Max(0f, width - frame.viewWidth);
             float centerX = cameraX + (0.5f - Mathf.Clamp01(t)) * extraX;
-            float spareY = Mathf.Max(0f, (frame.height - frame.viewHeight) * 0.5f);
-            float shiftY = Mathf.Clamp((originY - cameraY) * VerticalDrift, -spareY, spareY);
-            var scale = new Vector3(frame.scale, frame.scale, 1f);
-            Vector3 visualCenter = new Vector3(centerX, cameraY + shiftY, 0f);
+            float centerY = floorWorldY + height * (0.5f - fraction);
+            var scale3 = new Vector3(scale, scale, 1f);
+            Vector3 visualCenter = new Vector3(centerX, centerY, 0f);
 
             renderer.enabled = true;
             renderer.sprite = sprite;
@@ -211,8 +226,23 @@ namespace Gstarr.CameraSystem
             Color color = source.color;
             color.a *= alpha;
             renderer.color = color;
-            renderer.transform.localScale = scale;
-            renderer.transform.position = visualCenter - Vector3.Scale((Vector3)frame.center, scale);
+            renderer.transform.localScale = scale3;
+            renderer.transform.position = visualCenter - Vector3.Scale((Vector3)frame.center, scale3);
+        }
+
+        private float FloorFraction(Sprite sprite)
+        {
+            if (backgrounds != null && floorFromBottom != null)
+            {
+                int count = Mathf.Min(backgrounds.Length, floorFromBottom.Length);
+                for (int i = 0; i < count; i++)
+                {
+                    if (backgrounds[i] == sprite)
+                        return Mathf.Clamp01(floorFromBottom[i]);
+                }
+            }
+
+            return 0.08f;
         }
 
         private Frame Measure(Camera camera, Sprite sprite)

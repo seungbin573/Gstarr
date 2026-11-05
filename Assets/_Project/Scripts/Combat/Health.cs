@@ -16,8 +16,8 @@ namespace Gstarr.Combat
         [SerializeField] private float knockbackForce = 4f;
         [SerializeField] private bool destroyOnDeath = false;
 
-        public UnityEvent<int, int> onHealthChanged;
-        public UnityEvent onDeath;
+        public UnityEvent<int, int> onHealthChanged = new UnityEvent<int, int>();
+        public UnityEvent onDeath = new UnityEvent();
 
         public int Current { get; private set; }
         public int Max => maxHealth;
@@ -49,6 +49,8 @@ namespace Gstarr.Combat
 
         private void Awake()
         {
+            if (onHealthChanged == null) onHealthChanged = new UnityEvent<int, int>();
+            if (onDeath == null) onDeath = new UnityEvent();
             Current = maxHealth;
             spriteRenderer = GetComponent<SpriteRenderer>();
             rb = GetComponent<Rigidbody2D>();
@@ -106,13 +108,16 @@ namespace Gstarr.Combat
             {
                 onDeath?.Invoke();
                 CombatFeel.Burst(transform.position, playerHit ? new Color(1f, 0.35f, 0.3f) : new Color(1f, 0.75f, 0.3f), 10);
-                GetComponent<SpriteMotion>()?.PlayDeath();
+                if (playerHit)
+                    GetComponent<SpriteMotion>()?.PlayDeath();
+                else
+                    HideSprites();
                 if (enemy != null)
                 {
                     if (EnemyActor.CountAlive() == 0 && !Gstarr.World.ArenaDoorSpawner.HasUnopenedRooms)
                         StageHUD.ShowGameClear();
                 }
-                else if (playerHit) StageHUD.ShowGameOver();
+                else if (playerHit) StageHUD.BeginPlayerDeath();
                 if (destroyOnDeath)
                 {
                     var body = GetComponent<Rigidbody2D>();
@@ -136,6 +141,13 @@ namespace Gstarr.Combat
 
         private void Update()
         {
+            if (Current <= 0)
+            {
+                if (GetComponent<PlayerController>() == null)
+                    HideSprites();
+                return;
+            }
+
             if (invulnTimer > 0f)
             {
                 invulnTimer -= Time.deltaTime;
@@ -157,6 +169,15 @@ namespace Gstarr.Combat
             flashTimer -= Time.deltaTime;
             if (flashTimer <= 0f && spriteRenderer != null)
                 spriteRenderer.color = baseColor;
+        }
+
+        private void HideSprites()
+        {
+            if (blinkRenderers == null || blinkRenderers.Length == 0)
+                blinkRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+            for (int i = 0; i < blinkRenderers.Length; i++)
+                if (blinkRenderers[i] != null)
+                    blinkRenderers[i].enabled = false;
         }
 
         private void SetBlinkVisible(bool visible)

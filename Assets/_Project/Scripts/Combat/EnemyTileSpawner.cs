@@ -6,6 +6,7 @@ using UnityEngine.SceneManagement;
 namespace Gstarr.Combat
 {
     /// <summary>타일맵에 그려 둔 적 그림은 지운다. 실제 적은 방이 열릴 때 나온다.</summary>
+    [DefaultExecutionOrder(200)]
     [RequireComponent(typeof(Tilemap))]
     public class EnemyTileSpawner : MonoBehaviour
     {

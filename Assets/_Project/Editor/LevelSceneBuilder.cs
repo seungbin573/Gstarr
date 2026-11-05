@@ -68,7 +68,7 @@ namespace Gstarr.EditorTools
             var player = CreatePlayer(playerSprite, noFriction, new Vector3(-2f, 0.5f, 0f));
             SetupCamera(player.transform);
             CreateParallaxBackground(new Vector3(-2f, 2f, 0f));
-            EnemyActor.Spawn(null, new Vector3(8f, 0.5f, 0f), EnemyKind.BeatChaser);
+            EnemyActor.Spawn(null, new Vector3(8f, 0.5f, 0f), EnemyKind.Bunny);
             EnemyActor.Spawn(null, new Vector3(18f, 0.5f, 0f), EnemyKind.RangedBeat);
             EnemyActor.Spawn(null, new Vector3(48f, 0.5f, 0f), EnemyKind.RangedHalfBeat);
             var doorTile = DoorTools.GetOrCreateTile();
@@ -255,21 +255,43 @@ namespace Gstarr.EditorTools
 
         private static readonly string[] BackgroundSpritePaths =
         {
-            "Assets/arts/picture/background_forest.png",
-            "Assets/arts/picture/background_ball.png",
-            "Assets/arts/picture/background_forest_snow.png",
-            "Assets/arts/picture/background_church.png",
+            "Assets/arts/school/school_background.jpg",
+            "Assets/arts/zones/sky-gate/sky_gate.jpg",
+            "Assets/arts/zones/birthday/birthday.png",
+            "Assets/arts/zones/kids-cafe/kids_cafe.png",
+            "Assets/arts/zones/kids-cafe/kids_cafe_exit.png",
+            "Assets/arts/zones/passage/passage_1.jpg",
+            "Assets/arts/zones/passage/passage_2.jpg",
+            "Assets/arts/zones/passage/passage_3.jpg",
+            "Assets/arts/zones/house/house.jpg",
+            "Assets/arts/zones/snow/snow_forest_deep.jpg",
+            "Assets/arts/zones/snow/snow_forest.jpg",
+            "Assets/arts/zones/church/church.jpg",
         };
+
+        private static Sprite LoadBackground(string path)
+        {
+            Sprite first = null;
+            Sprite full = null;
+            foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(path))
+            {
+                if (asset is not Sprite sprite) continue;
+                if (first == null) first = sprite;
+                if (sprite.name.EndsWith("_full")) full = sprite;
+            }
+
+            return full != null ? full : first;
+        }
 
         private static void CreateParallaxBackground(Vector3 viewCenter)
         {
             var sprites = new Sprite[BackgroundSpritePaths.Length];
             for (int i = 0; i < BackgroundSpritePaths.Length; i++)
-                sprites[i] = AssetDatabase.LoadAssetAtPath<Sprite>(BackgroundSpritePaths[i]);
+                sprites[i] = LoadBackground(BackgroundSpritePaths[i]);
 
             if (sprites[0] == null)
             {
-                Debug.LogWarning("[Level Builder] Assets/arts/picture/background_forest.png 스프라이트를 찾지 못했습니다.");
+                Debug.LogWarning("[Level Builder] 첫 배경 스프라이트를 찾지 못했습니다.");
                 return;
             }
 

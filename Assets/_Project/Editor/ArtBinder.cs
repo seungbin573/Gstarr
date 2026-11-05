@@ -29,6 +29,14 @@ namespace Gstarr.EditorTools
             changed |= Assign(ref assets.titleLogo, "Assets/arts/UI/TitleLogo.png");
             changed |= Assign(ref assets.menuBackground, "Assets/arts/UI/MenuBackground.png");
             changed |= Assign(ref assets.heartSprite, "Assets/arts/UI/heartbar.png");
+            changed |= AssignFolder(ref assets.angelSprites, "Assets/arts/character/angel");
+            changed |= AssignFolder(ref assets.annoyingKidSprites, "Assets/arts/character/ankid");
+            changed |= AssignFolder(ref assets.blackKidSprites, "Assets/arts/character/blackKid");
+            changed |= AssignFolder(ref assets.blackKidThrowSprites, "Assets/arts/character/blackKidThrow");
+            changed |= AssignFolder(ref assets.bunnySprites, "Assets/arts/character/bunny");
+            changed |= AssignFolder(ref assets.distortedBunnySprites, "Assets/arts/character/d_bunny");
+            changed |= AssignFolder(ref assets.twinBunnySprites, "Assets/arts/character/twinBunny");
+            changed |= AssignFolder(ref assets.shadowmanSprites, "Assets/arts/character/shadowman");
             if (!changed) return;
 
             EditorUtility.SetDirty(assets);
@@ -37,9 +45,45 @@ namespace Gstarr.EditorTools
 
         private static bool Assign(ref Sprite slot, string path)
         {
-            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+            var sprite = LoadSprite(path);
             if (sprite == null || slot == sprite) return false;
             slot = sprite;
+            return true;
+        }
+
+        private static Sprite LoadSprite(string path)
+        {
+            var all = AssetDatabase.LoadAllAssetsAtPath(path);
+            if (all != null)
+            {
+                for (int i = 0; i < all.Length; i++)
+                    if (all[i] is Sprite sprite) return sprite;
+            }
+            return AssetDatabase.LoadAssetAtPath<Sprite>(path);
+        }
+
+        private static bool AssignFolder(ref Sprite[] slot, string folder)
+        {
+            var guids = AssetDatabase.FindAssets("t:Texture2D", new[] { folder });
+            System.Array.Sort(guids, (a, b) =>
+                string.Compare(AssetDatabase.GUIDToAssetPath(a), AssetDatabase.GUIDToAssetPath(b), System.StringComparison.Ordinal));
+            var loaded = new System.Collections.Generic.List<Sprite>();
+            for (int i = 0; i < guids.Length; i++)
+            {
+                var sprite = LoadSprite(AssetDatabase.GUIDToAssetPath(guids[i]));
+                if (sprite != null) loaded.Add(sprite);
+            }
+
+            if (loaded.Count == 0) return false;
+            if (slot != null && slot.Length == loaded.Count)
+            {
+                bool same = true;
+                for (int i = 0; i < loaded.Count; i++)
+                    if (slot[i] != loaded[i]) { same = false; break; }
+                if (same) return false;
+            }
+
+            slot = loaded.ToArray();
             return true;
         }
     }

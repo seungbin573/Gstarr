@@ -25,7 +25,7 @@ namespace Gstarr.Combat
             if (player == null) return;
 
             Vector3 origin = player.transform.position;
-            EnemyActor.Spawn(null, origin + new Vector3(9f, 0.2f, 0f), EnemyKind.BeatChaser);
+            EnemyActor.Spawn(null, origin + new Vector3(9f, 0.2f, 0f), EnemyKind.Bunny);
             EnemyActor.Spawn(null, origin + new Vector3(22f, 0.2f, 0f), EnemyKind.RangedBeat);
             EnemyActor.Spawn(null, origin + new Vector3(36f, 0.2f, 0f), EnemyKind.Mole);
         }

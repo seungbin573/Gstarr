@@ -88,7 +88,10 @@ namespace Gstarr.UI
 
         private void Refresh(int current, int max)
         {
-            int shown = max <= 0 ? 0 : Mathf.Clamp(Mathf.RoundToInt(current / (float)max * Steps), 0, Steps);
+            int slots = FramePixels.Length - 1;
+            int shown = max == slots
+                ? Mathf.Clamp(current, 0, slots)
+                : max <= 0 ? 0 : Mathf.Clamp(Mathf.RoundToInt(current / (float)max * slots), 0, slots);
             if (bar != null)
             {
                 var tex = bar.texture;

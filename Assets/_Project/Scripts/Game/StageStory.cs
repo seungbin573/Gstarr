@@ -14,10 +14,13 @@ namespace Gstarr.Game
 
         public static readonly Beat Opening = new Beat
         {
-            Title = "임시 · 꿈속",
-            Body = "(임시) 감은 눈꺼풀 너머로, 교실의 피아노가 멀어졌다.\n(임시) 눈을 뜨자 에이든은 숲 한가운데 서 있었다."
+            Title = "임시 · 뒤틀린 학교",
+            Body = "(임시) 눈을 뜨자 에이든은 뒤틀린 학교 복도에 서 있었다.\n(임시) 형광등 아래, 복도가 끝없이 이어진다."
         };
 
+        /// <summary>
+        /// 장소가 처음 바뀔 때만. 같은 장소의 다음 그림(출구, 통로 중간, 둘째 눈숲)은 비운다.
+        /// </summary>
         public static Beat ForBackground(int index)
         {
             switch (index)
@@ -25,20 +28,44 @@ namespace Gstarr.Game
                 case 1:
                     return new Beat
                     {
-                        Title = "임시 · 볼풀",
-                        Body = "(임시) 숲이 끝나고, 거대한 볼풀이 나타났다.\n(임시) 발밑의 공이 꿈처럼 출렁인다."
+                        Title = "하늘문",
+                        Body = "구름 위의 문. 문틈으로 하얀 빛이 샌다."
                     };
                 case 2:
                     return new Beat
                     {
-                        Title = "임시 · 눈 숲",
-                        Body = "(임시) 어느새 숲에 눈이 내려앉았다.\n(임시) 붉은 하늘 아래로 발소리가 묻힌다."
+                        Title = "생일 파티",
+                        Body = "촛불이 켜진 케이크, 그리고 키즈카페로 난 아치."
                     };
                 case 3:
                     return new Beat
                     {
-                        Title = "임시 · 교회",
-                        Body = "(임시) 눈 숲 끝에 붉은 교회가 서 있다.\n(임시) 여기서부터는 풍경이 더 바뀌지 않는다."
+                        Title = "키즈카페",
+                        Body = "공으로 가득 찬 놀이터. 발밑이 꿈처럼 출렁인다."
+                    };
+                case 5:
+                    return new Beat
+                    {
+                        Title = "뒤틀린 통로",
+                        Body = "별 장식 창 사이로 보랏빛이 새는 복도."
+                    };
+                case 8:
+                    return new Beat
+                    {
+                        Title = "화려한 집",
+                        Body = "장미와 거울. 거울마다 다른 하늘이 비친다."
+                    };
+                case 9:
+                    return new Beat
+                    {
+                        Title = "눈 쌓인 숲",
+                        Body = "집 끝에 펼쳐진 눈숲. 발소리가 눈에 묻힌다."
+                    };
+                case 11:
+                    return new Beat
+                    {
+                        Title = "교회",
+                        Body = "눈 숲 끝의 붉은 교회."
                     };
                 default:
                     return null;

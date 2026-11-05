@@ -107,7 +107,12 @@ namespace Gstarr.Game
             body = GetComponent<Rigidbody2D>();
             player = GetComponent<PlayerController>();
             boss = GetComponent<BossActor>() != null;
-            if (source == null || source.sprite == null) return;
+            EnsureVisual();
+        }
+
+        private void EnsureVisual()
+        {
+            if (visual != null || source == null || source.sprite == null) return;
 
             var go = new GameObject("BodyVisual");
             go.transform.SetParent(transform, false);
@@ -143,14 +148,19 @@ namespace Gstarr.Game
             kick = 0.14f;
         }
 
+        public bool IsDying => dying;
+        public bool DeathPresented { get; private set; }
+
         public void PlayDeath()
         {
             dying = true;
-            deathTime = 0.28f;
+            deathTime = player != null ? 0f : 0.28f;
+            DeathPresented = false;
         }
 
         private void LateUpdate()
         {
+            EnsureVisual();
             if (visual == null || source == null) return;
 
             if (source.sprite != visual.sprite) visual.sprite = source.sprite;
@@ -161,7 +171,11 @@ namespace Gstarr.Game
 
             if (source.color.a > 0.02f) shownColor = source.color;
             var color = shownColor;
-            if (dying)
+            float drop = 0f;
+            float lean = 0f;
+            if (dying && player != null)
+                PosePlayerDeath(ref color, ref drop, ref lean);
+            else if (dying)
             {
                 deathTime -= Time.unscaledDeltaTime;
                 float t = 1f - Mathf.Clamp01(deathTime / 0.28f);
@@ -173,6 +187,7 @@ namespace Gstarr.Game
             }
             else
             {
+                visual.transform.localRotation = Quaternion.identity;
                 TickPose();
                 var health = GetComponent<Health>();
                 if (health == null || !health.IsInvulnerable)
@@ -185,7 +200,52 @@ namespace Gstarr.Game
             source.color = hidden;
             visual.transform.localScale = new Vector3(fitScale.x * squashX, fitScale.y * squashY, 1f);
             float facing = transform.localScale.x >= 0f ? 1f : -1f;
-            visual.transform.localPosition = new Vector3(fitOffset.x + kick * facing, fitOffset.y + Bob(), 0f);
+            float poseX = kick * facing + lean;
+            float poseY = Bob() - drop;
+            visual.transform.localPosition = new Vector3(fitOffset.x + poseX, fitOffset.y + poseY, 0f);
+            NudgeGear(poseX, poseY);
+        }
+
+        /// <summary>몸만 밀리면 손에 든 것이 앞에 떠 보인다. 같은 만큼 같이 움직인다.</summary>
+        private void NudgeGear(float extraX, float extraY)
+        {
+            if (player == null) return;
+            var extra = new Vector3(extraX, extraY, 0f);
+            var weapon = transform.Find("WeaponPivot");
+            if (weapon != null) weapon.localPosition += extra;
+            var held = transform.Find("HeldItem");
+            if (held != null) held.localPosition += extra;
+        }
+
+        /// <summary>땅에 닿으면 바라보던 쪽으로 쓰러지고, 그 다음 사라진다.</summary>
+        private void PosePlayerDeath(ref Color color, ref float drop, ref float lean)
+        {
+            float dt = Time.unscaledDeltaTime;
+            if (deathTime <= 0f)
+            {
+                deathTime -= dt;
+                bool grounded = player.IsGrounded;
+                if (!grounded && -deathTime < 0.7f)
+                {
+                    squashY = Mathf.MoveTowards(squashY, 0.92f, dt * 2f);
+                    return;
+                }
+                deathTime = 0.001f;
+            }
+
+            deathTime += dt;
+            const float fallLen = 0.58f;
+            const float fadeLen = 0.42f;
+            float fall = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(deathTime / fallLen));
+            float fade = Mathf.Clamp01((deathTime - fallLen) / fadeLen);
+            squashX = Mathf.Lerp(1.05f, 1.2f, fall);
+            squashY = Mathf.Lerp(0.92f, 0.78f, fall);
+            color.a *= 1f - fade;
+            visual.transform.localRotation = Quaternion.Euler(0f, 0f, -84f * fall);
+            drop = 0.46f * fall;
+            lean = 0.16f * fall;
+            visual.enabled = fade < 0.98f;
+            if (deathTime >= fallLen + fadeLen) DeathPresented = true;
         }
 
         /// <summary>임시 그림을 적 콜라이더 박스에 딱 맞춘다. 플레이어는 그대로 둔다.</summary>
@@ -200,10 +260,19 @@ namespace Gstarr.Game
             Bounds art = visual.sprite.bounds;
             if (art.size.x < 0.0001f || art.size.y < 0.0001f) return;
 
-            float sx = width / art.size.x;
-            float sy = height / art.size.y;
             fittedSprite = visual.sprite;
             fittedCollider = col;
+            if (GetComponent<CharacterFoe>() != null)
+            {
+                float s = height / art.size.y;
+                fitScale = new Vector2(s, s);
+                float feet = centerY - height * 0.5f;
+                fitOffset = new Vector2(centerX - art.center.x * s, feet - art.min.y * s);
+                return;
+            }
+
+            float sx = width / art.size.x;
+            float sy = height / art.size.y;
             fitScale = new Vector2(sx, sy);
             fitOffset = new Vector2(centerX - art.center.x * sx, centerY - art.center.y * sy);
         }

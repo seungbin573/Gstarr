@@ -19,7 +19,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 16012a79a866dd64995870b4a78e16a9, type: 2}
   - {fileID: 11400000, guid: 6bb971fda42a4e77a19da33bdb3bbdf1, type: 2}
   - {fileID: 11400000, guid: 7cc615a6c0544a3294351904704e9f89, type: 2}
-  defaultItemCount: 3
+  defaultItemCount: 0
   enableRhythm: 1
   music: {fileID: 8300000, guid: 4d5cef3ed3d00b144856b26669a96d19, type: 3}
   beatChart: {fileID: 4900000, guid: 0c4f7be93731d5c4f8003975ea514c39, type: 3}
@@ -39,6 +39,68 @@ MonoBehaviour:
   - {fileID: 21300000, guid: 2b379a7ba848409c991687a3ca271486, type: 3}
   - {fileID: 21300000, guid: dfd40f5ecbab43e8b20722c374db3b1e, type: 3}
   - {fileID: 21300000, guid: 9f56ab5b323e44468f1a201839828bcc, type: 3}
+  bossSprite: {fileID: 0}
+  moleSprite: {fileID: 0}
+  angelSprites:
+  - {fileID: 21300000, guid: 22c182295616572469562c5301a5e613, type: 3}
+  - {fileID: 21300000, guid: f95200c428ec0034695a4c09cd5e2c8a, type: 3}
+  - {fileID: 21300000, guid: f87a63b2f56ce8544814c4d62a469066, type: 3}
+  - {fileID: 21300000, guid: 2697c5e8d8505aa46954146492a049df, type: 3}
+  annoyingKidSprites:
+  - {fileID: 21300000, guid: 89e0b663ac1c80d498d9e2b5ab0e0c3b, type: 3}
+  - {fileID: 21300000, guid: b6abbf07f3e3f3143a304beb90246bdb, type: 3}
+  - {fileID: 21300000, guid: 7e1dcf612412fc34796ddfa594f0a2a9, type: 3}
+  - {fileID: 21300000, guid: 6ca4d1d14f03f65428d932d0fc59a01c, type: 3}
+  - {fileID: 21300000, guid: 21fe7a7c841885a4b91fde87950583fc, type: 3}
+  - {fileID: 21300000, guid: 025b8fa8486eaf94fa00a039c080ae5a, type: 3}
+  - {fileID: 21300000, guid: 96e10900007a0d645bf396c12838fce3, type: 3}
+  - {fileID: 21300000, guid: 67508800d00872946a7cbad26661b4b6, type: 3}
+  - {fileID: 21300000, guid: c0b43d2f2ea1d6f4dac5a02712bebb87, type: 3}
+  - {fileID: 21300000, guid: aef5f878c4d458949aa069ed3be05b8a, type: 3}
+  - {fileID: 21300000, guid: 5b1d104894dc53a479ec0237eefd8020, type: 3}
+  blackKidSprites:
+  - {fileID: 21300000, guid: 4adc8e972c403bb4b866fd5c040e5443, type: 3}
+  - {fileID: 21300000, guid: 58a461f7680855c47b6d76dd17c5b760, type: 3}
+  - {fileID: 21300000, guid: 4b7848580cd9ac34ebc7d07ce381886a, type: 3}
+  - {fileID: 21300000, guid: 8e86ef39de9fadf4e845c0b111c6473e, type: 3}
+  - {fileID: 21300000, guid: 13615f2c0cef8f541b7f097f97616d30, type: 3}
+  blackKidThrowSprites:
+  - {fileID: 21300000, guid: d76d6d8bfe70ab94f8a061107e89e38f, type: 3}
+  - {fileID: 21300000, guid: 67ec606db48a6194e8848535ff504af8, type: 3}
+  - {fileID: 21300000, guid: 6e85a52b77429ea4eb1847f482c499c6, type: 3}
+  - {fileID: 21300000, guid: 353c627916c33544fb820c1ac626b197, type: 3}
+  - {fileID: 21300000, guid: eb24e485cc24cd6428bcf0308caff15f, type: 3}
+  - {fileID: 21300000, guid: 1992e75889af8194f878738c173f4d6a, type: 3}
+  bunnySprites:
+  - {fileID: 21300000, guid: bf4f0742b8636924d965fbb7950d26a2, type: 3}
+  - {fileID: 21300000, guid: ce428e4b66f326342a6d6d65491e758c, type: 3}
+  - {fileID: 21300000, guid: a9251825328da604aa020befb2e9f510, type: 3}
+  - {fileID: 21300000, guid: ec7260135e774ea44a627ef68bd320e8, type: 3}
+  distortedBunnySprites:
+  - {fileID: 21300000, guid: 64771e76cb1caf14d9dcb2cb86106351, type: 3}
+  - {fileID: 21300000, guid: a8840f69bc3543e478d3b567474f8ede, type: 3}
+  - {fileID: 21300000, guid: d43bde5b2762e1f41b812fbdb44131a9, type: 3}
+  - {fileID: 21300000, guid: a95befab7792abd46ae4c577b6432a93, type: 3}
+  - {fileID: 21300000, guid: 7e4488f3851468940b96b59e77e08517, type: 3}
+  twinBunnySprites:
+  - {fileID: 21300000, guid: 9dc31beded5edac45b63c342e31c9120, type: 3}
+  - {fileID: 21300000, guid: 4c86666d4118a814cacd9e47339c2db0, type: 3}
+  - {fileID: 21300000, guid: fee0cf6929ec3ca4f8689c69746e4097, type: 3}
+  - {fileID: 21300000, guid: 294d65aa312dd674a9b52be4fbcc9841, type: 3}
+  - {fileID: 21300000, guid: c485d3d0950b4974684101d1463e1062, type: 3}
+  shadowmanSprites:
+  - {fileID: 21300000, guid: d921e81f9553180409d37ef5f1b8042a, type: 3}
+  - {fileID: 21300000, guid: 0d66b8a6a27b867499eeb1c44238f586, type: 3}
+  - {fileID: 21300000, guid: 26800b69d8992f54990255b319d379a0, type: 3}
+  - {fileID: 21300000, guid: c967aea369f37984dae1446c9c8adeed, type: 3}
+  - {fileID: 21300000, guid: 38ceb412303436447b3180d00d73c9a3, type: 3}
+  - {fileID: 21300000, guid: 71252b76e738f424d8a0ad1e6b343ef3, type: 3}
+  - {fileID: 21300000, guid: 36bdf9a017548b04799120e3d1f59aea, type: 3}
+  - {fileID: 21300000, guid: 3e517f3db334ed84089f5ba91208c09c, type: 3}
+  - {fileID: 21300000, guid: b9b0728b585523a4bbffd5b49797cc06, type: 3}
+  - {fileID: 21300000, guid: 39cf8b354e9fc82428ccfd50dd9d6590, type: 3}
+  titleLogo: {fileID: 0}
+  menuBackground: {fileID: 0}
   heartSprite: {fileID: 21300000, guid: b7e4c2a91f6d4e38a0c5d9b28e41f6a3, type: 3}
   gloryNoteSprites:
   - {fileID: 21300000, guid: a1c4e8b27f3d4a61b9e0c5d84f17a201, type: 3}

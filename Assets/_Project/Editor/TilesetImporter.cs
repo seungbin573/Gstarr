@@ -20,15 +20,19 @@ namespace Gstarr.EditorTools
             public int Columns;
             public int Rows;
             public string PalettePath;
+            /// <summary>includeFullImage 로 만든 원본 전체 스프라이트.</summary>
+            public Sprite FullSprite;
         }
 
         public static Result Import(Texture2D texture, int tileSize, Vector2Int offset, Vector2Int padding,
-            bool skipEmpty, string paletteName, Tile.ColliderType colliderType = Tile.ColliderType.Grid)
+            bool skipEmpty, string paletteName, Tile.ColliderType colliderType = Tile.ColliderType.Grid,
+            FilterMode filterMode = FilterMode.Point, bool includeFullImage = false,
+            bool generatePhysicsShape = true)
         {
             string texPath = AssetDatabase.GetAssetPath(texture);
             var importer = (TextureImporter)AssetImporter.GetAtPath(texPath);
 
-            ConfigureImporter(importer, tileSize);
+            ConfigureImporter(importer, tileSize, filterMode, generatePhysicsShape);
 
             importer.GetSourceTextureWidthAndHeight(out int texW, out int texH);
             int cols = Mathf.Max(0, (texW - offset.x + padding.x) / (tileSize + padding.x));
@@ -52,7 +56,13 @@ namespace Gstarr.EditorTools
                 }
             }
 
-            WriteSpriteRects(importer, baseName, cellRects);
+            var namedRects = new Dictionary<string, Rect>();
+            foreach (var kv in cellRects)
+                namedRects[$"{baseName}_{kv.Key}"] = kv.Value;
+            if (includeFullImage)
+                namedRects[$"{baseName}_full"] = new Rect(0, 0, texW, texH);
+
+            WriteSpriteRects(importer, namedRects);
 
             var sprites = AssetDatabase.LoadAllAssetsAtPath(texPath).OfType<Sprite>()
                 .ToDictionary(s => s.name, s => s);
@@ -95,10 +105,22 @@ namespace Gstarr.EditorTools
             string palettePath = BuildPalette(string.IsNullOrWhiteSpace(paletteName) ? baseName : paletteName,
                 tiles, cols);
 
-            return new Result { Tiles = tiles, Columns = cols, Rows = rows, PalettePath = palettePath };
+            Sprite full = null;
+            if (includeFullImage)
+                sprites.TryGetValue($"{baseName}_full", out full);
+
+            return new Result
+            {
+                Tiles = tiles,
+                Columns = cols,
+                Rows = rows,
+                PalettePath = palettePath,
+                FullSprite = full,
+            };
         }
 
-        private static void ConfigureImporter(TextureImporter importer, int tileSize)
+        private static void ConfigureImporter(TextureImporter importer, int tileSize, FilterMode filterMode,
+            bool generatePhysicsShape)
         {
             var settings = new TextureImporterSettings();
             importer.ReadTextureSettings(settings);
@@ -107,16 +129,18 @@ namespace Gstarr.EditorTools
             settings.spritePixelsPerUnit = tileSize;
             settings.spriteMeshType = SpriteMeshType.FullRect;
             settings.spriteExtrude = 0;
-            settings.filterMode = FilterMode.Point;
+            settings.spriteGenerateFallbackPhysicsShape = generatePhysicsShape;
+            settings.filterMode = filterMode;
             settings.mipmapEnabled = false;
             settings.wrapMode = TextureWrapMode.Clamp;
             settings.alphaIsTransparency = true;
             importer.SetTextureSettings(settings);
             importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.maxTextureSize = 2048;
             importer.SaveAndReimport();
         }
 
-        private static void WriteSpriteRects(TextureImporter importer, string baseName, Dictionary<int, Rect> cellRects)
+        private static void WriteSpriteRects(TextureImporter importer, Dictionary<string, Rect> namedRects)
         {
             var factory = new SpriteDataProviderFactories();
             factory.Init();
@@ -128,9 +152,9 @@ namespace Gstarr.EditorTools
                 .ToDictionary(g => g.Key, g => g.First().spriteID);
 
             var rects = new List<SpriteRect>();
-            foreach (var kv in cellRects.OrderBy(k => k.Key))
+            foreach (var kv in namedRects.OrderBy(k => k.Key))
             {
-                string name = $"{baseName}_{kv.Key}";
+                string name = kv.Key;
                 rects.Add(new SpriteRect
                 {
                     name = name,

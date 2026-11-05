@@ -37,6 +37,15 @@ namespace Gstarr.Items
         public Sprite bossSprite;
         [Tooltip("두더지. Assets/arts/character/enemy5.png")]
         public Sprite moleSprite;
+        [Header("Character foes")]
+        public Sprite[] angelSprites;
+        public Sprite[] annoyingKidSprites;
+        public Sprite[] blackKidSprites;
+        public Sprite[] blackKidThrowSprites;
+        public Sprite[] bunnySprites;
+        public Sprite[] distortedBunnySprites;
+        public Sprite[] twinBunnySprites;
+        public Sprite[] shadowmanSprites;
         [Tooltip("메인 메뉴 제목. Assets/arts/UI/TitleLogo.png")]
         public Sprite titleLogo;
         [Tooltip("메인 메뉴 배경. Assets/arts/UI/MenuBackground.png")]

@@ -6,14 +6,17 @@ using UnityEngine;
 namespace Gstarr.Combat
 {
     /// <summary>
-    /// 처음 놓인 자리에 머물고, 돌진과 바닥 쓸기만 나갔다가 그 자리로 돌아온다.
-    /// 1페이즈: 돌진, 바닥 쓸기, 원거리, 느린 회전. 2페이즈: 돌진, 넓은 쓸기, 세 발, 빈칸 회전.
+    /// 제자리에 머물며 예고 후 한 가지 기술만 쓴다.
+    /// 마지막 보스 1페이즈: 고정 한 발, 몸통 돌진, 바닥 칼, 지휘봉.
+    /// 마지막 보스 2페이즈: 빠른 돌진, 두꺼운 바닥 칼, 세 갈래, 빈칸 회전.
+    /// 중간보스 1페이즈: 바닥 찍기, 양옆 탄, 한쪽 바닥 칼, 양쪽에서 좁혀 오는 칼.
+    /// 중간보스 2페이즈: 찍기 두 번, 더 좁은 양옆 탄, 되돌아오는 칼, 더 높은 협공.
     /// </summary>
     [RequireComponent(typeof(EnemyActor), typeof(Health), typeof(Rigidbody2D))]
     public class BossActor : MonoBehaviour
     {
         private enum Motion { Idle, Mark, Move, Sweep, Shot }
-        private enum Pattern { Charge, SweepFloor, Ranged, Orbit, Volley, Ring }
+        private enum Pattern { Charge, SweepFloor, Ranged, Orbit, Volley, Ring, Stamp, Pocket, HalfSweep, Cross }
 
         [SerializeField] private float attackInterval = 0.32f;
         [SerializeField] private float phaseOneAttackInterval = 0.18f;
@@ -49,6 +52,11 @@ namespace Gstarr.Combat
         private int shotIndex;
         private int shotCount = 1;
         private bool struckThisPattern;
+        private bool aimLocked;
+        private bool midBoss;
+        private float lockedAngle;
+        private float sweepBaseAngle;
+        private Vector2 lockedPoint;
         private Vector2 shotFrom;
         private Vector2 shotTo;
         private float shotDuration = 0.42f;
@@ -71,9 +79,15 @@ namespace Gstarr.Combat
         public int Phase => phase;
         public bool RequiresPhaseGlory => phase == 1;
 
-        private float MoveSpeed => phase == 1 ? 23f : 17f;
-        private float ReturnSpeed => phase == 1 ? 18f : 13f;
-        private float MarkTime => phase == 1 ? 0.28f : 0.38f;
+        private float MoveSpeed => phase == 1 ? 11f : 13f;
+        private float ReturnSpeed => phase == 1 ? 12f : 13f;
+        private float MarkTime => midBoss
+            ? (phase == 1 ? 0.95f : 0.78f)
+            : (phase == 1 ? 0.9f : 0.72f);
+        private float ActiveSlamRadius => pattern == Pattern.Stamp ? (phase == 1 ? 1.4f : 1.15f) : slamRadius;
+
+        /// <summary>오른쪽에 보스가 더 있으면 중간보스다. 마지막 보스는 그대로 둔다.</summary>
+        public void SetMidBoss(bool value) => midBoss = value;
 
         private void Awake()
         {
@@ -247,6 +261,8 @@ namespace Gstarr.Combat
             PoseDash();
             UpdateWarnings();
             Face((int)Mathf.Sign(waypoints[waypointIndex].x - transform.position.x));
+            if (pattern == Pattern.Charge && waypointIndex == 0)
+                HitBossBody();
             if (!arrived && moveTimer > 0f) return;
 
             if (waypointIndex == strikeAtWaypoint && !struckThisPattern)
@@ -270,24 +286,23 @@ namespace Gstarr.Combat
         {
             motion = Motion.Idle;
             arrived = false;
-            attackTimer = phase == 1 ? phaseOneAttackInterval : attackInterval;
+            attackTimer = midBoss
+                ? (phase == 1 ? 1.15f : 0.9f)
+                : (phase == 1 ? 1.05f : 0.85f);
             transform.localScale = baseScale;
             transform.rotation = Quaternion.identity;
             SetWarningsVisible(false);
-            patternCursor = (patternCursor + 1) % 4;
+            patternCursor = (patternCursor + 1) % 6;
         }
 
         private void BeginPattern()
         {
-            pattern = phase == 1
-                ? (Pattern)(patternCursor % 4)
-                : patternCursor % 4 == 2 ? Pattern.Volley
-                : patternCursor % 4 == 3 ? Pattern.Ring
-                : (Pattern)(patternCursor % 4);
+            pattern = PickPattern();
             waypoints.Clear();
             strikeAtWaypoint = -1;
             struckThisPattern = false;
             strikeCircle = false;
+            aimLocked = false;
             Vector2 playerCell = Snap(PlayerGroundPoint());
             int toward = playerCell.x >= home.x ? 1 : -1;
             if (toward == 0) toward = facing;
@@ -296,25 +311,41 @@ namespace Gstarr.Combat
             {
                 case Pattern.Charge:
                     BuildCharge(playerCell);
+                    strikeAtWaypoint = -1;
                     break;
                 case Pattern.SweepFloor:
-                    BuildFloorSweep(playerCell);
+                    sweepDuration = phase == 1 ? 1.7f : 1.35f;
                     break;
                 case Pattern.Ranged:
                     shotCount = 1;
-                    AimShot(PlayerBodyCenter(), 0);
+                    LockAim();
                     break;
                 case Pattern.Volley:
                     shotCount = 3;
-                    AimShot(PlayerBodyCenter(), 0);
+                    LockAim();
                     break;
                 case Pattern.Orbit:
-                    sweepDuration = phase == 1 ? 1.45f : 1.15f;
-                    beamLength = 2.6f;
+                    sweepDuration = 1.55f;
+                    beamLength = 4.8f;
+                    break;
+                case Pattern.Stamp:
+                    BuildStamp();
+                    break;
+                case Pattern.Pocket:
+                    shotCount = 2;
+                    LockPocket();
+                    break;
+                case Pattern.HalfSweep:
+                    sweepDuration = phase == 1 ? 1.45f : 1.7f;
+                    break;
+                case Pattern.Cross:
+                    sweepDuration = phase == 1 ? 1.5f : 1.25f;
                     break;
                 default:
-                    sweepDuration = phase == 1 ? 1.25f : 1.0f;
-                    beamLength = 2.4f;
+                    sweepDuration = 2.15f;
+                    beamLength = 4.2f;
+                    Vector2 toPlayer = PlayerBodyCenter() - (Vector2)home;
+                    sweepBaseAngle = Mathf.Atan2(toPlayer.y, toPlayer.x) * Mathf.Rad2Deg + 90f;
                     break;
             }
 
@@ -348,58 +379,126 @@ namespace Gstarr.Combat
 
         private bool AtHome() => Vector2.Distance(body.position, home) <= 0.22f;
 
-        private static bool IsSweep(Pattern value) => value == Pattern.Orbit || value == Pattern.Ring;
+        private Pattern PickPattern()
+        {
+            int step = patternCursor % 6;
+            if (!midBoss)
+            {
+                return phase == 1
+                    ? step switch
+                    {
+                        0 => Pattern.Ranged,
+                        1 => Pattern.Charge,
+                        2 => Pattern.SweepFloor,
+                        3 => Pattern.Stamp,
+                        4 => Pattern.Orbit,
+                        _ => Pattern.Pocket
+                    }
+                    : step switch
+                    {
+                        0 => Pattern.Ranged,
+                        1 => Pattern.SweepFloor,
+                        2 => Pattern.Stamp,
+                        3 => Pattern.Orbit,
+                        4 => Pattern.Volley,
+                        _ => Pattern.Charge
+                    };
+            }
 
-        private static bool IsRanged(Pattern value) => value == Pattern.Ranged || value == Pattern.Volley;
+            return phase == 1
+                ? step switch
+                {
+                    0 => Pattern.Stamp,
+                    1 => Pattern.Ranged,
+                    2 => Pattern.HalfSweep,
+                    3 => Pattern.Pocket,
+                    4 => Pattern.Charge,
+                    _ => Pattern.Cross
+                }
+                : step switch
+                {
+                    0 => Pattern.Stamp,
+                    1 => Pattern.Pocket,
+                    2 => Pattern.HalfSweep,
+                    3 => Pattern.Ranged,
+                    4 => Pattern.SweepFloor,
+                    _ => Pattern.Cross
+                };
+        }
+
+        private static bool IsSweep(Pattern value) =>
+            value == Pattern.SweepFloor || value == Pattern.Orbit || value == Pattern.Ring
+            || value == Pattern.HalfSweep || value == Pattern.Cross;
+
+        private static bool IsRanged(Pattern value) =>
+            value == Pattern.Ranged || value == Pattern.Volley || value == Pattern.Pocket;
+
+        private void BuildStamp()
+        {
+            strikeCircle = true;
+            float floor = arenaFloorY > float.NegativeInfinity ? arenaFloorY + 0.04f : home.y - cell.y;
+            strikeCenter = new Vector2(ClampX(PlayerGroundPoint().x), floor);
+            strikeAtWaypoint = 0;
+            waypoints.Add(new Vector2(strikeCenter.x, home.y));
+            waypoints.Add(home);
+        }
 
         private void BuildCharge(Vector2 playerCell)
         {
-            float reach = cell.x * (phase == 1 ? 4.2f : 3.4f);
+            float reach = cell.x * (phase == 1 ? 3.1f : 2.6f);
             var aim = new Vector2(playerCell.x, home.y);
             Vector2 delta = aim - (Vector2)home;
             if (delta.magnitude > reach) aim = (Vector2)home + delta.normalized * reach;
             aim = new Vector2(ClampX(aim.x), home.y);
             strikeCenter = ((Vector2)home + aim) * 0.5f;
             strikeSize = new Vector2(Mathf.Max(1.2f, Mathf.Abs(aim.x - home.x) + 1.1f), 1.2f);
-            strikeAtWaypoint = 0;
+            strikeAtWaypoint = -1;
             waypoints.Add(aim);
             waypoints.Add(home);
         }
 
-        private void BuildFloorSweep(Vector2 playerCell)
+        private void LockAim()
         {
-            float floor = arenaFloorY > float.NegativeInfinity ? arenaFloorY + 0.5f : home.y - cell.y;
-            floor = Mathf.Clamp(floor, home.y - cell.y * 3f, home.y + cell.y);
-            float half = cell.x * (phase == 1 ? 3.2f : 4.4f);
-            float left = ClampX(playerCell.x - half);
-            float right = ClampX(playerCell.x + half);
-            if (right < left) right = left;
-            strikeCenter = new Vector2((left + right) * 0.5f, floor);
-            strikeSize = new Vector2(Mathf.Max(cell.x, right - left), 0.95f);
-            strikeAtWaypoint = 1;
-            waypoints.Add(new Vector2(left, floor));
-            waypoints.Add(new Vector2(right, floor));
-            waypoints.Add(home);
+            Vector2 aim = PlayerBodyCenter() - (Vector2)home;
+            aim.y = Mathf.Clamp(aim.y, -0.45f, 0.65f);
+            if (aim.sqrMagnitude < 0.01f) aim = new Vector2(facing, 0f);
+            lockedAngle = Mathf.Atan2(aim.y, aim.x) * Mathf.Rad2Deg;
+            aimLocked = true;
         }
 
-        private void AimShot(Vector2 target, int index)
+        private void LockPocket()
         {
-            Vector2 origin = home;
-            Vector2 aim = target - origin;
-            aim.y = Mathf.Clamp(aim.y, -0.35f, 0.55f);
-            if (aim.sqrMagnitude < 0.01f) aim = new Vector2(facing, 0f);
-            float dist = Mathf.Clamp(aim.magnitude, cell.x * 3f, cell.x * 8f);
-            Vector2 dir = aim.normalized;
+            lockedPoint = PlayerBodyCenter();
+            aimLocked = true;
+        }
+
+        private void AimShot(int index)
+        {
+            if (pattern == Pattern.Pocket)
+            {
+                float gap = phase == 1 ? 2.15f : 1.85f;
+                float side = index == 0 ? -1f : 1f;
+                Vector2 target = lockedPoint + new Vector2(side * gap, 0f);
+                Vector2 dir = target - (Vector2)home;
+                if (dir.sqrMagnitude < 0.01f) dir = new Vector2(side, 0f);
+                float dist = Mathf.Clamp(dir.magnitude, cell.x * 2.2f, cell.x * 8f);
+                shotFrom = home;
+                shotTo = (Vector2)home + dir.normalized * dist;
+                return;
+            }
+
+            float angle = aimLocked ? lockedAngle : facing > 0 ? 0f : 180f;
             if (pattern == Pattern.Volley)
-                dir = AngleDir(Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg + (index - 1) * 16f);
-            shotFrom = origin;
-            shotTo = origin + dir * dist;
+                angle += (index - 1) * 34f;
+            float distAim = cell.x * (phase == 1 ? 7.2f : 8.2f);
+            shotFrom = home;
+            shotTo = (Vector2)home + AngleDir(angle) * distAim;
         }
 
         private void BeginShot(int index)
         {
-            AimShot(PlayerBodyCenter(), index);
-            shotDuration = phase == 1 ? 0.42f : 0.55f;
+            AimShot(index);
+            shotDuration = phase == 1 ? 0.36f : 0.3f;
             sweepTime = 0f;
             GameAudio.Play(GameAudio.Id.EnemyShot, 0.4f);
         }
@@ -408,19 +507,13 @@ namespace Gstarr.Combat
         {
             HideBeams();
             if (circleWarning != null) circleWarning.enabled = false;
-            if (pattern == Pattern.Volley)
+            int count = pattern == Pattern.Volley ? 3 : pattern == Pattern.Pocket ? 2 : 1;
+            for (int i = 0; i < count; i++)
             {
-                for (int i = 0; i < 3; i++)
-                {
-                    AimShot(PlayerBodyCenter(), i);
-                    ShowBeam(i, shotFrom, Mathf.Atan2(shotTo.y - shotFrom.y, shotTo.x - shotFrom.x) * Mathf.Rad2Deg,
-                        Vector2.Distance(shotFrom, shotTo), 0.18f, false);
-                }
-                return;
+                AimShot(i);
+                float angle = Mathf.Atan2(shotTo.y - shotFrom.y, shotTo.x - shotFrom.x) * Mathf.Rad2Deg;
+                ShowBeam(i, shotFrom, angle, Vector2.Distance(shotFrom, shotTo), 0.16f, false);
             }
-            AimShot(PlayerBodyCenter(), 0);
-            float angle = Mathf.Atan2(shotTo.y - shotFrom.y, shotTo.x - shotFrom.x) * Mathf.Rad2Deg;
-            ShowBeam(0, shotFrom, angle, Vector2.Distance(shotFrom, shotTo), 0.16f, false);
         }
 
         private void UpdateShot()
@@ -459,25 +552,87 @@ namespace Gstarr.Combat
             if (circleWarning != null) circleWarning.enabled = false;
             HideBeams();
 
-            if (pattern == Pattern.Orbit || pattern == Pattern.Ring)
-            {
-                bool downbeat = pattern == Pattern.Orbit;
-                SweepFlatLane(downbeat ? 0.72f : 1.55f, downbeat ? 0.34f : 0.28f, damaging, downbeat, downbeat ? -32f : 24f);
-                return;
-            }
+            if (pattern == Pattern.SweepFloor)
+                SweepFloorLane(damaging);
+            else if (pattern == Pattern.HalfSweep)
+                SweepHalfFloor(damaging);
+            else if (pattern == Pattern.Cross)
+                SweepCross(damaging);
+            else if (pattern == Pattern.Ring)
+                SweepGap(damaging);
+            else
+                SweepBaton(damaging);
         }
 
-        /// <summary>지휘봉이 바닥을 가르거나, 들어 올린 채로 지나간다.</summary>
-        private void SweepFlatLane(float lift, float thickness, bool damaging, bool leftToRight, float angle)
+        /// <summary>플레이어가 있는 쪽 바닥만 가른다. 반대쪽으로 빠지면 맞는다.</summary>
+        private void SweepHalfFloor(bool damaging)
         {
-            float left = hasArenaBounds ? arenaMinX + 0.7f : home.x - cell.x * 4f;
-            float right = hasArenaBounds && !float.IsPositiveInfinity(arenaMaxX) ? arenaMaxX - 0.7f : home.x + cell.x * 4f;
-            float x = Mathf.Lerp(leftToRight ? left : right, leftToRight ? right : left, Sweep01());
-            float y = arenaFloorY > float.NegativeInfinity ? arenaFloorY + lift : home.y + lift * 0.35f;
-            y = Mathf.Clamp(y, home.y - cell.y, home.y + cell.y * 1.15f);
-            ShowBeam(0, new Vector2(x, y), angle, beamLength, thickness, damaging);
-            Face(leftToRight ? 1 : -1);
-            transform.rotation = Quaternion.Euler(0f, 0f, angle * 0.65f);
+            float left = hasArenaBounds ? arenaMinX + 0.45f : home.x - cell.x * 5f;
+            float right = hasArenaBounds && !float.IsPositiveInfinity(arenaMaxX) ? arenaMaxX - 0.45f : home.x + cell.x * 5f;
+            float edge = attackFacing > 0 ? right : left;
+            float along = phase == 2 ? Mathf.PingPong(Sweep01() * 2f, 1f) : Sweep01();
+            float x = Mathf.Lerp(home.x, edge, along);
+            float floor = arenaFloorY > float.NegativeInfinity ? arenaFloorY : home.y - cell.y;
+            ShowBeam(0, new Vector2(x, floor + 0.58f), 0f, 2.35f, 0.4f, damaging);
+            Face(attackFacing);
+        }
+
+        /// <summary>양쪽 끝에서 가운데로 칼이 모인다. 그 자리에서 뛰면 넘긴다.</summary>
+        private void SweepCross(bool damaging)
+        {
+            float left = hasArenaBounds ? arenaMinX + 0.4f : home.x - cell.x * 5f;
+            float right = hasArenaBounds && !float.IsPositiveInfinity(arenaMaxX) ? arenaMaxX - 0.4f : home.x + cell.x * 5f;
+            float mid = (left + right) * 0.5f;
+            float u = Sweep01();
+            float floor = arenaFloorY > float.NegativeInfinity ? arenaFloorY : home.y - cell.y;
+            float y = floor + 0.55f;
+            ShowBeam(0, new Vector2(Mathf.Lerp(left, mid, u), y), 0f, 2.1f, 0.36f, damaging);
+            ShowBeam(1, new Vector2(Mathf.Lerp(right, mid, u), y), 0f, 2.1f, 0.36f, damaging);
+        }
+
+        /// <summary>바닥을 따라 짧은 칼이 지나간다. 뛰면 넘긴다.</summary>
+        private void SweepFloorLane(bool damaging)
+        {
+            float left = hasArenaBounds ? arenaMinX + 0.45f : home.x - cell.x * 5f;
+            float right = hasArenaBounds && !float.IsPositiveInfinity(arenaMaxX) ? arenaMaxX - 0.45f : home.x + cell.x * 5f;
+            float floor = arenaFloorY > float.NegativeInfinity ? arenaFloorY : home.y - cell.y;
+            float x = Mathf.Lerp(left, right, Sweep01());
+            float span = Mathf.Max(1f, right - left);
+            float length = phase == 1 ? Mathf.Max(2.1f, span * 0.22f) : Mathf.Max(2.6f, span * 0.3f);
+            ShowBeam(0, new Vector2(x, floor + 0.5f), 0f, length, 0.36f, damaging);
+            Face(1);
+        }
+
+        /// <summary>플레이어가 있는 쪽으로 지휘봉을 아래에서 위로 훑는다. 뒤로 빠지면 맞는다.</summary>
+        private void SweepBaton(bool damaging)
+        {
+            float sweep = Mathf.Lerp(-62f, 62f, Sweep01());
+            float angle = attackFacing > 0 ? sweep : 180f - sweep;
+            float length = Mathf.Clamp(OuterReach() * 0.55f, cell.x * 2.4f, cell.x * 3.6f);
+            ShowBeam(0, home, angle, length, 0.3f, damaging);
+            transform.rotation = Quaternion.Euler(0f, 0f, sweep * 0.2f);
+        }
+
+        /// <summary>맞은편 두 줄이 돈다. 줄 사이 빈칸에 서서 같이 움직인다.</summary>
+        private void SweepGap(bool damaging)
+        {
+            float angle = sweepBaseAngle + Sweep01() * 170f;
+            float length = Mathf.Clamp(OuterReach() * 0.92f, cell.x * 3.2f, cell.x * 8f);
+            ShowBeam(0, home, angle, length, 0.26f, damaging);
+            ShowBeam(1, home, angle + 180f, length, 0.26f, damaging);
+        }
+
+        private void HitBossBody()
+        {
+            if (struckThisPattern || player == null) return;
+            var hits = Physics2D.OverlapBoxAll(transform.position, new Vector2(1.45f, 1.75f), 0f);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                if (hits[i].GetComponentInParent<PlayerController>() == null) continue;
+                struckThisPattern = true;
+                DamagePlayer(new Vector2(attackFacing, 0.35f));
+                return;
+            }
         }
 
         private float Sweep01() => sweepDuration <= 0.01f ? 1f : Mathf.Clamp01(sweepTime / sweepDuration);
@@ -569,7 +724,7 @@ namespace Gstarr.Combat
 
             if (strikeCircle)
             {
-                if (Vector2.Distance(PlayerBodyCenter(), strikeCenter) > slamRadius) return;
+                if (Vector2.Distance(PlayerBodyCenter(), strikeCenter) > ActiveSlamRadius) return;
                 DamagePlayer((PlayerBodyCenter() - (Vector2)transform.position).normalized);
                 return;
             }
@@ -722,7 +877,7 @@ namespace Gstarr.Combat
                 circleWarning.enabled = true;
                 if (boxWarning != null) boxWarning.enabled = false;
                 circleWarning.transform.position = new Vector3(strikeCenter.x, strikeCenter.y + 0.02f, transform.position.z);
-                circleWarning.transform.localScale = Vector3.one * slamRadius * 2f;
+                circleWarning.transform.localScale = Vector3.one * ActiveSlamRadius * 2f;
                 circleWarning.color = Color.Lerp(new Color(1f, 0.8f, 0.15f, 0.45f), new Color(1f, 0.15f, 0.08f, 0.85f), danger);
                 return;
             }
@@ -796,7 +951,9 @@ namespace Gstarr.Combat
             SetWarningsVisible(false);
             transform.localScale = baseScale;
             health.Heal(health.Max);
-            StageHUD.ShowHint("2페이즈. 돌진은 더 짧고, 탄이 세 발로 퍼집니다.", 4.5f);
+            StageHUD.ShowHint(midBoss
+                ? "2페이즈. 같은 기술을 조금 빨리 씁니다. 예고를 보고 한 칸만 비우면 됩니다."
+                : "2페이즈. 탄이 넓게 갈라지고, 바닥 칼이 조금 길어집니다. 예고된 자리만 피하면 됩니다.", 4.5f);
             return true;
         }
     }

@@ -14,7 +14,15 @@ namespace Gstarr.Combat
         Flyer,
         Mole,
         Boss,
-        Hopper
+        Hopper,
+        Angel,
+        AnnoyingKid,
+        BlackShadowKid,
+        BlackShadowThrow,
+        Bunny,
+        DistortedBunny,
+        TwinBunny,
+        Shadowman
     }
 
     [RequireComponent(typeof(Health))]
@@ -42,6 +50,7 @@ namespace Gstarr.Combat
         private bool beatBound;
         private State state;
         private bool staggerSpent;
+        private bool gloryKill = true;
         private float staggerTimer;
         private float stunTimer;
         private Color idleColor;
@@ -69,6 +78,7 @@ namespace Gstarr.Combat
         private bool waitingForPlayer;
         private bool waitAnchorReady;
         private Vector2 waitOrigin;
+        private static bool spawning;
 
         private bool moleInitialized;
         private bool moleBuried;
@@ -96,18 +106,48 @@ namespace Gstarr.Combat
         public bool IsBoss => kind == EnemyKind.Boss;
         public bool IsDead => state == State.Dead || health == null || health.Current <= 0;
         public int GloryFloor => Mathf.Max(1, Mathf.CeilToInt(health.Max * 0.3f));
+        public EnemyKind Kind => kind;
+        public bool Floats => kind == EnemyKind.Flyer || kind == EnemyKind.BlackShadowKid
+            || kind == EnemyKind.BlackShadowThrow || kind == EnemyKind.AnnoyingKid;
+        public bool CanAct =>
+            state == State.Combat
+            && !IsDead
+            && !GamePause.BlocksGameplay
+            && !HoldsStill;
+        public Transform PlayerTarget
+        {
+            get
+            {
+                if (player == null)
+                {
+                    var tagged = GameObject.FindGameObjectWithTag("Player");
+                    if (tagged != null) player = tagged.transform;
+                }
+                return player;
+            }
+        }
+        public float RoomMin => leashMinX;
+        public float RoomMax => leashMaxX;
+        public float GroundY => CurrentFloorY();
 
         public static Sprite Art
         {
             get
             {
                 var assets = Gstarr.Items.GameAssets.Instance;
-                return assets != null ? assets.enemySprite : null;
+                return assets != null && assets.enemySprite != null
+                    ? assets.enemySprite : CharacterArt.Idle(EnemyKind.Bunny);
             }
         }
 
         private static Sprite ArtFor(EnemyKind enemyKind)
         {
+            if (CharacterArt.Owns(enemyKind))
+            {
+                var character = CharacterArt.Idle(enemyKind);
+                if (character != null) return character;
+            }
+
             var assets = Gstarr.Items.GameAssets.Instance;
             if (enemyKind == EnemyKind.Boss && assets != null && assets.bossSprite != null)
                 return assets.bossSprite;
@@ -123,21 +163,31 @@ namespace Gstarr.Combat
             if (assets != null && assets.enemySprites != null && index < assets.enemySprites.Length
                 && assets.enemySprites[index] != null)
                 return assets.enemySprites[index];
-            return Art;
+            return CharacterArt.Idle(enemyKind switch
+            {
+                EnemyKind.RangedBeat => EnemyKind.AnnoyingKid,
+                EnemyKind.RangedHalfBeat => EnemyKind.BlackShadowThrow,
+                EnemyKind.Flyer => EnemyKind.BlackShadowKid,
+                EnemyKind.Boss => EnemyKind.Angel,
+                EnemyKind.Mole => EnemyKind.DistortedBunny,
+                _ => EnemyKind.Bunny
+            });
         }
 
         public static EnemyActor Spawn(Sprite spriteSource, Vector3 position, int maxHealth = 0) =>
-            Spawn(spriteSource, position, EnemyKind.BeatChaser, maxHealth);
+            Spawn(spriteSource, position, EnemyKind.Bunny, maxHealth);
 
         public static EnemyActor Spawn(Sprite spriteSource, Vector3 position, EnemyKind kind, int maxHealth = 0)
         {
+            // Retired walking rabbit: old tiles and callers must spawn the new controller too.
+            if (kind == EnemyKind.BeatChaser) kind = EnemyKind.Bunny;
             if (spriteSource == null) spriteSource = ArtFor(kind);
-            var go = new GameObject($"Enemy_{kind}");
+            var go = new GameObject(kind == EnemyKind.Bunny ? "NormalBunny" : $"Enemy_{kind}");
             go.transform.position = position;
 
             var sr = go.AddComponent<SpriteRenderer>();
             sr.sprite = spriteSource;
-            sr.sortingOrder = 4;
+            sr.sortingOrder = CharacterArt.Owns(kind) ? 8 : 4;
 
             var rb = go.AddComponent<Rigidbody2D>();
             rb.freezeRotation = true;
@@ -155,8 +205,12 @@ namespace Gstarr.Combat
 
             var hp = go.AddComponent<Health>();
             hp.Configure(maxHealth > 0 ? maxHealth : DefaultHealth(kind), true);
+            spawning = true;
             var enemy = go.AddComponent<EnemyActor>();
+            spawning = false;
             enemy.SetKind(kind);
+            if (kind != EnemyKind.Boss)
+                enemy.SkipGloryKill();
             if (kind == EnemyKind.Boss)
             {
                 go.transform.localScale = Vector3.one * 1.6f;
@@ -177,6 +231,14 @@ namespace Gstarr.Combat
             EnemyKind.Mole => 7,
             EnemyKind.Boss => 28,
             EnemyKind.Hopper => 4,
+            EnemyKind.Angel => 6,
+            EnemyKind.AnnoyingKid => 6,
+            EnemyKind.BlackShadowKid => 6,
+            EnemyKind.BlackShadowThrow => 6,
+            EnemyKind.Bunny => 6,
+            EnemyKind.DistortedBunny => 3,
+            EnemyKind.TwinBunny => 12,
+            EnemyKind.Shadowman => 15,
             _ => 8
         };
 
@@ -278,6 +340,39 @@ namespace Gstarr.Combat
             hasLeash = true;
         }
 
+        public void CopyLeashFrom(EnemyActor other)
+        {
+            if (other == null || !other.hasLeash) return;
+            SetLeash(other.leashMinX, other.leashMaxX);
+        }
+
+        /// <summary>체력이 바닥까지 떨어져도 비틀리지 않고 바로 죽는다.</summary>
+        public void SkipGloryKill() => gloryKill = false;
+
+        public void ClampRoom() => ClampLeash();
+
+        public void FaceToward(float dx)
+        {
+            if (Mathf.Abs(dx) < 0.05f) return;
+            if (CharacterArt.Owns(kind) && sprite != null)
+            {
+                sprite.flipX = dx < 0f;
+                return;
+            }
+            Face(dx);
+        }
+
+        public int Facing()
+        {
+            if (CharacterArt.Owns(kind) && sprite != null)
+                return sprite.flipX ? -1 : 1;
+            return transform.localScale.x >= 0f ? 1 : -1;
+        }
+
+        public bool RoomAhead(int direction) => RoomAheadPrivate(direction);
+
+        public bool PitInFront(int direction) => PitAhead(direction);
+
         private bool IsAimTarget =>
             state != State.Dead
             && state != State.Glory
@@ -296,9 +391,13 @@ namespace Gstarr.Combat
 
             if (sprite != null && sprite.sprite == null) sprite.sprite = Art;
             patrolHome = transform.position;
-            ApplyKind();
-            if (GetComponent<Gstarr.Game.SpriteMotion>() == null)
-                gameObject.AddComponent<Gstarr.Game.SpriteMotion>();
+            if (!spawning)
+            {
+                // Migrate enemies serialized by the old scene builder before binding movement/visuals.
+                if (kind == EnemyKind.BeatChaser) kind = EnemyKind.Bunny;
+                ApplyKind();
+                BindVisual();
+            }
         }
 
         private void SetKind(EnemyKind value)
@@ -313,8 +412,68 @@ namespace Gstarr.Combat
                 EnemyKind.Flyer => 5.6f,
                 EnemyKind.Mole => 4.4f,
                 EnemyKind.Hopper => 0f,
+                EnemyKind.Angel => 5.8f,
+                EnemyKind.AnnoyingKid => 3.2f,
+                EnemyKind.BlackShadowKid => 6.4f,
+                EnemyKind.BlackShadowThrow => 3.6f,
+                EnemyKind.Bunny => 6.4f,
+                EnemyKind.DistortedBunny => 9.2f,
+                EnemyKind.TwinBunny => 6.2f,
+                EnemyKind.Shadowman => 4.2f,
                 _ => moveSpeed
             };
+            BindVisual();
+        }
+
+        private void BindVisual()
+        {
+            if (CharacterArt.Owns(kind))
+            {
+                var motion = GetComponent<Gstarr.Game.SpriteMotion>();
+                if (motion != null) DestroyImmediate(motion);
+                var leftover = transform.Find("BodyVisual");
+                if (leftover != null) DestroyImmediate(leftover.gameObject);
+                if (kind == EnemyKind.Bunny || kind == EnemyKind.TwinBunny || kind == EnemyKind.DistortedBunny
+                    || kind == EnemyKind.Angel || kind == EnemyKind.AnnoyingKid
+                    || kind == EnemyKind.BlackShadowKid || kind == EnemyKind.BlackShadowThrow
+                    || kind == EnemyKind.Shadowman)
+                {
+                    var oldFoe = GetComponent<CharacterFoe>();
+                    if (oldFoe != null) DestroyImmediate(oldFoe);
+                    if (kind == EnemyKind.Angel)
+                    {
+                        if (GetComponent<Angel>() == null) gameObject.AddComponent<Angel>();
+                    }
+                    else if (kind == EnemyKind.AnnoyingKid)
+                    {
+                        if (GetComponent<AnnoyingKid>() == null) gameObject.AddComponent<AnnoyingKid>();
+                    }
+                    else if (kind == EnemyKind.BlackShadowKid)
+                    {
+                        if (GetComponent<BlackKid>() == null) gameObject.AddComponent<BlackKid>();
+                    }
+                    else if (kind == EnemyKind.BlackShadowThrow)
+                    {
+                        if (GetComponent<BlackKidThrow>() == null) gameObject.AddComponent<BlackKidThrow>();
+                    }
+                    else if (kind == EnemyKind.Shadowman)
+                    {
+                        if (GetComponent<ShadowMan>() == null) gameObject.AddComponent<ShadowMan>();
+                    }
+                    else if (GetComponent<NormalBunny>() == null)
+                    {
+                        gameObject.AddComponent<NormalBunny>();
+                    }
+                }
+                else
+                {
+                    var foe = GetComponent<CharacterFoe>();
+                    if (foe == null) foe = gameObject.AddComponent<CharacterFoe>();
+                    foe.BindKind(kind);
+                }
+            }
+            else if (GetComponent<Gstarr.Game.SpriteMotion>() == null)
+                gameObject.AddComponent<Gstarr.Game.SpriteMotion>();
         }
 
         private void ApplyKind()
@@ -324,9 +483,17 @@ namespace Gstarr.Combat
             if (body == null) body = GetComponent<Collider2D>();
 
             idleColor = kind == EnemyKind.Hopper ? new Color(0.45f, 0.95f, 0.4f) : Color.white;
-            if (sprite != null) sprite.color = idleColor;
-            if (rb != null) rb.gravityScale = kind == EnemyKind.Flyer ? 0f : 4f;
-            if (kind == EnemyKind.Flyer && rb != null)
+            if (sprite != null)
+            {
+                sprite.color = idleColor;
+                if (CharacterArt.Owns(kind))
+                {
+                    var art = CharacterArt.Idle(kind);
+                    if (art != null) sprite.sprite = art;
+                }
+            }
+            if (rb != null) rb.gravityScale = Floats ? 0f : 4f;
+            if (Floats && rb != null)
             {
                 rb.bodyType = RigidbodyType2D.Dynamic;
                 rb.gravityScale = 0f;
@@ -399,7 +566,9 @@ namespace Gstarr.Combat
 
         public bool CatchGlory(ref int nextHealth)
         {
-            if ((state != State.Combat && state != State.Stunned) || health == null) return false;
+            if (health == null || (state != State.Combat && state != State.Stunned)) return false;
+            bool styled = ComboSystem.Instance != null && ComboSystem.Instance.Rank >= StyleRank.B;
+            if (!gloryKill && !styled) return false;
             int floor = GloryFloor;
             var boss = GetComponent<BossActor>();
             if (boss != null)
@@ -470,6 +639,7 @@ namespace Gstarr.Combat
             }
 
             state = State.Dead;
+            transform.rotation = Quaternion.identity;
             if (health != null && health.Current > 0)
                 health.TakeDamage(health.Current, Vector2.up);
         }
@@ -521,7 +691,7 @@ namespace Gstarr.Combat
         private void HoldInPlace()
         {
             if (rb == null) return;
-            if (kind == EnemyKind.Flyer)
+            if (Floats)
                 rb.linearVelocity = Vector2.zero;
             else if (state == State.Glory)
                 rb.linearVelocity = new Vector2(0f, Mathf.Min(0f, rb.linearVelocity.y));
@@ -542,7 +712,7 @@ namespace Gstarr.Combat
                 ClampLeash();
                 return;
             }
-            if (kind == EnemyKind.Boss) return;
+            if (kind == EnemyKind.Boss || CharacterArt.Owns(kind)) return;
             if (jumping)
             {
                 StepGapJump();
@@ -611,7 +781,7 @@ namespace Gstarr.Combat
                 transform.rotation = Quaternion.Euler(0f, 0f, wobble);
                 if (sprite != null) sprite.color = staggerColor;
             }
-            else if (sprite != null)
+            else if (sprite != null && GetComponent<CharacterFoe>() == null)
             {
                 sprite.color = preparing ? Color.Lerp(idleColor, Color.white, 0.7f) : idleColor;
             }
@@ -659,7 +829,7 @@ namespace Gstarr.Combat
 
         private void OnBeat(long beat)
         {
-            if (state != State.Combat || kind == EnemyKind.Boss || GamePause.BlocksGameplay || HoldsStill || jumping) return;
+            if (state != State.Combat || kind == EnemyKind.Boss || CharacterArt.Owns(kind) || GamePause.BlocksGameplay || HoldsStill || jumping) return;
 
             if (kind == EnemyKind.Flyer)
             {
@@ -977,7 +1147,7 @@ namespace Gstarr.Combat
             }
         }
 
-        private bool RoomAhead(int direction)
+        private bool RoomAheadPrivate(int direction)
         {
             if (!hasLeash || direction == 0) return true;
             float pad = body != null && body.enabled ? body.bounds.extents.x : 0.45f;
@@ -1453,6 +1623,5 @@ namespace Gstarr.Combat
             transform.localScale = scale;
         }
 
-        private int Facing() => transform.localScale.x >= 0f ? 1 : -1;
     }
 }

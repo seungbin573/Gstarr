@@ -174,7 +174,7 @@ namespace Gstarr.Game
             {
                 bool hasEntry = i < entries.Count;
                 leaderboardRows[i].text = hasEntry
-                    ? $"{i + 1}.  {entries[i].nickname}  {entries[i].score:N0}\n      {entries[i].stage}"
+                    ? $"{i + 1}.  {entries[i].nickname}   {entries[i].score:N0}"
                     : $"{i + 1}.  ---";
                 leaderboardRows[i].color = new Color(1f, 1f, 1f, hasEntry ? 1f : 0.4f);
             }

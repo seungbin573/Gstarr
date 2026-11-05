@@ -29,12 +29,12 @@ namespace Gstarr.Rhythm
         [Tooltip("랭크가 높을수록 게이지가 덜 오름 (랭크당 감소 비율)")]
         [SerializeField] private float gainFalloffPerRank = 0.2f;
         [Tooltip("마지막 성공 후 이 시간이 지나면 게이지가 줄기 시작")]
-        [SerializeField] private float decayDelay = 1.5f;
-        [SerializeField] private float decayPerSecond = 15f;
+        [SerializeField] private float decayDelay = 2.4f;
+        [SerializeField] private float decayPerSecond = 8f;
         [Tooltip("랭크당 감소 속도 증가 비율 (S 랭크 = 기본의 1 + 4 * 값 배)")]
-        [SerializeField] private float decayGrowthPerRank = 0.75f;
+        [SerializeField] private float decayGrowthPerRank = 0.3f;
         [Tooltip("랭크당 감소 시작 대기시간 단축 비율")]
-        [SerializeField] private float delayShrinkPerRank = 0.4f;
+        [SerializeField] private float delayShrinkPerRank = 0.15f;
         [Header("점수")]
         [SerializeField] private int hitScore = 100;
         [Tooltip("콤보 1당 추가 배율")]

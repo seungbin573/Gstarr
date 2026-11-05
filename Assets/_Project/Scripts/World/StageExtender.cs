@@ -21,6 +21,9 @@ namespace Gstarr.World
 
         private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            // Stage_1 은 처음부터 끝까지 한 번으로 만들어 두었다. 복사하면 방이 반복된다.
+            if (scene.name == "Stage_1") return;
+
             var maps = Object.FindObjectsByType<Tilemap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             Tilemap ground = null;
             for (int i = 0; i < maps.Length; i++)

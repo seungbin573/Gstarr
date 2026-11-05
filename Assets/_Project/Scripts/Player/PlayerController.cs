@@ -76,6 +76,28 @@ namespace Gstarr.Player
         public int FacingDirection { get; private set; } = 1;
         public Vector2 Velocity => rb.linearVelocity;
         public bool HasMoveInput => moveInput.sqrMagnitude > stickDeadZone * stickDeadZone;
+        public bool IsStunned => stunTimer > 0f;
+
+        private float stunTimer;
+        private Transform grabAnchor;
+        private Vector3 grabOffset;
+
+        public void Stun(float seconds)
+        {
+            stunTimer = Mathf.Max(stunTimer, seconds);
+            moveInput = Vector2.zero;
+            dashTimer = 0f;
+            jumpBufferTimer = 0f;
+            dashRequested = false;
+            if (rb != null) rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+        }
+
+        public void GrabbedBy(Transform grabber, Vector3 offset, float seconds)
+        {
+            Stun(seconds);
+            grabAnchor = grabber;
+            grabOffset = offset;
+        }
 
         private void Awake()
         {
@@ -184,22 +206,29 @@ namespace Gstarr.Player
             var health = GetComponent<Gstarr.Combat.Health>();
             if (health != null && health.Current <= 0)
             {
-                StageHUD.ShowGameOver();
                 moveInput = Vector2.zero;
-                if (rb != null) rb.linearVelocity = Vector2.zero;
                 return;
             }
 
             if (!GamePause.BlocksGameplay && transform.position.y < -8f && health != null)
                 health.TakeDamage(health.Current, Vector2.up);
 
-            if (GamePause.BlocksGameplay)
+            if (GamePause.BlocksGameplay || IsStunned)
             {
                 moveInput = Vector2.zero;
                 jumpBufferTimer = 0f;
                 jumpCutRequested = false;
                 dashRequested = false;
-                if (rb != null) rb.linearVelocity = Vector2.zero;
+                if (IsStunned)
+                {
+                    stunTimer -= Time.unscaledDeltaTime;
+                    if (stunTimer <= 0f)
+                    {
+                        stunTimer = 0f;
+                        grabAnchor = null;
+                    }
+                }
+                if (rb != null && !IsStunned) rb.linearVelocity = Vector2.zero;
                 return;
             }
 
@@ -227,9 +256,27 @@ namespace Gstarr.Player
 
         private void FixedUpdate()
         {
-            if (GamePause.BlocksGameplay)
+            var motion = GetComponent<SpriteMotion>();
+            bool dead = motion != null && motion.IsDying;
+            if (GamePause.BlocksGameplay || IsStunned || (dead && motion.DeathPresented))
             {
+                if (IsStunned && grabAnchor != null)
+                {
+                    Vector2 hold = (Vector2)grabAnchor.position + (Vector2)grabOffset;
+                    rb.position = hold;
+                    transform.position = new Vector3(hold.x, hold.y, transform.position.z);
+                }
                 rb.linearVelocity = Vector2.zero;
+                return;
+            }
+
+            if (dead)
+            {
+                CheckGround();
+                Vector2 fall = rb.linearVelocity;
+                fall.x = Mathf.MoveTowards(fall.x, 0f, 60f * Time.fixedDeltaTime);
+                rb.linearVelocity = fall;
+                HandleGravity();
                 return;
             }
 

@@ -29,8 +29,28 @@ namespace Gstarr.World
         private readonly List<ArenaRoom> rooms = new List<ArenaRoom>();
         private readonly HashSet<BossActor> configuredBosses = new HashSet<BossActor>();
         private readonly List<DoorGate> gates = new List<DoorGate>();
+        private readonly List<PlacedEnemy> placedEnemies = new List<PlacedEnemy>();
         private static readonly List<Vector2> doorBarriers = new List<Vector2>();
         private static ArenaDoorSpawner active;
+
+        private struct PlacedEnemy
+        {
+            public float X;
+            public Vector3 Position;
+            public EnemyKind Kind;
+            public bool Spawned;
+        }
+
+        public static void Adopt(EnemyActor enemy)
+        {
+            if (active == null || enemy == null) return;
+            for (int i = 0; i < active.rooms.Count; i++)
+            {
+                if (!active.rooms[i].Contains(enemy.transform.position.x)) continue;
+                active.rooms[i].Adopt(enemy);
+                return;
+            }
+        }
 
         public static bool HasUnopenedRooms
         {
@@ -110,6 +130,7 @@ namespace Gstarr.World
             active = this;
             var renderer = GetComponent<TilemapRenderer>();
             if (renderer != null) renderer.enabled = false;
+            CollectPlacedEnemies();
         }
 
         private void OnDestroy()
@@ -126,6 +147,7 @@ namespace Gstarr.World
 
         private void Start()
         {
+            CollectPlacedEnemies();
             doorBarriers.Clear();
             var tilemap = GetComponent<Tilemap>();
             tilemap.CompressBounds();
@@ -248,6 +270,29 @@ namespace Gstarr.World
             StageHUD.AnnounceRoomClear(more);
         }
 
+        private void CollectPlacedEnemies()
+        {
+            placedEnemies.Clear();
+            var maps = Object.FindObjectsByType<Tilemap>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < maps.Length; i++)
+            {
+                var map = maps[i];
+                if (map == null || map.gameObject.scene != gameObject.scene) continue;
+                map.CompressBounds();
+                foreach (var cell in map.cellBounds.allPositionsWithin)
+                {
+                    if (map.GetTile(cell) is not EnemyTile tile) continue;
+                    Vector3 position = map.GetCellCenterWorld(cell);
+                    placedEnemies.Add(new PlacedEnemy
+                    {
+                        X = position.x,
+                        Position = position,
+                        Kind = tile.Kind
+                    });
+                }
+            }
+        }
+
         private void OpenRoom(int index)
         {
             if (index < 0 || index >= rooms.Count) return;
@@ -255,61 +300,113 @@ namespace Gstarr.World
             if (room.IsOpened) return;
             room.MarkOpened();
 
-            float span = room.FrameMax - room.FrameMin;
-            bool wide = span >= 19f;
-            bool bossRoom = index == 4 && rooms.Count >= 5;
+            bool bossRoom = index == rooms.Count - 1 && rooms.Count >= 2;
             if (bossRoom)
             {
-                SpawnInto(room, EnemyKind.Boss, 0.55f, 0f);
+                SpawnInto(room, EnemyKind.Boss, 0.55f, 0f, false);
                 return;
             }
 
-            if (!wide)
+            const float midBossX = 245f;
+            if (room.FrameMin < midBossX && room.FrameMax > midBossX)
             {
-                SpawnInto(room, NarrowKind(index), 0.55f, NarrowKind(index) == EnemyKind.Flyer ? 4f : 0f);
+                SpawnInto(room, EnemyKind.Boss, 0.5f, 0f, true);
                 return;
             }
 
-            var pair = WidePair(index);
-            SpawnInto(room, pair.a, 0.14f, pair.a == EnemyKind.Flyer ? 4f : 0f);
-            SpawnInto(room, pair.b, 0.9f, pair.b == EnemyKind.Flyer ? 4f : 0f);
-        }
-
-        private static EnemyKind NarrowKind(int index)
-        {
-            EnemyKind[] kinds =
+            var plan = RoomPlan(index);
+            if (plan.Length == 1)
             {
-                EnemyKind.BeatChaser,
-                EnemyKind.Mole,
-                EnemyKind.Flyer,
-                EnemyKind.Hopper,
-                EnemyKind.RangedHalfBeat
-            };
-            return kinds[Mathf.Abs(index) % kinds.Length];
+                SpawnInto(room, plan[0], 0.62f, 0f);
+                return;
+            }
+
+            float[] along = plan.Length == 2
+                ? new[] { 0.32f, 0.74f }
+                : new[] { 0.22f, 0.5f, 0.78f };
+            for (int i = 0; i < plan.Length; i++)
+                SpawnInto(room, plan[i], along[Mathf.Min(i, along.Length - 1)], 0f);
         }
 
-        private static (EnemyKind a, EnemyKind b) WidePair(int index)
+        /// <summary>앞에서부터 한 종류씩 만나고, 뒤에서는 둘까지. 보스 방은 여기 쓰지 않는다.</summary>
+        private static EnemyKind[] RoomPlan(int index)
         {
-            (EnemyKind a, EnemyKind b)[] pairs =
+            EnemyKind[][] plans =
             {
-                (EnemyKind.RangedBeat, EnemyKind.Mole),
-                (EnemyKind.Flyer, EnemyKind.Hopper),
-                (EnemyKind.BeatChaser, EnemyKind.RangedHalfBeat),
-                (EnemyKind.Hopper, EnemyKind.RangedBeat),
-                (EnemyKind.RangedHalfBeat, EnemyKind.Mole),
-                (EnemyKind.Flyer, EnemyKind.BeatChaser)
+                new[] { EnemyKind.Bunny },
+                new[] { EnemyKind.Angel },
+                new[] { EnemyKind.AnnoyingKid },
+                new[] { EnemyKind.Bunny, EnemyKind.Angel },
+                new[] { EnemyKind.Bunny, EnemyKind.AnnoyingKid },
+                new[] { EnemyKind.TwinBunny },
+                new[] { EnemyKind.DistortedBunny, EnemyKind.Bunny },
+                new[] { EnemyKind.BlackShadowKid, EnemyKind.Angel },
+                new[] { EnemyKind.AnnoyingKid, EnemyKind.TwinBunny },
+                new[] { EnemyKind.BlackShadowThrow, EnemyKind.Bunny },
+                new[] { EnemyKind.DistortedBunny, EnemyKind.Angel },
+                new[] { EnemyKind.Shadowman },
+                new[] { EnemyKind.BlackShadowThrow, EnemyKind.Angel },
+                new[] { EnemyKind.Shadowman, EnemyKind.Bunny },
+                new[] { EnemyKind.BlackShadowKid, EnemyKind.AnnoyingKid },
+                new[] { EnemyKind.Shadowman, EnemyKind.Angel },
+                new[] { EnemyKind.TwinBunny, EnemyKind.DistortedBunny },
             };
-            return pairs[Mathf.Abs(index) % pairs.Length];
+            return plans[Mathf.Clamp(index, 0, plans.Length - 1)];
         }
 
-        private static void SpawnInto(ArenaRoom room, EnemyKind kind, float along, float lift)
+        private bool HasBossFurtherRight(float x)
         {
+            for (int i = 0; i < placedEnemies.Count; i++)
+                if (placedEnemies[i].Kind == EnemyKind.Boss && placedEnemies[i].X > x + 0.75f)
+                    return true;
+            return false;
+        }
+
+        private Tilemap groundMap;
+
+        private float SurfaceAt(float worldX, float fallback)
+        {
+            if (groundMap == null)
+            {
+                var maps = FindObjectsByType<Tilemap>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                for (int i = 0; i < maps.Length; i++)
+                {
+                    if (maps[i] == null || maps[i].gameObject.scene != gameObject.scene) continue;
+                    if (maps[i].name != "Ground") continue;
+                    groundMap = maps[i];
+                    break;
+                }
+            }
+
+            if (groundMap == null) return fallback;
+            int x = groundMap.WorldToCell(new Vector3(worldX, fallback, 0f)).x;
+            var bounds = groundMap.cellBounds;
+            for (int y = bounds.yMax - 1; y >= bounds.yMin; y--)
+            {
+                if (!groundMap.HasTile(new Vector3Int(x, y, 0))) continue;
+                return groundMap.CellToWorld(new Vector3Int(x, y + 1, 0)).y;
+            }
+
+            return fallback;
+        }
+
+        private void SpawnInto(ArenaRoom room, EnemyKind kind, float along, float lift, bool midBoss = false)
+        {
+            if (kind == EnemyKind.BlackShadowKid || kind == EnemyKind.BlackShadowThrow || kind == EnemyKind.AnnoyingKid)
+                lift = Mathf.Max(lift, 2.8f);
+            if (kind == EnemyKind.Boss)
+                lift = Mathf.Max(lift, 1.7f);
             float x = Mathf.Lerp(room.FrameMin + 1.2f, room.FrameMax - 1.2f, along);
-            var position = new Vector3(x, room.FrameY + lift, 0f);
+            float floor = SurfaceAt(x, room.FrameY);
+            var position = new Vector3(x, floor + lift + 0.08f, 0f);
             EnemyActor actor = kind == EnemyKind.Boss
                 ? EnemyActor.SpawnBoss(position)
                 : EnemyActor.Spawn(null, position, kind);
-            if (kind == EnemyKind.Boss) room.NoteBoss(position);
+            if (kind == EnemyKind.Boss)
+            {
+                room.NoteBoss(position);
+                actor.GetComponent<BossActor>()?.SetMidBoss(midBoss);
+            }
             actor.WaitForPlayerMove();
         }
 
@@ -595,6 +692,17 @@ namespace Gstarr.World
             return 0f;
         }
 
+        public void Adopt(EnemyActor enemy)
+        {
+            if (enemy == null || occupants.Contains(enemy)) return;
+            occupants.Add(enemy);
+            if (cleared)
+            {
+                cleared = false;
+                locked = true;
+            }
+        }
+
         public void RegisterBoss(BossActor boss)
         {
             if (cleared)
@@ -655,7 +763,7 @@ namespace Gstarr.World
                 if (enemy == null || enemy.IsDead || occupants.Contains(enemy)) continue;
                 float x = enemy.transform.position.x;
                 if (x <= innerMin || x >= innerMax) continue;
-                if (enemy.transform.position.y < floorY - 0.75f) continue;
+                if (enemy.transform.position.y < floorY - 2.2f) continue;
                 occupants.Add(enemy);
             }
 
@@ -687,8 +795,8 @@ namespace Gstarr.World
 
             var body = player.attachedRigidbody;
             float x = body != null ? body.position.x : player.transform.position.x;
-            // 문에 닿아 있는 것은 그대로 둔다. 문을 통과해 밖으로 나갔을 때만 끌어온다.
-            if (!force && x >= min - 0.2f && x <= max + 0.2f) return;
+            // 문에 붙어 비비는 것은 그대로 둔다. 문을 통과했을 때만 끌어온다.
+            if (!force && x >= min - 0.6f && x <= max + 0.6f) return;
 
             float clamped = Mathf.Clamp(x, min, max);
             if (Mathf.Abs(clamped - x) < 0.001f) return;
@@ -765,12 +873,19 @@ namespace Gstarr.World
             block.SetShutterBottom(frameH);
             shutterGo.GetComponent<SpriteRenderer>().enabled = false;
 
-            // 바닥 이음새와 윗면에 걸리지 않는 세로 벽. 점프로는 위에 올라설 수 없다.
+            // 모양은 그리지 않는다. 발 높이보다 위에서만 막아 바닥 모서리에 걸리지 않게 한다.
             var box = go.AddComponent<BoxCollider2D>();
-            float wallHeight = frameH + 1.1f;
+            const float clearance = 0.55f;
+            float wallHeight = Mathf.Max(0.2f, frameH - clearance);
             box.size = new Vector2(Mathf.Max(0.45f, targetW * 0.72f), wallHeight);
-            box.offset = new Vector2(0f, 0.18f + wallHeight * 0.5f);
-            box.sharedMaterial = new PhysicsMaterial2D("DoorSlip") { friction = 0f, bounciness = 0f };
+            box.offset = new Vector2(0f, clearance + wallHeight * 0.5f);
+            box.sharedMaterial = new PhysicsMaterial2D("DoorSlip")
+            {
+                friction = 0f,
+                bounciness = 0f,
+                frictionCombine = PhysicsMaterialCombine2D.Minimum,
+                bounceCombine = PhysicsMaterialCombine2D.Minimum
+            };
             box.enabled = false;
             block.body = box;
             return block;

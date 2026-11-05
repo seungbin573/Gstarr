@@ -62,16 +62,40 @@ namespace Gstarr.EditorTools
             TilesetImporter.EnsureFolder(TileFolder);
             var kinds = new[]
             {
-                EnemyKind.BeatChaser,
+                EnemyKind.Bunny,
                 EnemyKind.RangedBeat,
                 EnemyKind.RangedHalfBeat,
                 EnemyKind.Flyer,
                 EnemyKind.Mole,
                 EnemyKind.Boss,
-                EnemyKind.Hopper
+                EnemyKind.Hopper,
+                EnemyKind.Angel,
+                EnemyKind.AnnoyingKid,
+                EnemyKind.BlackShadowKid,
+                EnemyKind.BlackShadowThrow,
+                EnemyKind.Bunny,
+                EnemyKind.DistortedBunny,
+                EnemyKind.TwinBunny,
+                EnemyKind.Shadowman
             };
-            string[] names = { "BeatChaser", "RangedBeat", "RangedHalfBeat", "Flyer", "Mole", "Boss", "Hopper" };
-            string[] icons = { "enemy1", "enemy2", "enemy3", "enemy4", "enemy1", "enemy1", "enemy1" };
+            string[] names =
+            {
+                "BeatChaser", "RangedBeat", "RangedHalfBeat", "Flyer", "Mole", "Boss", "Hopper",
+                "Angel", "AnnoyingKid", "BlackShadowKid", "BlackShadowThrow",
+                "Bunny", "DistortedBunny", "TwinBunny", "Shadowman"
+            };
+            string[] icons =
+            {
+                "bunny/the normal bunny 1", "enemy2", "enemy3", "enemy4", "enemy1", "enemy1", "enemy1",
+                "angel/the angel state idle",
+                "ankid/the annoying kid idle",
+                "blackKid/black shadow kid entity 1",
+                "blackKidThrow/black shadow kid entity grabbing rolled paper",
+                "bunny/the normal bunny 1",
+                "d_bunny/the distorted bunny",
+                "twinBunny/the twin bunny",
+                "shadowman/the kitty room shadow man walking png"
+            };
             Color[] tints =
             {
                 Color.white,
@@ -80,7 +104,15 @@ namespace Gstarr.EditorTools
                 Color.white,
                 new Color(0.75f, 0.75f, 0.75f),
                 new Color(1f, 0.65f, 0.45f),
-                new Color(0.45f, 0.95f, 0.4f)
+                new Color(0.45f, 0.95f, 0.4f),
+                Color.white,
+                Color.white,
+                Color.white,
+                Color.white,
+                Color.white,
+                Color.white,
+                Color.white,
+                Color.white
             };
             var palette = new TileBase[kinds.Length];
             var tiles = new EnemyTile[kinds.Length];

@@ -68,6 +68,12 @@ namespace Gstarr.Game
         private Sprite gameOverCutscene;
         private bool cutsceneActive;
         private readonly HashSet<int> toldStories = new HashSet<int>();
+        private RectTransform storyCaption;
+        private CanvasGroup storyCaptionGroup;
+        private Image storyCaptionImage;
+        private Text storyCaptionTitle;
+        private Text storyCaptionBody;
+        private int storyCaptionToken;
         private Text marchText;
         private bool showMarch;
         private bool routeHintShown;
@@ -117,6 +123,7 @@ namespace Gstarr.Game
 
             BuildGameOver(root);
             BuildCutscene(root);
+            BuildStoryCaption(root);
 
             countdownDim = UIFactory.CreateImage("CountdownBlack", root, Color.black);
             UIFactory.Stretch(countdownDim.rectTransform);
@@ -250,6 +257,35 @@ namespace Gstarr.Game
             cutscenePanel.gameObject.SetActive(false);
         }
 
+        private void BuildStoryCaption(RectTransform root)
+        {
+            storyCaption = UIFactory.CreateRect("StoryCaption", root);
+            UIFactory.Place(storyCaption, new Vector2(0.5f, 0f), new Vector2(0f, 36f), new Vector2(980f, 92f));
+            storyCaptionGroup = storyCaption.gameObject.AddComponent<CanvasGroup>();
+            storyCaptionGroup.interactable = false;
+            storyCaptionGroup.blocksRaycasts = false;
+            storyCaptionGroup.alpha = 0f;
+
+            var bg = UIFactory.CreateImage("StoryCaptionBg", storyCaption, new Color(0.02f, 0.02f, 0.04f, 0.78f));
+            UIFactory.Stretch(bg.rectTransform);
+            bg.raycastTarget = false;
+
+            storyCaptionImage = UIFactory.CreateImage("StoryCaptionImage", storyCaption, Color.white);
+            UIFactory.Place(storyCaptionImage.rectTransform, new Vector2(0f, 0.5f), new Vector2(10f, 0f), new Vector2(72f, 72f));
+            storyCaptionImage.preserveAspect = true;
+            storyCaptionImage.raycastTarget = false;
+
+            storyCaptionTitle = UIFactory.CreateText("StoryCaptionTitle", storyCaption, "", 22, TextAnchor.MiddleLeft, FontStyle.Bold);
+            UIFactory.Place(storyCaptionTitle.rectTransform, new Vector2(0f, 1f), new Vector2(96f, -8f), new Vector2(860f, 32f));
+            storyCaptionTitle.color = new Color(1f, 0.78f, 0.4f);
+            storyCaptionTitle.raycastTarget = false;
+
+            storyCaptionBody = UIFactory.CreateText("StoryCaptionBody", storyCaption, "", 22, TextAnchor.MiddleLeft, FontStyle.Normal);
+            UIFactory.Place(storyCaptionBody.rectTransform, new Vector2(0f, 0f), new Vector2(96f, 12f), new Vector2(860f, 36f));
+            storyCaptionBody.raycastTarget = false;
+            storyCaption.gameObject.SetActive(false);
+        }
+
         private static Sprite LoadCutscene(string assetName)
         {
             // 임시 컷신 그림은 같은 이름의 Resources PNG를 바꾸면 교체할 수 있다.
@@ -312,66 +348,48 @@ namespace Gstarr.Game
             var beat = StageStory.ForBackground(index);
             if (beat == null) return;
             toldStories.Add(index);
-            StartCoroutine(PlayBackgroundStory(beat, image));
+            StartCoroutine(PlayBackgroundCaption(beat, image));
         }
 
-        private IEnumerator PlayBackgroundStory(StageStory.Beat beat, Sprite image)
+        private IEnumerator PlayBackgroundCaption(StageStory.Beat beat, Sprite image)
         {
-            while (cutsceneActive) yield return null;
-            if (resultShown) yield break;
+            if (resultShown || storyCaption == null) yield break;
 
-            cutsceneActive = true;
-            if (conductor != null) conductor.DuckForStory(true);
-            GamePause.SetPaused(true);
+            int token = ++storyCaptionToken;
+            storyCaptionTitle.text = beat.Title;
+            storyCaptionBody.text = beat.Body;
+            storyCaptionImage.sprite = image;
+            storyCaptionImage.enabled = image != null;
+            storyCaption.gameObject.SetActive(true);
+            storyCaption.SetAsLastSibling();
 
-            cutsceneTitle.text = beat.Title;
-            cutsceneImage.sprite = image;
-            cutsceneImage.color = image != null ? Color.white : new Color(0.12f, 0.13f, 0.18f, 1f);
-            if (cutsceneDim != null) cutsceneDim.color = new Color(0.02f, 0.03f, 0.06f, 0.42f);
-            cutscenePanel.gameObject.SetActive(true);
-            cutscenePanel.SetAsLastSibling();
-            if (cutsceneGroup != null) cutsceneGroup.alpha = 0f;
-
-            const float fadeIn = 0.45f;
+            const float fadeIn = 0.25f;
             for (float t = 0f; t < fadeIn; t += Time.unscaledDeltaTime)
             {
-                if (cutsceneGroup != null) cutsceneGroup.alpha = Mathf.Clamp01(t / fadeIn);
+                if (token != storyCaptionToken) yield break;
+                storyCaptionGroup.alpha = Mathf.Clamp01(t / fadeIn);
                 yield return null;
             }
-            if (cutsceneGroup != null) cutsceneGroup.alpha = 1f;
+            if (token != storyCaptionToken) yield break;
+            storyCaptionGroup.alpha = 1f;
 
-            string[] lines = beat.Body.Split('\n');
-            bool skipped = false;
-            for (int i = 0; i < lines.Length; i++)
+            const float hold = 2.6f;
+            for (float t = 0f; t < hold; t += Time.unscaledDeltaTime)
             {
-                cutscenePrompt.text = i < lines.Length - 1
-                    ? "ENTER / SPACE  다음    ESC  건너뛰기"
-                    : "ENTER / SPACE  계속";
-                yield return RevealLine(lines[i]);
-                if (CutsceneSkipPressed()) { skipped = true; break; }
-                float hold = 1.35f + lines[i].Length * 0.02f;
-                for (float t = 0f; t < hold; t += Time.unscaledDeltaTime)
-                {
-                    if (CutsceneSkipPressed()) { skipped = true; break; }
-                    if (CutsceneAdvancePressed()) break;
-                    yield return null;
-                }
-                if (skipped) break;
+                if (token != storyCaptionToken) yield break;
+                yield return null;
             }
 
-            if (conductor != null) conductor.DuckForStory(false);
-            const float fadeOut = 0.5f;
+            const float fadeOut = 0.45f;
             for (float t = 0f; t < fadeOut; t += Time.unscaledDeltaTime)
             {
-                if (cutsceneGroup != null) cutsceneGroup.alpha = 1f - Mathf.Clamp01(t / fadeOut);
+                if (token != storyCaptionToken) yield break;
+                storyCaptionGroup.alpha = 1f - Mathf.Clamp01(t / fadeOut);
                 yield return null;
             }
-
-            cutscenePanel.gameObject.SetActive(false);
-            if (cutsceneGroup != null) cutsceneGroup.alpha = 1f;
-            if (cutsceneDim != null) cutsceneDim.color = new Color(0.015f, 0.02f, 0.04f, 1f);
-            cutsceneActive = false;
-            GamePause.SetPaused(false);
+            if (token != storyCaptionToken) yield break;
+            storyCaptionGroup.alpha = 0f;
+            storyCaption.gameObject.SetActive(false);
         }
 
         private IEnumerator RevealLine(string line)
@@ -405,8 +423,14 @@ namespace Gstarr.Game
             coverUntilWake = false;
             wakeOwnsCountdown = true;
             if (countdownDim != null) countdownDim.enabled = false;
+            // 이야기에서 이미 나오던 곡은 눈을 뜰 때도 이어서 튼다.
+            if (conductor != null && conductor.IsReady && conductor.SongTime >= 0)
+            {
+                GamePause.SetCountdown(false);
+                return;
+            }
             GamePause.SetPaused(false);
-            if (conductor != null && conductor.IsReady && conductor.SongTime < 0)
+            if (conductor != null && conductor.IsReady)
                 conductor.StartCountdownNow(conductor.CountdownBeats);
             else
                 GamePause.SetCountdown(false);
@@ -600,12 +624,35 @@ namespace Gstarr.Game
             var playerBody = playerController != null ? playerController.GetComponent<Rigidbody2D>() : null;
             if (playerBody != null) playerBody.linearVelocity = Vector2.zero;
             showMarch = false;
-            if (!cleared && RunCheckpoint.HasSave)
-            {
-                ShowContinuePrompt();
-                return;
-            }
             StartCoroutine(PlayEndingCutscene(cleared));
+        }
+
+        /// <summary>쓰러지고 화면이 어두워진 뒤에 들킨 이야기로 넘긴다.</summary>
+        public static void BeginPlayerDeath()
+        {
+            var hud = FindAnyObjectByType<StageHUD>();
+            if (hud == null || hud.resultShown || hud.deathSequence) return;
+            hud.deathSequence = true;
+            hud.StartCoroutine(hud.CollapseThenStory());
+        }
+
+        private bool deathSequence;
+
+        private IEnumerator CollapseThenStory()
+        {
+            var player = playerController != null ? playerController : FindAnyObjectByType<PlayerController>();
+            var motion = player != null ? player.GetComponent<SpriteMotion>() : null;
+            float guard = 0f;
+            while ((motion == null || !motion.DeathPresented) && guard < 3.2f)
+            {
+                guard += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            var pain = FindAnyObjectByType<Gstarr.CameraSystem.PainOverlay>();
+            if (pain != null) yield return pain.FadeToBlack(0.5f);
+            else yield return new WaitForSecondsRealtime(0.35f);
+            ShowResult(false);
         }
 
         private void HideGameplayHud()
@@ -645,13 +692,14 @@ namespace Gstarr.Game
                         "잠든 모습을 본 친구들의 시선이 한꺼번에 에이든에게 쏠렸다.",
                         "얼굴이 새빨개진 에이든은 아무 말도 못 한 채 고개를 푹 숙였다."
                     },
-                    ShowResultPanel);
+                    RunCheckpoint.HasSave ? ShowContinuePrompt : ShowResultPanel);
             }
             cutsceneActive = false;
         }
 
         private void ShowContinuePrompt()
         {
+            FindAnyObjectByType<Gstarr.CameraSystem.PainOverlay>()?.ClearFade();
             askingContinue = true;
             continueDeclined = false;
             gameOverPanel.SetAsLastSibling();
@@ -697,6 +745,7 @@ namespace Gstarr.Game
 
         private void ShowResultPanel()
         {
+            FindAnyObjectByType<Gstarr.CameraSystem.PainOverlay>()?.ClearFade();
             gameOverPanel.SetAsLastSibling();
             gameOverPanel.gameObject.SetActive(true);
             gameOverGroup.alpha = 1f;

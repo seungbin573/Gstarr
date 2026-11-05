@@ -139,7 +139,7 @@ namespace Gstarr.Combat
             // 입력 설정이 실패해도 체력은 남긴다.
             var health = GetComponent<Health>();
             if (health == null) health = gameObject.AddComponent<Health>();
-            health.Configure(7, false);
+            health.Configure(5, false);
             health.InvulnOnHit = 1f;
             if (GetComponent<PlayerHealthView>() == null) gameObject.AddComponent<PlayerHealthView>();
             if (GetComponent<PlayerInventory>() == null) gameObject.AddComponent<PlayerInventory>();
@@ -241,6 +241,8 @@ namespace Gstarr.Combat
         private void Update()
         {
             if (Gstarr.Game.GamePause.BlocksGameplay) return;
+            var controller = GetComponent<PlayerController>();
+            if (controller != null && controller.IsStunned) return;
             float dt = Time.deltaTime;
             cooldownTimer -= dt;
             if (damageBonusTimer > 0f && (damageBonusTimer -= dt) <= 0f)
@@ -306,6 +308,8 @@ namespace Gstarr.Combat
                 AnimateItemUse(dt);
                 return;
             }
+
+            if (heldItemRenderer != null) heldItemRenderer.enabled = false;
 
             var w = CurrentWeapon;
             float angle = 0f;
