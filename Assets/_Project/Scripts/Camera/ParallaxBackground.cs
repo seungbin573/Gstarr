@@ -67,6 +67,34 @@ namespace Gstarr.CameraSystem
             return backgrounds[backgroundIndex];
         }
 
+        /// <summary>카메라가 있는 배경으로 바로 맞춘다. 페이드로 중간 그림을 훑지 않는다.</summary>
+        public void CatchUp()
+        {
+            if (cam == null) cam = Camera.main;
+            if (!hasOrigin || cam == null || backgrounds == null || backgrounds.Length == 0) return;
+            float segment = Mathf.Max(1f, segmentDistance);
+            int last = backgrounds.Length - 1;
+            int target = Mathf.Clamp(Mathf.FloorToInt(Mathf.Max(0f, cam.transform.position.x - originX) / segment), 0, last);
+            if (target == index && fadeDir == 0 && fade <= 0f) return;
+            index = target;
+            fade = 0f;
+            fadeDir = 0;
+            BackgroundAdvanced?.Invoke(index, SpriteAt(index));
+        }
+
+        /// <summary>배경 firstIndex 부터 lastIndex 까지가 깔리는 월드 x 범위. 카메라 원점이 잡힌 뒤에만.</summary>
+        public bool TrySegmentSpan(int firstIndex, int lastIndex, out float minX, out float maxX)
+        {
+            minX = maxX = 0f;
+            if (!hasOrigin || backgrounds == null || backgrounds.Length == 0) return false;
+            int hi = Mathf.Clamp(lastIndex, 0, backgrounds.Length - 1);
+            int lo = Mathf.Clamp(firstIndex, 0, hi);
+            float segment = Mathf.Max(1f, segmentDistance);
+            minX = originX + lo * segment;
+            maxX = originX + (hi + 1) * segment;
+            return true;
+        }
+
         private struct Frame
         {
             public float scale;

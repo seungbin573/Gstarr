@@ -608,6 +608,13 @@ namespace Gstarr.Combat
             return image;
         }
 
+        public static void Dismiss()
+        {
+            if (activeScare == null) return;
+            Object.Destroy(activeScare);
+            activeScare = null;
+        }
+
         private static GameObject activeScare;
 
         private sealed class ScareFlash : MonoBehaviour

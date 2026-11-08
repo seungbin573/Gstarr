@@ -22,7 +22,10 @@ namespace Gstarr.Combat
         Bunny,
         DistortedBunny,
         TwinBunny,
-        Shadowman
+        Shadowman,
+        AngelEye,
+        AngelEyeTwo,
+        AngelGunHand
     }
 
     [RequireComponent(typeof(Health))]
@@ -49,8 +52,11 @@ namespace Gstarr.Combat
         private RhythmConductor conductor;
         private bool beatBound;
         private State state;
+        private enum BossGlory { None, Phase, Death }
+
         private bool staggerSpent;
         private bool gloryKill = true;
+        private BossGlory bossGlory;
         private float staggerTimer;
         private float stunTimer;
         private Color idleColor;
@@ -108,7 +114,8 @@ namespace Gstarr.Combat
         public int GloryFloor => Mathf.Max(1, Mathf.CeilToInt(health.Max * 0.3f));
         public EnemyKind Kind => kind;
         public bool Floats => kind == EnemyKind.Flyer || kind == EnemyKind.BlackShadowKid
-            || kind == EnemyKind.BlackShadowThrow || kind == EnemyKind.AnnoyingKid;
+            || kind == EnemyKind.BlackShadowThrow || kind == EnemyKind.AnnoyingKid
+            || kind == EnemyKind.AngelEye || kind == EnemyKind.AngelEyeTwo || kind == EnemyKind.AngelGunHand;
         public bool CanAct =>
             state == State.Combat
             && !IsDead
@@ -433,7 +440,11 @@ namespace Gstarr.Combat
                 if (motion != null) DestroyImmediate(motion);
                 var leftover = transform.Find("BodyVisual");
                 if (leftover != null) DestroyImmediate(leftover.gameObject);
-                if (kind == EnemyKind.Bunny || kind == EnemyKind.TwinBunny || kind == EnemyKind.DistortedBunny
+                if (kind == EnemyKind.AngelEye || kind == EnemyKind.AngelEyeTwo || kind == EnemyKind.AngelGunHand)
+                {
+                    if (GetComponent<AngelSummon>() == null) gameObject.AddComponent<AngelSummon>();
+                }
+                else if (kind == EnemyKind.Bunny || kind == EnemyKind.TwinBunny || kind == EnemyKind.DistortedBunny
                     || kind == EnemyKind.Angel || kind == EnemyKind.AnnoyingKid
                     || kind == EnemyKind.BlackShadowKid || kind == EnemyKind.BlackShadowThrow
                     || kind == EnemyKind.Shadowman)
@@ -515,7 +526,9 @@ namespace Gstarr.Combat
             var material = body != null ? body.sharedMaterial : null;
             if (body != null) DestroyImmediate(body);
 
-            if (kind == EnemyKind.Boss)
+            if (kind == EnemyKind.AngelEye || kind == EnemyKind.AngelEyeTwo || kind == EnemyKind.AngelGunHand)
+                body = AddBox((Vector2)art.size * 0.8f, art.center, material);
+            else if (kind == EnemyKind.Boss)
             {
                 var capsule = gameObject.AddComponent<CapsuleCollider2D>();
                 capsule.direction = CapsuleDirection2D.Vertical;
@@ -523,10 +536,29 @@ namespace Gstarr.Combat
                 capsule.offset = new Vector2(midX, foot + 0.95f);
                 capsule.sharedMaterial = material;
                 body = capsule;
-                return;
             }
+            else
+                body = AddBox(new Vector2(SharedWidth, SharedHeight), new Vector2(midX, foot + SharedHeight * 0.5f), material);
 
-            body = AddBox(new Vector2(SharedWidth, SharedHeight), new Vector2(midX, foot + SharedHeight * 0.5f), material);
+            IgnoreOtherEnemies();
+        }
+
+        private void IgnoreOtherEnemies()
+        {
+            var mine = GetComponents<Collider2D>();
+            for (int i = 0; i < All.Count; i++)
+            {
+                var other = All[i];
+                if (other == null || other == this) continue;
+                var theirs = other.GetComponents<Collider2D>();
+                for (int a = 0; a < mine.Length; a++)
+                {
+                    if (mine[a] == null || !mine[a].enabled) continue;
+                    for (int b = 0; b < theirs.Length; b++)
+                        if (theirs[b] != null && theirs[b].enabled)
+                            Physics2D.IgnoreCollision(mine[a], theirs[b], true);
+                }
+            }
         }
 
         private BoxCollider2D AddBox(Vector2 size, Vector2 offset, PhysicsMaterial2D material)
@@ -539,6 +571,8 @@ namespace Gstarr.Combat
         }
 
         private void OnEnable() => All.Add(this);
+
+        private void Start() => IgnoreOtherEnemies();
 
         private void OnDisable()
         {
@@ -567,6 +601,8 @@ namespace Gstarr.Combat
         public bool CatchGlory(ref int nextHealth)
         {
             if (health == null || (state != State.Combat && state != State.Stunned)) return false;
+            if (CatchBossGlory(ref nextHealth)) return true;
+            if (GetComponent<BossMark>() != null) return false;
             bool styled = ComboSystem.Instance != null && ComboSystem.Instance.Rank >= StyleRank.B;
             if (!gloryKill && !styled) return false;
             int floor = GloryFloor;
@@ -619,15 +655,13 @@ namespace Gstarr.Combat
 
         public void CancelGlory()
         {
-            state = State.Stagger;
-            staggerTimer = Mathf.Max(staggerSeconds, 5f);
-            transform.rotation = Quaternion.identity;
-            if (sprite != null) sprite.color = staggerColor;
-            HoldInPlace();
+            if (ResolveBossGlory(false)) return;
+            DieNow();
         }
 
         public void FinishGlory()
         {
+            if (ResolveBossGlory(true)) return;
             var boss = GetComponent<BossActor>();
             if (boss != null && boss.TryAdvancePhase())
             {
@@ -638,7 +672,71 @@ namespace Gstarr.Combat
                 return;
             }
 
+            DieNow();
+        }
+
+        private bool CatchBossGlory(ref int nextHealth)
+        {
+            if (GetComponent<BossMark>() == null || bossGlory != BossGlory.None) return false;
+            var mark = GetComponent<BossMark>();
+            bool dying = nextHealth <= 0;
+            bool crossing = mark.Phase < 2 && nextHealth * 2 <= health.Max;
+            if (crossing)
+            {
+                nextHealth = Mathf.Max(1, health.Max / 2);
+                bossGlory = BossGlory.Phase;
+                return true;
+            }
+            if (dying)
+            {
+                nextHealth = 1;
+                bossGlory = BossGlory.Death;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>성공이면 페이즈가 넘어가거나 죽는다. 실패면 체력을 채우고 패턴을 되돌린다.</summary>
+        private bool ResolveBossGlory(bool success)
+        {
+            if (GetComponent<BossMark>() == null || bossGlory == BossGlory.None) return false;
+            var kind = bossGlory;
+            bossGlory = BossGlory.None;
+            state = State.Combat;
+            transform.rotation = Quaternion.identity;
+            if (sprite != null) sprite.color = idleColor;
+            if (rb != null) rb.linearVelocity = Vector2.zero;
+
+            if (success && kind == BossGlory.Death)
+            {
+                DieNow();
+                return true;
+            }
+            if (success)
+            {
+                GetComponent<Angel>()?.BeginPhaseTwo();
+                GetComponent<ShadowMan>()?.BeginPhaseTwo();
+                return true;
+            }
+
+            if (health != null) health.Heal(health.Max);
+            if (kind == BossGlory.Phase)
+            {
+                GetComponent<Angel>()?.ResetPhaseOne();
+                GetComponent<ShadowMan>()?.ResetPhaseOne();
+            }
+            else
+            {
+                GetComponent<Angel>()?.BeginPhaseTwo();
+                GetComponent<ShadowMan>()?.BeginPhaseTwo();
+            }
+            return true;
+        }
+
+        private void DieNow()
+        {
             state = State.Dead;
+            bossGlory = BossGlory.None;
             transform.rotation = Quaternion.identity;
             if (health != null && health.Current > 0)
                 health.TakeDamage(health.Current, Vector2.up);
@@ -676,9 +774,8 @@ namespace Gstarr.Combat
                 HoldInPlace();
                 if (staggerTimer <= 0f)
                 {
-                    state = State.Combat;
-                    transform.rotation = Quaternion.identity;
-                    if (sprite != null) sprite.color = idleColor;
+                    if (bossGlory != BossGlory.None) CancelGlory();
+                    else DieNow();
                 }
             }
             else if (state == State.Glory)

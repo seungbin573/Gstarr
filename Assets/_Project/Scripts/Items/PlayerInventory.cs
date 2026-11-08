@@ -112,6 +112,8 @@ namespace Gstarr.Items
         private void Update()
         {
             if (Gstarr.Game.GamePause.BlocksGameplay) return;
+            var runner = GetComponent<Gstarr.Player.PlayerController>();
+            if (runner != null && runner.IsScripted) return;
             cooldownTimer -= Time.deltaTime;
 
             if (prevCombat != null && prevCombat.WasPressedThisFrame()) Select(ItemCategory.Combat, -1);

@@ -1,4 +1,5 @@
 using System;
+using Gstarr.Items;
 using Gstarr.Rhythm;
 using UnityEngine;
 
@@ -57,17 +58,20 @@ namespace Gstarr.Combat
             Vector2 pos = transform.position;
             Vector2 step = velocity * dt;
 
-            // 빠른 탄이 얇은 콜라이더를 뚫지 않도록 이동 경로를 레이캐스트
-            RaycastHit2D hit = Physics2D.Raycast(pos, step.normalized, Mathf.Max(0.01f, step.magnitude), hitMask);
-            if (hit.collider != null)
+            // 빠른 탄이 얇은 벽을 뚫지 않게 경로를 본다. 아이템은 지나간다.
+            float distance = Mathf.Max(0.01f, step.magnitude);
+            var hits = Physics2D.RaycastAll(pos, step.normalized, distance, hitMask);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            for (int i = 0; i < hits.Length; i++)
             {
-                if (owner == null || (hit.collider.transform != owner.transform && !hit.collider.transform.IsChildOf(owner.transform)))
-                {
-                    onHit?.Invoke(hit.collider);
-                    var target = hit.collider.GetComponentInParent<Health>();
-                    if (damage > 0 && target != null && target.TakeDamage(damage, velocity))
-                        ComboSystem.RegisterHit(hit.collider.gameObject, judgement);
-                }
+                var col = hits[i].collider;
+                if (col == null) continue;
+                if (owner != null && (col.transform == owner.transform || col.transform.IsChildOf(owner.transform))) continue;
+                if (col.GetComponentInParent<ItemPickup>() != null) continue;
+                onHit?.Invoke(col);
+                var target = col.GetComponentInParent<Health>();
+                if (damage > 0 && target != null && target.TakeDamage(damage, velocity))
+                    ComboSystem.RegisterHit(col.gameObject, judgement);
                 Destroy(gameObject);
                 return;
             }

@@ -53,6 +53,23 @@ namespace Gstarr.Combat
         private Image ring;
         private static Sprite arrowSprite;
 
+        /// <summary>게임 오버와 클리어에서 가운데 노트와 링을 바로 치운다.</summary>
+        public static void Dismiss()
+        {
+            if (Instance == null) return;
+            Instance.IsRunning = false;
+            Instance.endTimer = -1f;
+            GamePause.SetGloryKill(false);
+            if (Instance.cameraFollow != null) Instance.cameraFollow.EndFocus();
+            if (Instance.canvasRoot != null) Object.Destroy(Instance.canvasRoot.gameObject);
+            Instance.canvasRoot = null;
+            Instance.note = null;
+            Instance.noteLabel = null;
+            Instance.ring = null;
+            Instance.banner = null;
+            Instance.enemy = null;
+        }
+
         public static void Begin(EnemyActor target)
         {
             if (target == null || GamePause.BlocksGameplay) return;

@@ -9,6 +9,10 @@ namespace Gstarr.Combat
     public static class CharacterArt
     {
         private const float BodyHeight = 2.2f;
+        // 플레이어 콜라이더 키 1.9의 절반. 일반·디스토티드·트윈 모두 이 크기다.
+        private const float BunnyScale = 1.9f * 0.5f / BodyHeight;
+        // 중간 보스. 서 있는 키가 플레이어보다 조금 크고, 팔을 뻗는 장면도 같은 배율이다.
+        private const float ShadowmanHeight = 2.35f;
 
         public static bool Owns(EnemyKind kind) => kind >= EnemyKind.Angel;
 
@@ -17,8 +21,8 @@ namespace Gstarr.Combat
         /// <summary>준비 동작의 앞 프레임. 트윈과 디스토티드만 있다.</summary>
         public static Sprite WindupLead(EnemyKind kind)
         {
-            if (kind == EnemyKind.TwinBunny) return First(LoadVisible(TwinAlert, TwinIdle[0]));
-            if (kind == EnemyKind.DistortedBunny) return First(LoadVisible(DistortedAlert, DistortedIdle[0]));
+            if (kind == EnemyKind.TwinBunny) return First(LoadVisible(TwinAlert, TwinIdle[0], BunnyScale));
+            if (kind == EnemyKind.DistortedBunny) return First(LoadVisible(DistortedAlert, DistortedIdle[0], BunnyScale));
             return null;
         }
 
@@ -26,6 +30,9 @@ namespace Gstarr.Combat
         {
             return kind switch
             {
+                EnemyKind.AngelEye => new[] { Monster(Eye) },
+                EnemyKind.AngelEyeTwo => new[] { Monster(EyeTwo) },
+                EnemyKind.AngelGunHand => new[] { Monster(GunHand) },
                 EnemyKind.Angel => LoadVisible(pose == Pose.Charge ? AngelCharge : AngelIdle, AngelIdle[0]),
                 EnemyKind.AnnoyingKid => pose switch
                 {
@@ -42,14 +49,49 @@ namespace Gstarr.Combat
                     Pose.Shot => Load(ShadowPaper, 0.55f),
                     _ => LoadVisible(ShadowThrowIdle, ShadowThrowIdle[0])
                 },
-                EnemyKind.Bunny => LoadVisible(pose == Pose.Charge ? BunnyCharge : BunnyIdle, BunnyIdle[0]),
-                EnemyKind.DistortedBunny => LoadVisible(pose == Pose.Charge ? DistortedCharge : DistortedIdle, DistortedIdle[0]),
-                EnemyKind.TwinBunny => LoadVisible(pose == Pose.Charge ? TwinCharge : TwinIdle, TwinIdle[0]),
-                EnemyKind.Shadowman => pose == Pose.Grab
-                    ? LoadVisible(ManGrab, ManWalk[0], 1.32f)
-                    : LoadVisible(ManWalk, ManWalk[0], 1.32f),
+                EnemyKind.Bunny => LoadVisible(pose == Pose.Charge ? BunnyCharge : BunnyIdle, BunnyIdle[0], BunnyScale),
+                EnemyKind.DistortedBunny => LoadVisible(pose == Pose.Charge ? DistortedCharge : DistortedIdle, DistortedIdle[0], BunnyScale),
+                EnemyKind.TwinBunny => LoadVisible(pose == Pose.Charge ? TwinCharge : TwinIdle, TwinIdle[0], BunnyScale),
+                EnemyKind.Shadowman => LoadByHeight(
+                    pose == Pose.Grab ? ManGrab : ManWalk, ManWalk[0], ShadowmanHeight),
                 _ => System.Array.Empty<Sprite>()
             };
+        }
+
+        public const string MonsterFolder = "Assets/arts/character/monsters/";
+        public const string Cross = "날라가는 십자가";
+        public const string Eye = "천사눈깔 (몹)";
+        public const string EyeTwo = "천사눈깔 2 (몹)";
+        public const string GunHand = "총 모양으로 게스처 하는 손 (몹)";
+        public const string SummonedHand = "천사석상이 소환하는 손";
+        public const string PullHand = "천사석상의 또 다른 손 (다른 랜덤 몹들을 멋대로 가져옴)";
+        public const string HandSkill = "천사석상 스킬22";
+        public const string MultiHand = "천사스킬 333 (여러번 공격)";
+
+        // Trim transparent canvas so the visual, hitbox and warning use the same size.
+        public static Sprite Monster(string name, float length = 1.2f)
+        {
+            string path = MonsterFolder + name + ".png";
+            string key = path + "#trim@" + length;
+            if (Cache.TryGetValue(key, out var cached) && cached != null) return cached;
+            var texture = ReadTexture(path);
+            if (texture == null) return null;
+            var pixels = texture.GetPixels32();
+            int minX = texture.width, minY = texture.height, maxX = -1, maxY = -1;
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                if (pixels[i].a <= 40) continue;
+                int x = i % texture.width, y = i / texture.width;
+                minX = Mathf.Min(minX, x); maxX = Mathf.Max(maxX, x);
+                minY = Mathf.Min(minY, y); maxY = Mathf.Max(maxY, y);
+            }
+            if (maxX < minX) { Object.Destroy(texture); return null; }
+            var rect = new Rect(minX, minY, maxX - minX + 1, maxY - minY + 1);
+            var sprite = Sprite.Create(texture, rect, new Vector2(0.5f, 0f),
+                Mathf.Max(rect.width, rect.height) / length);
+            sprite.name = name;
+            Cache[key] = sprite;
+            return sprite;
         }
 
         public enum Pose
@@ -92,6 +134,21 @@ namespace Gstarr.Combat
             for (int i = 0; i < paths.Length; i++)
             {
                 var sprite = LoadOne(paths[i], height, 0f);
+                if (sprite != null) frames.Add(sprite);
+            }
+            return frames.ToArray();
+        }
+
+        /// <summary>기준 프레임의 보이는 키에 픽셀 비율을 고정한다. 팔이 길어져도 몸이 줄지 않는다.</summary>
+        private static Sprite[] LoadByHeight(string[] paths, string referencePath, float worldHeight)
+        {
+            var reference = MeasureVisible(referencePath);
+            float pixels = reference.Height > 0 ? reference.Height : PngPixelHeight(referencePath);
+            float ppu = pixels > 0f ? pixels / Mathf.Max(0.25f, worldHeight) : 100f;
+            var frames = new List<Sprite>(paths.Length);
+            for (int i = 0; i < paths.Length; i++)
+            {
+                var sprite = LoadAnchored(paths[i], ppu);
                 if (sprite != null) frames.Add(sprite);
             }
             return frames.ToArray();

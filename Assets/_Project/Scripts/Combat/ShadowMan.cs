@@ -1,3 +1,4 @@
+using Gstarr.Game;
 using Gstarr.Player;
 using Gstarr.World;
 using UnityEngine;
@@ -9,7 +10,8 @@ namespace Gstarr.Combat
     [DefaultExecutionOrder(80)]
     public sealed class ShadowMan : MonoBehaviour
     {
-        private enum Phase { Walk, Reach, Grab, Recover }
+        private enum Phase { Walk, Reach, Grab, Recover, RushWindup, Rush }
+        private enum Move { Grab, Rush, Again }
         private const float CalmSpeed = 1.6f;
         private const float ChaseSpeed = 3.1f;
         private const float NoticeRange = 5.2f;
@@ -31,6 +33,14 @@ namespace Gstarr.Combat
         private int noticedHealth;
         private bool aggro;
         private bool grabbed;
+        private bool boss;
+        private bool phase2;
+        private bool secondGrab;
+        private bool rushHit;
+        private Move nextMove = Move.Grab;
+        private bool freshPhase;
+
+        public void BecomeBoss() => boss = true;
 
         private void Awake()
         {
@@ -71,13 +81,32 @@ namespace Gstarr.Combat
             var player = actor.PlayerTarget;
             if (!aggro && Near(player)) aggro = true;
             elapsed += Time.fixedDeltaTime;
-            body.gravityScale = 4f;
+            body.gravityScale = phase == Phase.Rush ? 0f : 4f;
 
             switch (phase)
             {
                 case Phase.Walk:
                     StepWalk(player);
-                    if (aggro && InReach(player)) Enter(Phase.Reach);
+                    if (phase2 && nextMove == Move.Rush && aggro && Near(player)) Enter(Phase.RushWindup);
+                    else if (aggro && InReach(player)) Enter(Phase.Reach);
+                    break;
+                case Phase.RushWindup:
+                    Hold();
+                    FacePlayer(player);
+                    if (elapsed >= 0.42f)
+                    {
+                        Enter(actor.RoomAhead(direction) ? Phase.Rush : Phase.Recover);
+                        if (phase == Phase.Rush) GameAudio.Play(GameAudio.Id.Dash, 0.7f);
+                    }
+                    break;
+                case Phase.Rush:
+                    body.linearVelocity = new Vector2(direction * 14f, 0f);
+                    if (!rushHit && InReach(player))
+                    {
+                        rushHit = true;
+                        player.GetComponent<Health>()?.TakeDamage(2, new Vector2(direction, 0.4f));
+                    }
+                    if (elapsed >= 0.3f || !actor.RoomAhead(direction)) Enter(Phase.Recover);
                     break;
                 case Phase.Reach:
                     Hold();
@@ -89,11 +118,31 @@ namespace Gstarr.Combat
                     break;
                 case Phase.Grab:
                     Hold();
-                    if (elapsed >= GrabSeconds) Enter(Phase.Recover);
+                    if (elapsed < GrabSeconds) break;
+                    if (phase2 && nextMove == Move.Again && !secondGrab)
+                    {
+                        secondGrab = true;
+                        Enter(Phase.Reach);
+                    }
+                    else Enter(Phase.Recover);
                     break;
                 case Phase.Recover:
                     Hold();
-                    if (elapsed >= RecoverSeconds) Enter(Phase.Walk);
+                    if (elapsed < RecoverSeconds) break;
+                    if (freshPhase)
+                    {
+                        freshPhase = false;
+                        Enter(Phase.Walk);
+                        break;
+                    }
+                    if (phase2)
+                    {
+                        nextMove = nextMove == Move.Grab ? Move.Rush
+                            : nextMove == Move.Rush ? Move.Again
+                            : Move.Grab;
+                        secondGrab = false;
+                    }
+                    Enter(Phase.Walk);
                     break;
             }
 
@@ -119,7 +168,8 @@ namespace Gstarr.Combat
             bool walking = move != 0;
             body.constraints = RigidbodyConstraints2D.FreezeRotation
                 | (walking ? RigidbodyConstraints2D.None : RigidbodyConstraints2D.FreezePositionX);
-            body.linearVelocity = new Vector2(walking ? move * (aggro ? ChaseSpeed : CalmSpeed) : 0f, body.linearVelocity.y);
+            float speed = aggro ? (phase2 ? 4.6f : ChaseSpeed) : CalmSpeed;
+            body.linearVelocity = new Vector2(walking ? move * speed : 0f, body.linearVelocity.y);
         }
 
         private void Hold()
@@ -141,7 +191,8 @@ namespace Gstarr.Combat
             if (ArenaDoorSpawner.SeparatedByDoor(transform.position.x, player.position.x)) return false;
             if (actor.HasLeash && (player.position.x < actor.RoomMin || player.position.x > actor.RoomMax))
                 return false;
-            return Mathf.Abs(player.position.x - transform.position.x) <= NoticeRange
+            float notice = phase2 ? 7.2f : NoticeRange;
+            return Mathf.Abs(player.position.x - transform.position.x) <= notice
                 && Mathf.Abs(player.position.y - transform.position.y) <= 1.8f;
         }
 
@@ -149,8 +200,9 @@ namespace Gstarr.Combat
         {
             if (!Near(player)) return false;
             float dx = player.position.x - transform.position.x;
+            float reach = phase2 ? 3.4f : 2.8f;
             return dx * direction > 0.2f
-                && Mathf.Abs(dx) <= 2.8f
+                && Mathf.Abs(dx) <= reach
                 && Mathf.Abs(player.position.y - transform.position.y) <= 1.5f;
         }
 
@@ -162,18 +214,46 @@ namespace Gstarr.Combat
             player.GetComponent<Health>()?.TakeDamage(GrabDamage, new Vector2(direction, 0.25f));
         }
 
+        public void BeginPhaseTwo()
+        {
+            phase2 = true;
+            freshPhase = true;
+            nextMove = Move.Grab;
+            secondGrab = false;
+            GetComponent<BossMark>()?.EnterPhase(2);
+            if (visual != null) visual.color = new Color(0.78f, 0.7f, 1f);
+            Enter(Phase.Recover);
+        }
+
+        public void ResetPhaseOne()
+        {
+            phase2 = false;
+            freshPhase = false;
+            nextMove = Move.Grab;
+            secondGrab = false;
+            if (visual != null) visual.color = Color.white;
+            Enter(Phase.Walk);
+        }
+
         private void Enter(Phase next)
         {
             if (phase == next && next == Phase.Walk) return;
             phase = next;
             elapsed = 0f;
             if (next != Phase.Reach) grabbed = false;
+            if (next == Phase.Rush) rushHit = false;
+            if (next == Phase.Rush)
+            {
+                body.constraints = RigidbodyConstraints2D.FreezeRotation;
+                body.gravityScale = 0f;
+            }
             ShowFrame();
         }
 
         private void ShowFrame()
         {
-            if ((phase == Phase.Reach || phase == Phase.Grab) && reach != null && reach.Length > 0)
+            if ((phase == Phase.Reach || phase == Phase.Grab || phase == Phase.RushWindup || phase == Phase.Rush)
+                && reach != null && reach.Length > 0)
             {
                 float t = phase == Phase.Grab ? 1f : Mathf.Clamp01(elapsed / ReachSeconds);
                 int index = Mathf.Min(reach.Length - 1, Mathf.FloorToInt(t * reach.Length));

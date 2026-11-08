@@ -25,6 +25,12 @@ namespace Gstarr.Player
         private Limb armBack, armFront, foreBack, foreFront, bootBack, bootFront;
         private SpriteRenderer[] parts;
         private float cycle;
+        private float walkCycle;
+        private float walkWeight;
+        private Sprite eyesOpen, eyesClosed;
+        private SpriteRenderer headRenderer;
+        private float blinkTimer = 2.8f;
+        private bool blinking;
 
         private void Awake()
         {
@@ -41,11 +47,11 @@ namespace Gstarr.Player
             const float bodyX = 997f;
             float bodyY = Top(1524f);
             bootBack = LimbAt("BootBack", Folder + "무제320_20261104171405.png", 944f, Top(1632f), order, rig, FootX, FootY, true, -70f / Ppu);
-            bootFront = LimbAt("BootFront", Folder + "무제320_20261104171402.png", 1044f, Top(1590f), order + 1, rig, FootX, FootY);
+            // Both source boots point left. Mirror around each joint so +X faces right; the player root handles left turns.
+            bootFront = LimbAt("BootFront", Folder + "무제320_20261104171402.png", 1044f, Top(1590f), order + 1, rig, FootX, FootY, true);
             hoodie = LimbAt("Hoodie", Folder + "무제320_20261104171445.png", bodyX, bodyY, order + 3, rig, FootX, FootY);
             shorts = LimbAt("Shorts", Folder + "무제320_20261104171437.png", 992f, Top(1500f), order + 4, hoodie.Transform, bodyX, bodyY);
-            bootBack.StickTo(shorts.Transform);
-            bootFront.StickTo(shorts.Transform);
+            // Feet stay in rig space: breathing and hip rotation must not tilt the soles.
             const string armPathL = Folder + "무제320_20261104171429.png";
             const string armPathR = Folder + "무제320_20261104172258.png";
             const float armPivotL = 950f;
@@ -60,8 +66,12 @@ namespace Gstarr.Player
             Vector3 headOnBody = new Vector3(0.02f, 1.36f, 0f) - hoodie.Rest;
             neck = Place("Neck", PlayerArt.LoadTrimmed(Folder + "무제320_20261104171859.png", new Vector2(0.5f, 0.08f), 0.34f),
                 neckOnBody, order + 7, hoodie.Transform);
-            head = Place("Head", PlayerArt.LoadTrimmed(Folder + "화면 캡처 2026-11-06 005004.png", new Vector2(0.5f, 0f), 0.5f),
-                headOnBody, order + 8, hoodie.Transform);
+            eyesOpen = PlayerArt.LoadTrimmed(Folder + "무제320_20261104171457.png", new Vector2(0.5f, 0f), 0.5f);
+            eyesClosed = PlayerArt.LoadTrimmed(Folder + "무제320_20261104171502.png", new Vector2(0.5f, 0f), 0.5f);
+            head = Place("Head", eyesOpen, headOnBody, order + 8, hoodie.Transform);
+            headRenderer = head.Transform.GetComponent<SpriteRenderer>();
+            // The supplied face looks left; the controller's positive facing is right.
+            headRenderer.flipX = true;
 
             var hand = new GameObject("Hand").transform;
             hand.SetParent(foreFront.Transform, false);
@@ -77,15 +87,20 @@ namespace Gstarr.Player
             bool grounded = player.IsGrounded;
             bool dashing = player.IsDashing;
             float speed = Mathf.Abs(player.Velocity.x);
-            float rate = dashing ? 10f : grounded && speed > 0.4f ? Mathf.Lerp(5.2f, 8.2f, speed / 8f) : 2.2f;
-            cycle += dt * rate;
+            cycle += dt * 2.2f;
             float wave = Mathf.Sin(cycle);
-            float step = Mathf.Cos(cycle);
+            float targetWalk = grounded && !dashing ? Mathf.Clamp01(speed / 2f) : 0f;
+            walkWeight = Mathf.MoveTowards(walkWeight, targetWalk, dt * 10f);
+            // Advance in local travel direction, including the braking frames of a turn.
+            if (grounded && !dashing)
+                walkCycle = Mathf.Repeat(walkCycle + dt * player.Velocity.x * player.FacingDirection * 2.8f, Mathf.PI * 2f);
 
             if (dashing) PoseDash(wave);
             else if (!grounded) PoseAir(wave);
-            else if (speed > 0.4f) PoseWalk(wave, step, speed);
+            else if (walkWeight > 0f) PoseWalk(Mathf.Sin(walkCycle) * walkWeight, speed);
             else PoseIdle(wave);
+
+            TickBlink(dt);
 
             float attack = AttackAngle();
             if (Mathf.Abs(attack) > 1f)
@@ -110,7 +125,7 @@ namespace Gstarr.Player
             Plant(0f);
         }
 
-        private void PoseWalk(float wave, float step, float speed)
+        private void PoseWalk(float wave, float speed)
         {
             float pace = Mathf.Clamp01(speed / 8f);
             float left = Step(wave);
@@ -124,10 +139,10 @@ namespace Gstarr.Player
             armFront.Pose(-swing * 24f - wave * 4f);
             foreBack.Pose(swing * 10f - 6f);
             foreFront.Pose(-swing * 10f - 6f);
-            float reach = Mathf.Lerp(0.035f, 0.055f, pace);
-            float hop = Mathf.Lerp(0.028f, 0.042f, pace);
-            StepFoot(bootBack, cycle, reach, hop);
-            StepFoot(bootFront, cycle + Mathf.PI, reach, hop);
+            float reach = Mathf.Lerp(0.045f, 0.09f, pace) * walkWeight;
+            float hop = Mathf.Lerp(0.025f, 0.055f, pace) * walkWeight;
+            StepFoot(bootBack, walkCycle, reach, hop);
+            StepFoot(bootFront, walkCycle + Mathf.PI, reach, hop);
             Plant(0f);
         }
 
@@ -186,6 +201,21 @@ namespace Gstarr.Player
             return angle;
         }
 
+        private void TickBlink(float dt)
+        {
+            if (eyesOpen == null || eyesClosed == null) return;
+            if (motion != null && motion.IsDying)
+            {
+                headRenderer.sprite = eyesClosed;
+                return;
+            }
+            blinkTimer -= dt;
+            if (blinkTimer > 0f) return;
+            blinking = !blinking;
+            headRenderer.sprite = blinking ? eyesClosed : eyesOpen;
+            blinkTimer = blinking ? 0.12f : Random.Range(2.5f, 4.5f);
+        }
+
         private void ApplyFade()
         {
             if (parts == null) return;
@@ -198,7 +228,7 @@ namespace Gstarr.Player
                 color.r = color.g = color.b = 1f;
                 color.a = alpha;
                 parts[i].color = color;
-                if (!show) parts[i].enabled = false;
+                parts[i].enabled = show;
             }
         }
 
@@ -253,12 +283,6 @@ namespace Gstarr.Player
             {
                 Transform = transform;
                 Rest = rest = transform.localPosition;
-            }
-
-            public void StickTo(Transform parent)
-            {
-                Transform.SetParent(parent, true);
-                Rest = rest = Transform.localPosition;
             }
 
             public void Pose(float degrees, float x = 0f, float y = 0f, float scaleX = 1f, float scaleY = 1f)

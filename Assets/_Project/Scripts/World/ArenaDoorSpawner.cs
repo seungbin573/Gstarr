@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using Gstarr.Combat;
 using Gstarr.Game;
+using Gstarr.Player;
 using Gstarr.Rhythm;
+using Gstarr.UI;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -20,6 +22,12 @@ namespace Gstarr.World
     public class ArenaDoorSpawner : MonoBehaviour
     {
         public const int DefaultHeightTiles = 3;
+
+        /// <summary>
+        /// 분야별 안내가 끝난 다음의 첫 전투.
+        /// 테스트 몬스터는 이 방에 한 마리만 둔다.
+        /// </summary>
+        public const int FirstCombatRoom = 1;
 
         [SerializeField] Sprite doorSprite;
         [SerializeField] Sprite frameSprite;
@@ -124,6 +132,10 @@ namespace Gstarr.World
 
         private Collider2D playerBody;
         private CameraSystem.CameraFollow2D cameraFollow;
+        private bool corridorSettled;
+        private float corridorEnter;
+        private float corridorExit;
+        private bool corridorGateReady;
 
         private void Awake()
         {
@@ -237,6 +249,7 @@ namespace Gstarr.World
             }
 
             ConfigureBosses();
+            HangLessons();
 
             for (int i = 0; i < cells.Count; i++)
             {
@@ -267,7 +280,7 @@ namespace Gstarr.World
             int next = room.Index + 1;
             bool more = next < rooms.Count;
             if (more) OpenRoom(next);
-            StageHUD.AnnounceRoomClear(more);
+            if (room.HadFight) StageHUD.AnnounceRoomClear(more);
         }
 
         private void CollectPlacedEnemies()
@@ -300,17 +313,19 @@ namespace Gstarr.World
             if (room.IsOpened) return;
             room.MarkOpened();
 
+            if (IsCorridorIndex(index)) return;
+
             bool bossRoom = index == rooms.Count - 1 && rooms.Count >= 2;
             if (bossRoom)
             {
-                SpawnInto(room, EnemyKind.Boss, 0.55f, 0f, false);
+                SpawnFeatured(room, EnemyKind.Angel, 0.55f, 32);
                 return;
             }
 
             const float midBossX = 245f;
             if (room.FrameMin < midBossX && room.FrameMax > midBossX)
             {
-                SpawnInto(room, EnemyKind.Boss, 0.5f, 0f, true);
+                SpawnFeatured(room, EnemyKind.Shadowman, 0.5f, 22);
                 return;
             }
 
@@ -328,30 +343,53 @@ namespace Gstarr.World
                 SpawnInto(room, plan[i], along[Mathf.Min(i, along.Length - 1)], 0f);
         }
 
-        /// <summary>앞에서부터 한 종류씩 만나고, 뒤에서는 둘까지. 보스 방은 여기 쓰지 않는다.</summary>
+        /// <summary>앞은 토끼, 이어서 방해·추적·원거리를 한 종류씩 보여 주고, 뒤는 토끼와 섞는다. 보스 방은 여기 쓰지 않는다.</summary>
         private static EnemyKind[] RoomPlan(int index)
         {
+            if (index < FirstCombatRoom) return new EnemyKind[0];
+
             EnemyKind[][] plans =
             {
                 new[] { EnemyKind.Bunny },
-                new[] { EnemyKind.Angel },
+                new[] { EnemyKind.Bunny, EnemyKind.Bunny },
                 new[] { EnemyKind.AnnoyingKid },
-                new[] { EnemyKind.Bunny, EnemyKind.Angel },
+                new[] { EnemyKind.Bunny, EnemyKind.DistortedBunny },
                 new[] { EnemyKind.Bunny, EnemyKind.AnnoyingKid },
                 new[] { EnemyKind.TwinBunny },
-                new[] { EnemyKind.DistortedBunny, EnemyKind.Bunny },
-                new[] { EnemyKind.BlackShadowKid, EnemyKind.Angel },
+                new[] { EnemyKind.AnnoyingKid, EnemyKind.DistortedBunny },
+                new[] { EnemyKind.BlackShadowKid },
+                new[] { EnemyKind.DistortedBunny, EnemyKind.AnnoyingKid },
+                new[] { EnemyKind.BlackShadowThrow },
+                new[] { EnemyKind.Bunny, EnemyKind.AnnoyingKid },
+                new[] { EnemyKind.TwinBunny, EnemyKind.Bunny },
                 new[] { EnemyKind.AnnoyingKid, EnemyKind.TwinBunny },
-                new[] { EnemyKind.BlackShadowThrow, EnemyKind.Bunny },
-                new[] { EnemyKind.DistortedBunny, EnemyKind.Angel },
-                new[] { EnemyKind.Shadowman },
-                new[] { EnemyKind.BlackShadowThrow, EnemyKind.Angel },
-                new[] { EnemyKind.Shadowman, EnemyKind.Bunny },
-                new[] { EnemyKind.BlackShadowKid, EnemyKind.AnnoyingKid },
-                new[] { EnemyKind.Shadowman, EnemyKind.Angel },
-                new[] { EnemyKind.TwinBunny, EnemyKind.DistortedBunny },
+                new[] { EnemyKind.DistortedBunny, EnemyKind.Bunny },
+                new[] { EnemyKind.BlackShadowThrow, EnemyKind.TwinBunny },
+                new[] { EnemyKind.AnnoyingKid, EnemyKind.DistortedBunny },
+                new[] { EnemyKind.AnnoyingKid, EnemyKind.BlackShadowThrow },
             };
-            return plans[Mathf.Clamp(index, 0, plans.Length - 1)];
+            return plans[Mathf.Clamp(index - FirstCombatRoom, 0, plans.Length - 1)];
+        }
+
+        private static readonly RoomPoster.Part[] Lessons =
+        {
+            RoomPoster.Part.Move,
+            RoomPoster.Part.Dpad,
+            RoomPoster.Part.Buttons,
+        };
+
+        private void HangLessons()
+        {
+            if (rooms.Count == 0) return;
+            var room = rooms[0];
+            float[] tilt = { -2.4f, 2f, -1.8f };
+            for (int i = 0; i < Lessons.Length; i++)
+            {
+                float along = Mathf.Lerp(0.22f, 0.78f, i / (Lessons.Length - 1f));
+                float x = Mathf.Lerp(room.FrameMin, room.FrameMax, along);
+                float floor = SurfaceAt(x, room.FrameY);
+                RoomPoster.Hang(transform, new Vector2(x, floor + 2.6f), tilt[i], Lessons[i]);
+            }
         }
 
         private bool HasBossFurtherRight(float x)
@@ -388,6 +426,21 @@ namespace Gstarr.World
             }
 
             return fallback;
+        }
+
+        private void SpawnFeatured(ArenaRoom room, EnemyKind kind, float along, int health)
+        {
+            float x = Mathf.Lerp(room.FrameMin + 1.2f, room.FrameMax - 1.2f, along);
+            float floor = SurfaceAt(x, room.FrameY);
+            var position = new Vector3(x, floor + 0.08f, 0f);
+            var actor = EnemyActor.Spawn(null, position, kind, health);
+            room.NoteBoss(position);
+            var plate = actor.gameObject.AddComponent<BossMark>();
+            plate.DisplayName = kind == EnemyKind.Angel ? "석상" : "섀도우맨";
+            if (kind == EnemyKind.Angel) actor.GetComponent<Angel>()?.BecomeBoss();
+            else actor.GetComponent<ShadowMan>()?.BecomeBoss();
+            BossHealthHud.Ensure();
+            actor.WaitForPlayerMove();
         }
 
         private void SpawnInto(ArenaRoom room, EnemyKind kind, float along, float lift, bool midBoss = false)
@@ -521,8 +574,173 @@ namespace Gstarr.World
 
             for (int i = 0; i < rooms.Count; i++)
                 rooms[i].Tick(playerBody);
+            TryStartCorridor();
             AssignLeashes();
             UpdateCameraFrame(playerBody.bounds);
+        }
+
+        /// <summary>
+        /// 뒤틀린 통로(배경 5·6·7)는 전투 대신 추격전이다.
+        /// 카메라 원점이 없으면 Stage_1 문 위치(284~452)로 잡는다.
+        /// 출구는 그 구간을 넘어가는 첫 방의 문이다. 최종 보스 방은 넘기지 않는다.
+        /// </summary>
+        private bool CorridorSpan(out float enter, out float exit)
+        {
+            const float fallbackEnter = 284f;
+            const float fallbackExit = 452f;
+            var background = FindAnyObjectByType<CameraSystem.ParallaxBackground>();
+            if (background == null || !background.TrySegmentSpan(5, 7, out enter, out exit))
+            {
+                enter = fallbackEnter;
+                exit = fallbackExit;
+            }
+
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                var room = rooms[i];
+                bool boss = i == rooms.Count - 1 && rooms.Count >= 2;
+                bool startsAfter = room.FrameMin >= exit - 1f;
+                bool straddles = room.FrameMax > exit && room.FrameMin < exit;
+                if ((boss && room.FrameMin < exit) || startsAfter || straddles)
+                {
+                    if (room.FrameMin > enter + 4f)
+                    {
+                        exit = room.FrameMin;
+                        break;
+                    }
+                }
+            }
+
+            return exit > enter + 8f;
+        }
+
+        /// <summary>통로 문(약 284)부터 다음 구역 문 앞까지. 마지막 보스 방은 넣지 않는다.</summary>
+        private bool IsCorridorIndex(int index)
+        {
+            if (index < 0 || index >= rooms.Count) return false;
+            if (index == rooms.Count - 1 && rooms.Count >= 2) return false;
+            if (!CorridorSpan(out _, out float exit)) return false;
+            var room = rooms[index];
+            return room.FrameMin >= 280f && room.FrameMax <= exit + 0.45f && room.FrameMin < exit - 0.35f;
+        }
+
+        private bool TryCorridorGate(out float door, out float exit)
+        {
+            door = float.PositiveInfinity;
+            exit = 0f;
+            if (!CorridorSpan(out _, out exit)) return false;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                if (!IsCorridorIndex(i)) continue;
+                if (rooms[i].FrameMin < door) door = rooms[i].FrameMin;
+            }
+            return door < exit - 4f;
+        }
+
+        private void TryStartCorridor()
+        {
+            if (corridorSettled || CorridorChase.IsActive || playerBody == null) return;
+            if (GamePause.BlocksGameplay) return;
+            if (!TryCorridorGate(out float door, out float exit)) return;
+            var health = playerBody.GetComponent<Health>();
+            if (health != null && health.Current <= 0) return;
+            float x = playerBody.bounds.center.x;
+            if (x >= exit - 0.2f)
+            {
+                corridorSettled = true;
+                return;
+            }
+            if (x < door + 0.05f) return;
+            var player = playerBody.GetComponent<PlayerController>();
+            if (player == null) return;
+            corridorEnter = door;
+            corridorExit = exit;
+            corridorGateReady = true;
+            ClearCorridor(door, exit);
+            CorridorChase.Begin(player);
+        }
+
+        private void ClearCorridor(float door, float exit)
+        {
+            var enemies = Object.FindObjectsByType<EnemyActor>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            for (int i = 0; i < enemies.Length; i++)
+            {
+                var enemy = enemies[i];
+                if (enemy == null || enemy.IsBoss) continue;
+                float x = enemy.transform.position.x;
+                if (x < door - 0.6f || x > exit - 0.15f) continue;
+                enemy.gameObject.SetActive(false);
+                Destroy(enemy.gameObject);
+            }
+
+            for (int i = 0; i < rooms.Count; i++)
+                if (IsCorridorIndex(i)) rooms[i].ForceClear();
+        }
+
+        public static void ArriveAfterCorridor()
+        {
+            if (active == null) return;
+            active.corridorSettled = true;
+            active.ArriveFromCorridor();
+        }
+
+        private void ArriveFromCorridor()
+        {
+            if (!corridorGateReady && CorridorSpan(out float enter, out float exit))
+            {
+                corridorEnter = enter;
+                corridorExit = exit;
+            }
+
+            int next = -1;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                if (IsCorridorIndex(i))
+                {
+                    rooms[i].ForceClear();
+                    continue;
+                }
+                if (next < 0 && rooms[i].FrameMin >= corridorExit - 0.75f)
+                    next = i;
+            }
+
+            if (next < 0 || next >= rooms.Count) return;
+            var destination = rooms[next];
+            float standX = destination.FrameMin + 1.7f;
+            float floor = SurfaceAt(standX, destination.FrameY);
+
+            var player = playerBody != null ? playerBody.GetComponent<PlayerController>() : null;
+            if (player == null)
+            {
+                var tagged = GameObject.FindGameObjectWithTag("Player");
+                if (tagged != null) player = tagged.GetComponent<PlayerController>();
+            }
+            if (player != null)
+            {
+                var col = player.GetComponent<Collider2D>();
+                float foot = col != null ? col.bounds.min.y - player.transform.position.y : -0.9f;
+                var stand = new Vector3(standX, floor - foot + 0.05f, 0f);
+                player.transform.position = stand;
+                var body = player.GetComponent<Rigidbody2D>();
+                if (body != null)
+                {
+                    body.position = stand;
+                    body.linearVelocity = Vector2.zero;
+                }
+                if (cameraFollow == null && Camera.main != null)
+                    cameraFollow = Camera.main.GetComponent<CameraSystem.CameraFollow2D>();
+                cameraFollow?.SetFrame(destination.FrameMin, destination.FrameMax, destination.FrameY + 2.6f);
+                var cam = Camera.main;
+                if (cam != null)
+                {
+                    var focus = new Vector3(stand.x, stand.y + 1.5f, cam.transform.position.z);
+                    if (cameraFollow != null) cameraFollow.SnapTo(focus);
+                    else cam.transform.position = focus;
+                }
+            }
+
+            OpenRoom(next);
+            FindAnyObjectByType<CameraSystem.ParallaxBackground>()?.CatchUp();
         }
 
         private void AssignLeashes()
@@ -673,12 +891,24 @@ namespace Gstarr.World
             locked = false;
         }
 
+        /// <summary>통로 방은 싸움 없이 연다. 이미 잠갔으면 문도 다시 연다.</summary>
+        public void ForceClear()
+        {
+            cleared = true;
+            opened = true;
+            locked = false;
+            occupants.Clear();
+            left.Unlock();
+            right?.Unlock();
+        }
+
         public void NoteBoss(Vector3 point)
         {
             HostsBoss = true;
             BossPoint = point;
         }
 
+        public bool HadFight { get; private set; }
         public bool Contains(float x) => x >= innerMin && x <= innerMax;
         public bool HasBoss => anchored.Count > 0 || HostsBoss;
         public float FrameMin => innerMin;
@@ -770,9 +1000,11 @@ namespace Gstarr.World
             if (occupants.Count == 0)
             {
                 cleared = true;
+                onCleared?.Invoke(this);
                 return;
             }
 
+            HadFight = true;
             locked = true;
             KeepInside(player, force: true);
             Physics2D.SyncTransforms();

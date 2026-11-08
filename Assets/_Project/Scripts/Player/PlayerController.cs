@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Gstarr.Combat;
 using Gstarr.Game;
 
 namespace Gstarr.Player
@@ -70,6 +72,8 @@ namespace Gstarr.Player
         private float dashCooldownTimer;
         private int airDashesLeft;
         private Vector2 dashDirection;
+        private bool phasing;
+        private readonly List<Collider2D> phased = new List<Collider2D>();
 
         public bool IsGrounded { get; private set; }
         public bool IsDashing => dashTimer > 0f;
@@ -77,6 +81,24 @@ namespace Gstarr.Player
         public Vector2 Velocity => rb.linearVelocity;
         public bool HasMoveInput => moveInput.sqrMagnitude > stickDeadZone * stickDeadZone;
         public bool IsStunned => stunTimer > 0f;
+        /// <summary>추격전처럼 조작을 잠시 거두는 구간. 박자 판정은 그대로 둔다.</summary>
+        public bool IsScripted { get; private set; }
+        public Vector2 MoveValue => moveAction != null ? moveAction.ReadValue<Vector2>() : Vector2.zero;
+        public bool DashPressedThisFrame => dashAction != null && dashAction.WasPressedThisFrame();
+
+        public void SetScripted(bool value)
+        {
+            if (IsScripted == value) return;
+            IsScripted = value;
+            moveInput = Vector2.zero;
+            dashRequested = false;
+            jumpBufferTimer = 0f;
+            jumpCutRequested = false;
+            if (value && dashTimer > 0f) EndDash(false);
+            if (rb == null) return;
+            rb.linearVelocity = Vector2.zero;
+            rb.gravityScale = value ? 0f : gravityScale;
+        }
 
         private float stunTimer;
         private Transform grabAnchor;
@@ -84,6 +106,7 @@ namespace Gstarr.Player
 
         public void Stun(float seconds)
         {
+            if (dashTimer > 0f) EndDash(false);
             stunTimer = Mathf.Max(stunTimer, seconds);
             moveInput = Vector2.zero;
             dashTimer = 0f;
@@ -214,6 +237,16 @@ namespace Gstarr.Player
             if (!GamePause.BlocksGameplay && transform.position.y < -8f && health != null)
                 health.TakeDamage(health.Current, Vector2.up);
 
+            if (IsScripted)
+            {
+                moveInput = Vector2.zero;
+                jumpBufferTimer = 0f;
+                jumpCutRequested = false;
+                dashRequested = false;
+                if (rb != null) rb.linearVelocity = Vector2.zero;
+                return;
+            }
+
             if (GamePause.BlocksGameplay || IsStunned)
             {
                 moveInput = Vector2.zero;
@@ -259,6 +292,12 @@ namespace Gstarr.Player
         {
             var motion = GetComponent<SpriteMotion>();
             bool dead = motion != null && motion.IsDying;
+            if (IsScripted)
+            {
+                rb.linearVelocity = Vector2.zero;
+                return;
+            }
+
             if (GamePause.BlocksGameplay || IsStunned || (dead && motion.DeathPresented))
             {
                 if (IsStunned && grabAnchor != null)
@@ -309,7 +348,7 @@ namespace Gstarr.Player
                 dashTimer -= dt;
                 rb.linearVelocity = dashDirection * dashSpeed;
                 if (dashTimer <= 0f)
-                    EndDash();
+                    EndDash(true);
                 return;
             }
 
@@ -415,20 +454,114 @@ namespace Gstarr.Player
             dashTimer = dashDuration;
             dashCooldownTimer = dashDuration + dashCooldown;
             rb.gravityScale = 0f;
+            PhaseThroughEnemies();
+            GetComponent<Health>()?.GrantInvulnerability(dashDuration + 0.05f);
             GameAudio.Play(GameAudio.Id.Dash);
             isJumping = false;
             jumpBufferTimer = 0f;
         }
 
-        private void EndDash()
+        private void EndDash(bool punish)
         {
             dashTimer = 0f;
             rb.gravityScale = gravityScale;
+            var health = GetComponent<Health>();
+            health?.ClearInvulnerability();
+            if (punish && BuriedInEnemy(rb.position))
+            {
+                health?.TakeDamage(1, -dashDirection);
+                StepToOpenGround();
+            }
+            RestoreCollisions();
 
             Vector2 v = rb.linearVelocity;
             v.x = Mathf.Clamp(v.x, -moveSpeed, moveSpeed);
             if (v.y > 0f) v.y *= 0.5f;
             rb.linearVelocity = v;
+        }
+
+        private void PhaseThroughEnemies()
+        {
+            RestoreCollisions();
+            var mine = GetComponent<Collider2D>();
+            if (mine == null) return;
+            var enemies = Object.FindObjectsByType<EnemyActor>(FindObjectsSortMode.None);
+            for (int i = 0; i < enemies.Length; i++)
+            {
+                if (enemies[i] == null) continue;
+                var cols = enemies[i].GetComponents<Collider2D>();
+                for (int c = 0; c < cols.Length; c++)
+                {
+                    if (cols[c] == null) continue;
+                    Physics2D.IgnoreCollision(mine, cols[c], true);
+                    phased.Add(cols[c]);
+                }
+            }
+            phasing = phased.Count > 0;
+        }
+
+        private void RestoreCollisions()
+        {
+            if (!phasing && phased.Count == 0) return;
+            var mine = GetComponent<Collider2D>();
+            for (int i = 0; i < phased.Count; i++)
+                if (mine != null && phased[i] != null)
+                    Physics2D.IgnoreCollision(mine, phased[i], false);
+            phased.Clear();
+            phasing = false;
+        }
+
+        private bool BuriedInEnemy(Vector2 bodyPosition)
+        {
+            var box = GetComponent<BoxCollider2D>();
+            if (box == null) return false;
+            Vector2 center = bodyPosition + box.offset;
+            var hits = Physics2D.OverlapBoxAll(center, box.size * 0.85f, 0f);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                if (hits[i] == null || hits[i].transform == transform) continue;
+                if (hits[i].GetComponentInParent<EnemyActor>() != null) return true;
+            }
+            return false;
+        }
+
+        private void StepToOpenGround()
+        {
+            var box = GetComponent<BoxCollider2D>();
+            if (box == null) return;
+            Vector2 back = dashDirection.sqrMagnitude > 0.01f ? -((Vector2)dashDirection).normalized : new Vector2(-FacingDirection, 0f);
+            Vector2 side = new Vector2(-back.y, back.x);
+            Vector2[] dirs = { back, side, -side, (back + side).normalized, (back - side).normalized, -back };
+            for (int ring = 1; ring <= 8; ring++)
+            {
+                float dist = ring * 0.4f;
+                for (int d = 0; d < dirs.Length; d++)
+                {
+                    Vector2 spot = rb.position + dirs[d] * dist;
+                    if (!SpotIsOpen(spot, box)) continue;
+                    rb.position = spot;
+                    transform.position = new Vector3(spot.x, spot.y, transform.position.z);
+                    return;
+                }
+            }
+        }
+
+        private bool SpotIsOpen(Vector2 bodyPosition, BoxCollider2D box)
+        {
+            Vector2 center = bodyPosition + box.offset;
+            Vector2 size = box.size * 0.85f;
+            float feet = center.y - size.y * 0.5f;
+            var hits = Physics2D.OverlapBoxAll(center, size, 0f);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var hit = hits[i];
+                if (hit == null || hit.transform == transform || hit.transform.IsChildOf(transform)) continue;
+                if (hit.isTrigger) continue;
+                if (hit.GetComponentInParent<EnemyActor>() != null) return false;
+                if (hit.bounds.max.y <= feet + 0.22f) continue;
+                return false;
+            }
+            return true;
         }
 
         /// <summary>십자키는 아이템 선택 전용. 스틱이나 방향키로만 움직인다.</summary>

@@ -208,6 +208,8 @@ namespace Gstarr.Game
             float facing = transform.localScale.x >= 0f ? 1f : -1f;
             float poseX = kick * facing + lean;
             float poseY = Bob() - drop;
+            // Squash the player's puppet around its feet rather than the root center.
+            if (player != null && !dying) poseY += -0.75f * (1f - squashY);
             visual.transform.localPosition = new Vector3(fitOffset.x + poseX, fitOffset.y + poseY, 0f);
             NudgeGear(poseX, poseY);
         }
@@ -328,10 +330,8 @@ namespace Gstarr.Game
 
         private float Bob()
         {
-            if (boss || dying || body == null) return 0f;
-            bool moving = player != null
-                ? player.IsGrounded && Mathf.Abs(player.Velocity.x) > 0.6f && !player.IsDashing
-                : body.linearVelocity.sqrMagnitude > 0.4f;
+            if (player != null || boss || dying || body == null) return 0f;
+            bool moving = body.linearVelocity.sqrMagnitude > 0.4f;
             if (!moving) return 0f;
             return Mathf.Sin(Time.time * 16f) * 0.05f;
         }

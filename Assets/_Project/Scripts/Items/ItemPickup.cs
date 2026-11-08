@@ -17,6 +17,7 @@ namespace Gstarr.Items
         public static ItemPickup Spawn(ItemData item, int count, Vector3 position, int sortingOrder = 4)
         {
             var go = new GameObject($"Pickup ({item.name})");
+            go.layer = LayerMask.NameToLayer("Ignore Raycast");
             go.transform.position = position;
 
             var sr = go.AddComponent<SpriteRenderer>();
@@ -43,6 +44,7 @@ namespace Gstarr.Items
 
         private void Start()
         {
+            gameObject.layer = LayerMask.NameToLayer("Ignore Raycast");
             startPos = transform.position;
             if (item != null && TryGetComponent(out SpriteRenderer sr))
             {

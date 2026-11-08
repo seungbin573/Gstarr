@@ -338,8 +338,8 @@ namespace Gstarr.Game
             wakeOwnsCountdown = false;
             coverUntilWake = false;
             cutsceneActive = false;
+            routeHintShown = true;
             GamePause.SetPaused(false);
-            ShowHint("공중에서 점프를 한 번 더 누르면 더블 점프! 공격과 아이템은 박자에 맞춰 쓰세요.", 4f);
         }
 
         private void OnBackgroundAdvanced(int index, Sprite image)
@@ -582,6 +582,9 @@ namespace Gstarr.Game
         {
             if (resultShown) return;
             resultShown = true;
+            Combat.GloryKillDirector.Dismiss();
+            Combat.FoeEffects.Dismiss();
+            World.SignDetail.Dismiss();
             resultCleared = cleared;
             lastArcadeInput = Time.realtimeSinceStartup;
             var combo = ComboSystem.Instance;

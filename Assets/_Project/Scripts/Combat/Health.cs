@@ -25,6 +25,13 @@ namespace Gstarr.Combat
         public float InvulnOnHit { get; set; }
         public bool IsInvulnerable => invulnTimer > 0f;
 
+        public void ClearInvulnerability()
+        {
+            if (invulnTimer <= 0f) return;
+            invulnTimer = 0f;
+            SetBlinkVisible(true);
+        }
+
         public void GrantInvulnerability(float seconds)
         {
             invulnTimer = Mathf.Max(invulnTimer, Mathf.Max(0f, seconds));

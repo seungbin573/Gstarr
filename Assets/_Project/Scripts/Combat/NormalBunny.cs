@@ -53,7 +53,7 @@ namespace Gstarr.Combat
             distorted = actor.Kind == EnemyKind.DistortedBunny;
             dashSpeed = twin ? TwinDashSpeed : distorted ? DistortedDashSpeed : NormalDashSpeed;
             dashDuration = twin ? TwinDashSeconds : DashSeconds;
-            dashDamage = distorted ? 2 : 1;
+            dashDamage = 1;
             var art = twin ? EnemyKind.TwinBunny : distorted ? EnemyKind.DistortedBunny : EnemyKind.Bunny;
             idle = CharacterArt.Idle(art);
             windupLead = CharacterArt.WindupLead(art);

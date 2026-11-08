@@ -269,7 +269,7 @@ namespace Gstarr.Combat
         {
             if (Gstarr.Game.GamePause.BlocksGameplay) return;
             var controller = GetComponent<PlayerController>();
-            if (controller != null && controller.IsStunned) return;
+            if (controller != null && (controller.IsStunned || controller.IsScripted)) return;
             float dt = Time.deltaTime;
             cooldownTimer -= dt;
             if (damageBonusTimer > 0f && (damageBonusTimer -= dt) <= 0f)
@@ -418,6 +418,8 @@ namespace Gstarr.Combat
                 if (heldItemRenderer != null) heldItemRenderer.enabled = false;
             }
         }
+
+        public bool AttackPressedThisFrame => attackAction != null && attackAction.WasPressedThisFrame();
 
         private void TryAttack()
         {
