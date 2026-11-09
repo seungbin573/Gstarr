@@ -95,7 +95,10 @@ namespace Gstarr.Items
             nextEffect?.Enable();
         }
 
-        private void OnDisable()
+        private void OnDisable() => SuppressInput();
+
+        /// <summary>결과 화면이 십자키와 확인을 가져가도록 아이템 입력을 끈다.</summary>
+        public void SuppressInput()
         {
             useAction?.Disable();
             prevCombat?.Disable();

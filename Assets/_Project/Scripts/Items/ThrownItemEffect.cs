@@ -23,7 +23,8 @@ namespace Gstarr.Items
         private BeatJudgement judgement;
 
         public static bool Throw(GameObject user, Sprite icon, Color tint, Sprite effectSprite, float radius,
-            int damage, float range, float speed, float arcHeight, LayerMask hitMask, float stunDuration)
+            int damage, float range, float speed, float arcHeight, LayerMask hitMask, float stunDuration,
+            float visualScale = 1f)
         {
             if (user == null) return false;
 
@@ -40,6 +41,7 @@ namespace Gstarr.Items
             renderer.sprite = icon;
             renderer.color = tint;
             renderer.sortingOrder = 12;
+            go.transform.localScale = Vector3.one * Mathf.Clamp(visualScale, 0.2f, 3f);
 
             var thrown = go.AddComponent<ThrownItemEffect>();
             thrown.target = enemy != null ? enemy.transform : null;

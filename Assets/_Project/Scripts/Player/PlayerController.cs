@@ -215,6 +215,12 @@ namespace Gstarr.Player
 
         private void OnDisable()
         {
+            SuppressInput();
+        }
+
+        /// <summary>결과 화면이 패드 확인을 가져가도록 플레이 입력을 끈다.</summary>
+        public void SuppressInput()
+        {
             moveAction?.Disable();
             jumpAction?.Disable();
             dashAction?.Disable();

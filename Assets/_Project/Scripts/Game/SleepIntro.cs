@@ -518,16 +518,22 @@ namespace Gstarr.Game
                 || keyboard.zKey.wasPressedThisFrame)) return true;
             var mouse = Mouse.current;
             if (mouse != null && mouse.leftButton.wasPressedThisFrame) return true;
-            var pad = Gamepad.current;
-            return pad != null && (pad.buttonEast.wasPressedThisFrame || pad.buttonSouth.wasPressedThisFrame);
+            var pads = Gamepad.all;
+            for (int i = 0; i < pads.Count; i++)
+                if (pads[i] != null && (pads[i].buttonEast.wasPressedThisFrame || pads[i].buttonSouth.wasPressedThisFrame))
+                    return true;
+            return false;
         }
 
         private static bool SkipPressed()
         {
             var keyboard = Keyboard.current;
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) return true;
-            var pad = Gamepad.current;
-            return pad != null && pad.startButton.wasPressedThisFrame;
+            var pads = Gamepad.all;
+            for (int i = 0; i < pads.Count; i++)
+                if (pads[i] != null && pads[i].startButton.wasPressedThisFrame)
+                    return true;
+            return false;
         }
 
         // ───────────────────────── 화면 만들기 ─────────────────────────

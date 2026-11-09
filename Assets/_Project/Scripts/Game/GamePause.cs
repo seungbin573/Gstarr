@@ -46,6 +46,9 @@ namespace Gstarr.Game
             ApplyTimeScale();
         }
 
+        /// <summary>설명 창을 여는 순간, 달리던 속도를 끊는다.</summary>
+        public static void HaltMotion() => StopGameplayActors();
+
         public static void SetCountdown(bool countdown)
         {
             IsCountdown = countdown;

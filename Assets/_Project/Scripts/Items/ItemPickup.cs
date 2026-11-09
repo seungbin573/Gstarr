@@ -24,6 +24,7 @@ namespace Gstarr.Items
             sr.sprite = item.Icon;
             sr.color = item.IconTint;
             sr.sortingOrder = sortingOrder;
+            go.transform.localScale = Vector3.one * item.IconScale;
 
             var circle = go.AddComponent<CircleCollider2D>();
             circle.isTrigger = true;
@@ -75,6 +76,7 @@ namespace Gstarr.Items
             if (inventory == null) return;
 
             int left = inventory.Add(item, count);
+            if (left < count) Gstarr.World.CombatLesson.OnItemCollected();
             if (left <= 0) Destroy(gameObject);
             else count = left;
         }

@@ -70,7 +70,11 @@ namespace Gstarr.Combat
                 if (col.GetComponentInParent<ItemPickup>() != null) continue;
                 onHit?.Invoke(col);
                 var target = col.GetComponentInParent<Health>();
-                if (damage > 0 && target != null && target.TakeDamage(damage, velocity))
+                bool fromEnemy = owner != null && owner.GetComponentInParent<EnemyActor>() != null;
+                bool landed = damage > 0 && target != null && (fromEnemy
+                    ? target.TakeEnemyHit(damage, velocity)
+                    : target.TakeDamage(damage, velocity));
+                if (landed)
                     ComboSystem.RegisterHit(col.gameObject, judgement);
                 Destroy(gameObject);
                 return;

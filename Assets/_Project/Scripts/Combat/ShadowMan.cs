@@ -104,7 +104,7 @@ namespace Gstarr.Combat
                     if (!rushHit && InReach(player))
                     {
                         rushHit = true;
-                        player.GetComponent<Health>()?.TakeDamage(2, new Vector2(direction, 0.4f));
+                        player.GetComponent<Health>()?.TakeEnemyHit(2, new Vector2(direction, 0.4f));
                     }
                     if (elapsed >= 0.3f || !actor.RoomAhead(direction)) Enter(Phase.Recover);
                     break;
@@ -211,7 +211,7 @@ namespace Gstarr.Combat
             grabbed = true;
             var control = player.GetComponent<PlayerController>();
             control?.GrabbedBy(transform, new Vector3(direction * 1.85f, 1.55f, 0f), GrabSeconds);
-            player.GetComponent<Health>()?.TakeDamage(GrabDamage, new Vector2(direction, 0.25f));
+            player.GetComponent<Health>()?.TakeEnemyHit(GrabDamage, new Vector2(direction, 0.25f));
         }
 
         public void BeginPhaseTwo()

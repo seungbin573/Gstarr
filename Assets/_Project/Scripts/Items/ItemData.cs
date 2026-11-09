@@ -6,7 +6,7 @@ namespace Gstarr.Items
     {
         /// <summary>전투 아이템 (십자키 위/아래로 전환)</summary>
         Combat,
-        /// <summary>효과 아이템 (십자키 좌/우로 전환)</summary>
+        /// <summary>회복 아이템 (십자키 좌/우로 전환)</summary>
         Effect
     }
 
@@ -24,10 +24,13 @@ namespace Gstarr.Items
         [SerializeField] private int maxStack = 9;
         [Tooltip("사용하면 개수가 줄어드는지")]
         [SerializeField] private bool consumeOnUse = true;
+        [Tooltip("칸, 줍기, 던지기에 곱하는 크기. 1이면 그림 그대로다.")]
+        [SerializeField] private float iconScale = 1f;
 
         public string DisplayName => displayName;
         public Sprite Icon => icon;
         public Color IconTint => iconTint;
+        public float IconScale => iconScale <= 0f ? 1f : Mathf.Clamp(iconScale, 0.2f, 3f);
         public ItemCategory Category => category;
         public int MaxStack => Mathf.Max(1, maxStack);
         public bool ConsumeOnUse => consumeOnUse;

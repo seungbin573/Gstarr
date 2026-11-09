@@ -46,7 +46,7 @@ namespace Gstarr.Player
 
             const float bodyX = 997f;
             float bodyY = Top(1524f);
-            bootBack = LimbAt("BootBack", Folder + "무제320_20261104171405.png", 944f, Top(1632f), order, rig, FootX, FootY, true, -70f / Ppu);
+            bootBack = LimbAt("BootBack", Folder + "무제320_20261104171405.png", 944f, Top(1632f), order, rig, FootX, FootY, true);
             // Both source boots point left. Mirror around each joint so +X faces right; the player root handles left turns.
             bootFront = LimbAt("BootFront", Folder + "무제320_20261104171402.png", 1044f, Top(1590f), order + 1, rig, FootX, FootY, true);
             hoodie = LimbAt("Hoodie", Folder + "무제320_20261104171445.png", bodyX, bodyY, order + 3, rig, FootX, FootY);

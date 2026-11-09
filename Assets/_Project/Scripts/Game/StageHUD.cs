@@ -297,8 +297,17 @@ namespace Gstarr.Game
 
         private IEnumerator PlayOpeningCutscene()
         {
-            while (conductor != null && conductor.enabled && !conductor.IsReady && !resultShown)
+            float waitedForSong = 0f;
+            while (conductor != null && conductor.enabled && !conductor.IsReady && !resultShown && waitedForSong < 2f)
+            {
+                waitedForSong += Time.unscaledDeltaTime;
                 yield return null;
+            }
+            if (conductor != null && conductor.enabled && !conductor.IsReady)
+            {
+                conductor.enabled = false;
+                GamePause.SetCountdown(false);
+            }
             if (resultShown) yield break;
 
             if (conductor != null && conductor.IsReady) conductor.Pause();
@@ -466,14 +475,22 @@ namespace Gstarr.Game
                 || keyboard.zKey.wasPressedThisFrame)) return true;
             var mouse = Mouse.current;
             if (mouse != null && mouse.leftButton.wasPressedThisFrame) return true;
-            var pad = Gamepad.current;
-            return pad != null && (pad.buttonEast.wasPressedThisFrame || pad.buttonSouth.wasPressedThisFrame);
+            var pads = Gamepad.all;
+            for (int i = 0; i < pads.Count; i++)
+                if (pads[i] != null && (pads[i].buttonEast.wasPressedThisFrame || pads[i].buttonSouth.wasPressedThisFrame))
+                    return true;
+            return false;
         }
 
         private static bool CutsceneSkipPressed()
         {
             var keyboard = Keyboard.current;
-            return keyboard != null && keyboard.escapeKey.wasPressedThisFrame;
+            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) return true;
+            var pads = Gamepad.all;
+            for (int i = 0; i < pads.Count; i++)
+                if (pads[i] != null && pads[i].startButton.wasPressedThisFrame)
+                    return true;
+            return false;
         }
 
         public static void ShowHint(string message, float seconds = 4f)
@@ -617,6 +634,7 @@ namespace Gstarr.Game
 
             UIFactory.EnsureEventSystem();
             if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = false;
+            SuppressGameplayInput();
             if (!cleared && RunCheckpoint.HasSave && conductor != null)
             {
                 conductor.CapturePlayback(out double songTime, out bool heardBoss, out float bossTime);
@@ -722,7 +740,7 @@ namespace Gstarr.Game
             if (resultButtons != null) resultButtons.gameObject.SetActive(true);
             waitingForInitials = false;
             UIFactory.EnsureEventSystem();
-            if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = true;
+            if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = false;
             UIFactory.Select(yesButton);
         }
 
@@ -811,6 +829,8 @@ namespace Gstarr.Game
             }
 
             if (waitingForInitials && !cutsceneActive) UpdateInitialsInput();
+            else if (resultShown && !cutsceneActive && (askingContinue || gameOverFade >= 1f))
+                UpdateResultChoices();
 
             if (conductor.IsReady)
             {
@@ -828,29 +848,39 @@ namespace Gstarr.Game
                 gameOverGroup.alpha = gameOverFade;
             }
 
-            if (askingContinue && UIFactory.Cancel.WasPressedThisFrame())
+            bool cancel = UIFactory.Cancel.WasPressedThisFrame() || PadSouthPressed();
+            if (askingContinue && cancel)
                 DeclineContinue();
-            else if (!cutsceneActive && !waitingForInitials && !askingContinue && gameOverFade >= 1f && UIFactory.Cancel.WasPressedThisFrame())
+            else if (!cutsceneActive && !waitingForInitials && !askingContinue && gameOverFade >= 1f && cancel)
                 HandleMenu();
+        }
+
+        private Vector2 menuStick;
+        private readonly List<Button> resultChoices = new List<Button>();
+
+        private void SuppressGameplayInput()
+        {
+            GameSettings.Actions?.FindActionMap("Player")?.Disable();
+            var bodies = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+            for (int i = 0; i < bodies.Length; i++)
+                if (bodies[i] != null) bodies[i].SuppressInput();
+            var combats = FindObjectsByType<Gstarr.Combat.PlayerCombat>(FindObjectsSortMode.None);
+            for (int i = 0; i < combats.Length; i++)
+                if (combats[i] != null) combats[i].SuppressInput();
+            var bags = FindObjectsByType<Gstarr.Items.PlayerInventory>(FindObjectsSortMode.None);
+            for (int i = 0; i < bags.Length; i++)
+                if (bags[i] != null) bags[i].SuppressInput();
         }
 
         private void UpdateInitialsInput()
         {
             var keyboard = Keyboard.current;
-            var gamepad = Gamepad.current;
             bool left = keyboard != null && keyboard.leftArrowKey.wasPressedThisFrame;
             bool right = keyboard != null && keyboard.rightArrowKey.wasPressedThisFrame;
             bool up = keyboard != null && keyboard.upArrowKey.wasPressedThisFrame;
             bool down = keyboard != null && keyboard.downArrowKey.wasPressedThisFrame;
-            bool confirm = keyboard != null && keyboard.enterKey.wasPressedThisFrame;
-            if (gamepad != null)
-            {
-                left |= gamepad.dpad.left.wasPressedThisFrame;
-                right |= gamepad.dpad.right.wasPressedThisFrame;
-                up |= gamepad.dpad.up.wasPressedThisFrame;
-                down |= gamepad.dpad.down.wasPressedThisFrame;
-                confirm |= gamepad.buttonEast.wasPressedThisFrame;
-            }
+            bool confirm = keyboard != null && (keyboard.enterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame || keyboard.zKey.wasPressedThisFrame);
+            ReadMenuPad(ref left, ref right, ref up, ref down, ref confirm);
 
             if (left) selectedInitial = (selectedInitial + initialIndices.Length - 1) % initialIndices.Length;
             if (right) selectedInitial = (selectedInitial + 1) % initialIndices.Length;
@@ -858,6 +888,79 @@ namespace Gstarr.Game
             if (down) initialIndices[selectedInitial] = (initialIndices[selectedInitial] + InitialCharacters.Length - 1) % InitialCharacters.Length;
             if (left || right || up || down) RefreshInitials();
             if (confirm) CommitInitials();
+        }
+
+        private void UpdateResultChoices()
+        {
+            resultChoices.Clear();
+            ConsiderChoice(continueButton);
+            ConsiderChoice(yesButton);
+            ConsiderChoice(noButton);
+            ConsiderChoice(retryButton);
+            ConsiderChoice(menuButton);
+            if (resultChoices.Count == 0) return;
+
+            int index = 0;
+            var current = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+            for (int i = 0; i < resultChoices.Count; i++)
+                if (resultChoices[i].gameObject == current) { index = i; break; }
+
+            bool left = false, right = false, up = false, down = false, confirm = false;
+            var keyboard = Keyboard.current;
+            if (keyboard != null)
+            {
+                up = keyboard.upArrowKey.wasPressedThisFrame;
+                down = keyboard.downArrowKey.wasPressedThisFrame;
+                confirm = keyboard.enterKey.wasPressedThisFrame || keyboard.spaceKey.wasPressedThisFrame || keyboard.zKey.wasPressedThisFrame;
+            }
+            ReadMenuPad(ref left, ref right, ref up, ref down, ref confirm);
+            if (up) index = Mathf.Max(0, index - 1);
+            if (down) index = Mathf.Min(resultChoices.Count - 1, index + 1);
+            if (EventSystem.current != null && (up || down || current != resultChoices[index].gameObject))
+                UIFactory.Select(resultChoices[index]);
+            if (confirm && !up && !down)
+                resultChoices[index].onClick.Invoke();
+        }
+
+        private void ConsiderChoice(Button button)
+        {
+            if (button != null && button.gameObject.activeInHierarchy && button.interactable)
+                resultChoices.Add(button);
+        }
+
+        private void ReadMenuPad(ref bool left, ref bool right, ref bool up, ref bool down, ref bool confirm)
+        {
+            var pads = Gamepad.all;
+            Vector2 stick = Vector2.zero;
+            for (int i = 0; i < pads.Count; i++)
+            {
+                var pad = pads[i];
+                if (pad == null) continue;
+                left |= pad.dpad.left.wasPressedThisFrame;
+                right |= pad.dpad.right.wasPressedThisFrame;
+                up |= pad.dpad.up.wasPressedThisFrame;
+                down |= pad.dpad.down.wasPressedThisFrame;
+                confirm |= pad.buttonEast.wasPressedThisFrame;
+                var value = pad.leftStick.ReadValue();
+                if (value.sqrMagnitude > stick.sqrMagnitude) stick = value;
+            }
+
+            const float press = 0.65f;
+            const float release = 0.35f;
+            if (menuStick.x > -release && stick.x <= -press) left = true;
+            if (menuStick.x < release && stick.x >= press) right = true;
+            if (menuStick.y < release && stick.y >= press) up = true;
+            if (menuStick.y > -release && stick.y <= -press) down = true;
+            menuStick = stick;
+        }
+
+        private static bool PadSouthPressed()
+        {
+            var pads = Gamepad.all;
+            for (int i = 0; i < pads.Count; i++)
+                if (pads[i] != null && pads[i].buttonSouth.wasPressedThisFrame)
+                    return true;
+            return false;
         }
 
         private void RefreshInitials()
@@ -885,7 +988,7 @@ namespace Gstarr.Game
             if (resultButtons != null) resultButtons.gameObject.SetActive(true);
             ApplyDeathChoices();
             resultText.text += "\nNICKNAME   " + name;
-            if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = true;
+            if (EventSystem.current != null) EventSystem.current.sendNavigationEvents = false;
         }
 
         private void ApplyDeathChoices()

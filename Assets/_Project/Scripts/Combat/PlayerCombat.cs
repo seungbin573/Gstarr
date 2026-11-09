@@ -7,6 +7,7 @@ using Gstarr.Items;
 using Gstarr.Player;
 using Gstarr.Rhythm;
 using Gstarr.UI;
+using Gstarr.World;
 
 namespace Gstarr.Combat
 {
@@ -68,18 +69,18 @@ namespace Gstarr.Combat
             {
                 name = "Cutter", type = WeaponType.Melee, damage = 3, fireInterval = 0.3f,
                 holdOffset = new Vector2(0.1f, -0.28f),
-                meleeSize = new Vector2(2f, 1.5f), meleeReach = 1f
+                meleeSize = new Vector2(1.15f, 0.85f), meleeReach = 0.72f
             },
             new Weapon
             {
                 name = "Pistol", type = WeaponType.Ranged, damage = 1, fireInterval = 0.18f,
-                holdOffset = new Vector2(0.12f, -0.26f), muzzleOffset = new Vector2(0.72f, 0.04f),
+                holdOffset = new Vector2(0.12f, -0.26f), muzzleOffset = new Vector2(0.5f, 0.02f),
                 projectileSpeed = 14f, range = 9f, pellets = 1
             },
             new Weapon
             {
                 name = "Slingshot", type = WeaponType.Shotgun, damage = 1, fireInterval = 0.7f,
-                holdOffset = new Vector2(0.08f, -0.3f), muzzleOffset = new Vector2(0.32f, 0.42f),
+                holdOffset = new Vector2(0.08f, -0.3f), muzzleOffset = new Vector2(0.26f, 0.24f),
                 projectileSpeed = 20f, range = 7f, pellets = 3, spreadAngle = 30f, recoil = 4.8f
             }
         };
@@ -111,6 +112,7 @@ namespace Gstarr.Combat
 
         private Transform weaponPivot;
         private SpriteRenderer weaponRenderer;
+        private int weaponBaseOrder;
         private SpriteRenderer heldItemRenderer;
 
         private int currentIndex;
@@ -119,6 +121,7 @@ namespace Gstarr.Combat
         private float recoilKick;
         private float liftTimer;
         private float itemAnimTimer;
+        private float heldItemScale = 1f;
         private float aimAngle;
         private int damageBonus;
         private float damageBonusTimer;
@@ -192,19 +195,21 @@ namespace Gstarr.Combat
             if (weapons == null || weapons.Length < 3) return;
 
             weapons[0].name = "Cutter";
-            weapons[0].sprite = PlayerArt.LoadTrimmed(folder + "무제320_20261104173934.png", new Vector2(0.84f, 0.14f), 1.05f);
+            weapons[0].sprite = PlayerArt.LoadTrimmed(folder + "무제320_20261104173934.png", new Vector2(0.84f, 0.14f), 0.62f);
             weapons[0].holdOffset = new Vector2(0.04f, -0.02f);
             weapons[0].restAngle = -105f;
+            weapons[0].meleeSize = new Vector2(1.15f, 0.85f);
+            weapons[0].meleeReach = 0.72f;
 
             weapons[1].name = "Pistol";
-            weapons[1].sprite = PlayerArt.LoadTrimmed(folder + "무제320_20261104173759.png", new Vector2(0.22f, 0.42f), 1.15f);
+            weapons[1].sprite = PlayerArt.LoadTrimmed(folder + "무제320_20261104173759.png", new Vector2(0.22f, 0.42f), 0.48f);
             weapons[1].holdOffset = new Vector2(0.06f, 0.02f);
-            weapons[1].muzzleOffset = new Vector2(0.72f, 0.04f);
+            weapons[1].muzzleOffset = new Vector2(0.5f, 0.02f);
 
             weapons[2].name = "Slingshot";
-            weapons[2].sprite = PlayerArt.LoadTrimmed(folder + "무제320_20261104173326.png", new Vector2(0.48f, 0.08f), 0.78f);
+            weapons[2].sprite = PlayerArt.LoadTrimmed(folder + "무제320_20261104173326.png", new Vector2(0.48f, 0.08f), 0.42f);
             weapons[2].holdOffset = new Vector2(0.02f, 0f);
-            weapons[2].muzzleOffset = new Vector2(0.32f, 0.42f);
+            weapons[2].muzzleOffset = new Vector2(0.26f, 0.24f);
         }
 
         private void CreateWeaponVisual()
@@ -217,20 +222,17 @@ namespace Gstarr.Combat
             weaponRenderer = spriteGo.AddComponent<SpriteRenderer>();
 
             var playerRenderer = GetComponent<SpriteRenderer>();
+            weaponBaseOrder = playerRenderer != null ? playerRenderer.sortingOrder : weaponSortingOrder;
             if (playerRenderer != null)
-            {
                 weaponRenderer.sortingLayerID = playerRenderer.sortingLayerID;
-                weaponRenderer.sortingOrder = playerRenderer.sortingOrder + 8;
-            }
-            else
-            {
-                weaponRenderer.sortingOrder = weaponSortingOrder;
-            }
+            weaponRenderer.sortingOrder = weaponBaseOrder + 8;
 
             var heldGo = new GameObject("HeldItem");
             heldGo.transform.SetParent(transform, false);
             heldItemRenderer = heldGo.AddComponent<SpriteRenderer>();
-            heldItemRenderer.sortingOrder = weaponRenderer.sortingOrder;
+            int bodyOrder = playerRenderer != null ? playerRenderer.sortingOrder : 5;
+            heldItemRenderer.sortingLayerID = weaponRenderer.sortingLayerID;
+            heldItemRenderer.sortingOrder = bodyOrder + 14;
             heldItemRenderer.enabled = false;
         }
 
@@ -245,11 +247,17 @@ namespace Gstarr.Combat
 
         private void OnDisable()
         {
+            SuppressInput();
+            if (TryGetComponent(out PlayerInventory inventory))
+                inventory.ItemUsed -= OnItemUsed;
+        }
+
+        /// <summary>결과 화면이 패드 확인을 가져가도록 공격 입력을 끈다.</summary>
+        public void SuppressInput()
+        {
             attackAction?.Disable();
             prevAction?.Disable();
             nextAction?.Disable();
-            if (TryGetComponent(out PlayerInventory inventory))
-                inventory.ItemUsed -= OnItemUsed;
         }
 
         private void OnDestroy()
@@ -267,6 +275,7 @@ namespace Gstarr.Combat
 
         private void Update()
         {
+            CombatLesson.ConsiderPlayer(transform);
             if (Gstarr.Game.GamePause.BlocksGameplay) return;
             var controller = GetComponent<PlayerController>();
             if (controller != null && (controller.IsStunned || controller.IsScripted)) return;
@@ -311,6 +320,8 @@ namespace Gstarr.Combat
             var w = CurrentWeapon;
             weaponRenderer.sprite = w.sprite;
             weaponRenderer.enabled = w.sprite != null;
+            // 앞팔이 몸 순서 +8. 새총은 그 팔보다 앞에 둔다.
+            weaponRenderer.sortingOrder = weaponBaseOrder + (w.type == WeaponType.Shotgun ? 10 : 8);
             weaponPivot.localPosition = w.holdOffset;
             weaponPivot.localRotation = Quaternion.identity;
         }
@@ -322,6 +333,7 @@ namespace Gstarr.Combat
                 heldItemRenderer.sprite = item.Icon;
                 heldItemRenderer.color = item.IconTint;
                 heldItemRenderer.enabled = false;
+                heldItemScale = item.IconScale;
             }
             itemAnimTimer = HolsterTime + ItemUseTime + DrawTime;
             swingTimer = 0f;
@@ -408,7 +420,7 @@ namespace Gstarr.Combat
             {
                 heldItemRenderer.enabled = showItem && heldItemRenderer.sprite != null;
                 heldItemRenderer.transform.localPosition = w.holdOffset + new Vector2(0.1f, 0.3f + itemLift);
-                heldItemRenderer.transform.localScale = Vector3.one * itemScale;
+                heldItemRenderer.transform.localScale = Vector3.one * (itemScale * heldItemScale);
             }
 
             if (itemAnimTimer <= 0f)
@@ -583,12 +595,12 @@ namespace Gstarr.Combat
                     case WeaponType.Ranged:
                         if (w.projectileSprite == null) w.projectileSprite = LoadArt("Projectiles/Bullet.png");
                         w.holdOffset = new Vector2(0.12f, -0.26f);
-                        w.muzzleOffset = new Vector2(0.72f, 0.04f);
+                        w.muzzleOffset = new Vector2(0.5f, 0.02f);
                         break;
                     case WeaponType.Shotgun:
                         if (w.projectileSprite == null) w.projectileSprite = LoadArt("Projectiles/Pellet.png");
                         w.holdOffset = new Vector2(0.08f, -0.3f);
-                        w.muzzleOffset = new Vector2(0.32f, 0.42f);
+                        w.muzzleOffset = new Vector2(0.26f, 0.24f);
                         break;
                 }
             }

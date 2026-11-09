@@ -341,7 +341,7 @@ namespace Gstarr.Combat
             {
                 if (hit || !StruckFromFront(collision)) return;
                 hit = true;
-                health.TakeDamage(1, new Vector2(direction, 0.35f));
+                health.TakeEnemyHit(1, new Vector2(direction, 0.35f));
                 return;
             }
 

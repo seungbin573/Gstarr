@@ -17,7 +17,7 @@ namespace Gstarr.Items
         public override bool Use(GameObject user)
         {
             return ThrownItemEffect.Throw(user, Icon, IconTint, effectSprite, radius, damage,
-                throwRange, throwSpeed, arcHeight, hitMask, 0f);
+                throwRange, throwSpeed, arcHeight, hitMask, 0f, IconScale);
         }
     }
 }

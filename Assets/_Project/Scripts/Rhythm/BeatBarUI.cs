@@ -31,6 +31,7 @@ namespace Gstarr.Rhythm
         [SerializeField] private Color missColor = new Color(1f, 0.3f, 0.3f);
 
         private RhythmConductor conductor;
+        private Canvas canvas;
         private RectTransform bar;
         private RectTransform hitZone;
         private Image center;
@@ -73,7 +74,7 @@ namespace Gstarr.Rhythm
         {
             var canvasGo = new GameObject("BeatBarCanvas", typeof(Canvas), typeof(CanvasScaler));
             canvasGo.transform.SetParent(transform, false);
-            var canvas = canvasGo.GetComponent<Canvas>();
+            canvas = canvasGo.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 100;
             var scaler = canvasGo.GetComponent<CanvasScaler>();
@@ -169,6 +170,9 @@ namespace Gstarr.Rhythm
 
         private void Update()
         {
+            if (canvas != null)
+                canvas.sortingOrder = Gstarr.Game.GamePause.IsPaused && !conductor.IsPaused ? 250 : 100;
+
             float dt = Time.unscaledDeltaTime;
             float half = barSize.x * 0.5f - 20f;
 

@@ -281,7 +281,7 @@ namespace Gstarr.Combat
             {
                 if (hit || !StruckFromFront(collision)) return;
                 hit = true;
-                health.TakeDamage(dashDamage, new Vector2(direction, 0.35f));
+                health.TakeEnemyHit(dashDamage, new Vector2(direction, 0.35f));
                 return;
             }
             // Ground contact is harmless; a wall ends the dash immediately.

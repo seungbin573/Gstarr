@@ -20,12 +20,13 @@ namespace Gstarr.EditorTools
         public const string InputActionsPath = "Assets/_Project/Input/PlayerControls.inputactions";
         public const string SlotSpritePath = "Assets/arts/UI/Slot.png";
 
-        private const string PotionPath = ItemFolder + "/Potion.asset";
         private const string BombPath = ItemFolder + "/Bomb.asset";
-        private const string DamagePotionPath = ItemFolder + "/DamagePotion.asset";
-        private const string InvulnerabilityPotionPath = ItemFolder + "/InvulnerabilityPotion.asset";
         private const string FlashbangPath = ItemFolder + "/Flashbang.asset";
+        private const string PillPath = ItemFolder + "/Pill.asset";
+        private const string BearPath = ItemFolder + "/Bear.asset";
+        private const string HeartPath = ItemFolder + "/Heart.asset";
         private const string GameAssetsPath = "Assets/Resources/Gstarr/GameAssets.asset";
+        private static bool retiredItemsRemoved;
 
         [InitializeOnLoadMethod]
         private static void EnsureItemGridOnEditorLoad()
@@ -33,7 +34,7 @@ namespace Gstarr.EditorTools
             EditorApplication.delayCall += () =>
             {
                 EnsureDefaultItems();
-                if (PaletteNeedsRebuild()) BuildItemTiles();
+                if (retiredItemsRemoved || PaletteNeedsRebuild()) BuildItemTiles();
             };
         }
 
@@ -124,19 +125,29 @@ namespace Gstarr.EditorTools
         {
             TilesetImporter.EnsureFolder(ItemFolder);
 
-            CreateItemIfMissing<HealItem>(PotionPath, "Potion", "Assets/arts/Items/Potion.png", ItemCategory.Effect, null);
-            CreateItemIfMissing<AreaDamageItem>(BombPath, "Bomb", "Assets/arts/Items/Bomb.png", ItemCategory.Combat,
+            DeleteIfExists(ItemFolder + "/Potion.asset");
+            DeleteIfExists(ItemFolder + "/DamagePotion.asset");
+            DeleteIfExists(ItemFolder + "/InvulnerabilityPotion.asset");
+            DeleteIfExists(ItemTileFolder + "/PotionTile.asset");
+            DeleteIfExists(ItemTileFolder + "/DamagePotionTile.asset");
+            DeleteIfExists(ItemTileFolder + "/InvulnerabilityPotionTile.asset");
+
+            CreateItemIfMissing<AreaDamageItem>(BombPath, "폭발", "Assets/arts/Items/Bomb.png", ItemCategory.Combat,
                 so => so.FindProperty("effectSprite").objectReferenceValue =
                     AssetDatabase.LoadAssetAtPath<Sprite>("Assets/arts/Effects/Explosion.png"));
-            CreateItemIfMissing<FlashbangItem>(FlashbangPath, "Flashbang", "Assets/arts/Items/Bomb.png", ItemCategory.Combat,
+            CreateItemIfMissing<FlashbangItem>(FlashbangPath, "기절", "Assets/arts/Items/Bomb.png", ItemCategory.Combat,
                 so => so.FindProperty("iconTint").colorValue = new Color(0.8f, 0.95f, 1f));
-            CreateItemIfMissing<DamageBoostItem>(DamagePotionPath, "Strength Potion", "Assets/arts/Items/Potion.png", ItemCategory.Effect,
-                so => so.FindProperty("iconTint").colorValue = new Color(1f, 0.55f, 0.45f));
-            CreateItemIfMissing<InvulnerabilityPotionItem>(InvulnerabilityPotionPath, "Invulnerability Potion", "Assets/arts/Items/Potion.png", ItemCategory.Effect,
-                so => so.FindProperty("iconTint").colorValue = new Color(0.5f, 0.85f, 1f));
-            AssignDedicatedIcon(DamagePotionPath, "Assets/arts/Items/DamagePotion.png");
-            AssignDedicatedIcon(InvulnerabilityPotionPath, "Assets/arts/Items/InvulnerabilityPotion.png");
             AssignDedicatedIcon(FlashbangPath, "Assets/arts/Items/Flashbang.png");
+            CreateItemIfMissing<HealItem>(PillPath, "회복", "Assets/arts/Items/pill.png", ItemCategory.Effect,
+                so => so.FindProperty("healAmount").intValue = 2);
+            CreateItemIfMissing<DamageBoostItem>(BearPath, "공격력", "Assets/arts/Items/bear.png", ItemCategory.Effect,
+                so =>
+                {
+                    so.FindProperty("damageBonus").intValue = 2;
+                    so.FindProperty("duration").floatValue = 8f;
+                });
+            CreateItemIfMissing<HeartItem>(HeartPath, "무적", "Assets/arts/Items/heart.png", ItemCategory.Effect,
+                so => so.FindProperty("duration").floatValue = 5f);
 
             var gameAssets = AssetDatabase.LoadAssetAtPath<GameAssets>(GameAssetsPath);
             if (gameAssets != null)
@@ -145,9 +156,9 @@ namespace Gstarr.EditorTools
                 {
                     AssetDatabase.LoadAssetAtPath<ItemData>(BombPath),
                     AssetDatabase.LoadAssetAtPath<ItemData>(FlashbangPath),
-                    AssetDatabase.LoadAssetAtPath<ItemData>(PotionPath),
-                    AssetDatabase.LoadAssetAtPath<ItemData>(DamagePotionPath),
-                    AssetDatabase.LoadAssetAtPath<ItemData>(InvulnerabilityPotionPath)
+                    AssetDatabase.LoadAssetAtPath<ItemData>(PillPath),
+                    AssetDatabase.LoadAssetAtPath<ItemData>(BearPath),
+                    AssetDatabase.LoadAssetAtPath<ItemData>(HeartPath)
                 };
                 if (gameAssets.defaultItems == null || !gameAssets.defaultItems.SequenceEqual(defaults))
                 {
@@ -167,6 +178,13 @@ namespace Gstarr.EditorTools
                 .Select(g => AssetDatabase.LoadAssetAtPath<ItemData>(AssetDatabase.GUIDToAssetPath(g)))
                 .Where(i => i != null)
                 .Any(i => AssetDatabase.LoadAssetAtPath<ItemTile>($"{ItemTileFolder}/{i.name}Tile.asset") == null);
+        }
+
+        private static void DeleteIfExists(string path)
+        {
+            if (AssetDatabase.LoadAssetAtPath<Object>(path) == null) return;
+            AssetDatabase.DeleteAsset(path);
+            retiredItemsRemoved = true;
         }
 
         private static void CreateItemIfMissing<T>(string path, string displayName, string iconPath, ItemCategory category,

@@ -84,7 +84,7 @@ namespace Gstarr.Combat
             var player = actor.PlayerTarget;
             var health = collision.collider.GetComponentInParent<Health>();
             if (player == null || health == null || health != player.GetComponent<Health>()) return;
-            if (health.TakeDamage(1, player.position - transform.position)) contactClock = 0.8f;
+            if (health.TakeEnemyHit(1, player.position - transform.position)) contactClock = 0.8f;
         }
     }
 
@@ -133,7 +133,7 @@ namespace Gstarr.Combat
                     var player = actor.PlayerTarget;
                     var collider = player != null ? player.GetComponent<Collider2D>() : null;
                     if (collider != null && visual.bounds.Intersects(collider.bounds))
-                        player.GetComponent<Health>()?.TakeDamage(1, Vector2.up);
+                        player.GetComponent<Health>()?.TakeEnemyHit(1, Vector2.up);
                 }
             }
             if (elapsed >= 1.05f) Destroy(gameObject);

@@ -95,6 +95,18 @@ namespace Gstarr.World
             return stop;
         }
 
+        /// <summary>같은 방 안에 둘 다 있는지. 문 사이 간격은 어느 방도 아니다.</summary>
+        public static bool SameRoom(float a, float b)
+        {
+            if (active == null) return false;
+            for (int i = 0; i < active.rooms.Count; i++)
+            {
+                var room = active.rooms[i];
+                if (room.Contains(a) && room.Contains(b)) return true;
+            }
+            return false;
+        }
+
         /// <summary>두 위치 사이에 문 칸이 있으면 원거리 적이 서로를 보면 안 된다.</summary>
         public static bool SeparatedByDoor(float a, float b)
         {
@@ -249,7 +261,6 @@ namespace Gstarr.World
             }
 
             ConfigureBosses();
-            HangLessons();
 
             for (int i = 0; i < cells.Count; i++)
             {
@@ -332,7 +343,8 @@ namespace Gstarr.World
             var plan = RoomPlan(index);
             if (plan.Length == 1)
             {
-                SpawnInto(room, plan[0], 0.62f, 0f);
+                var actor = SpawnInto(room, plan[0], 0.62f, 0f);
+                if (index == FirstCombatRoom) actor.AllowGloryKill();
                 return;
             }
 
@@ -340,7 +352,10 @@ namespace Gstarr.World
                 ? new[] { 0.32f, 0.74f }
                 : new[] { 0.22f, 0.5f, 0.78f };
             for (int i = 0; i < plan.Length; i++)
-                SpawnInto(room, plan[i], along[Mathf.Min(i, along.Length - 1)], 0f);
+            {
+                var actor = SpawnInto(room, plan[i], along[Mathf.Min(i, along.Length - 1)], 0f);
+                if (index == FirstCombatRoom && i == 0) actor.AllowGloryKill();
+            }
         }
 
         /// <summary>앞은 토끼, 이어서 방해·추적·원거리를 한 종류씩 보여 주고, 뒤는 토끼와 섞는다. 보스 방은 여기 쓰지 않는다.</summary>
@@ -369,27 +384,6 @@ namespace Gstarr.World
                 new[] { EnemyKind.AnnoyingKid, EnemyKind.BlackShadowThrow },
             };
             return plans[Mathf.Clamp(index - FirstCombatRoom, 0, plans.Length - 1)];
-        }
-
-        private static readonly RoomPoster.Part[] Lessons =
-        {
-            RoomPoster.Part.Move,
-            RoomPoster.Part.Dpad,
-            RoomPoster.Part.Buttons,
-        };
-
-        private void HangLessons()
-        {
-            if (rooms.Count == 0) return;
-            var room = rooms[0];
-            float[] tilt = { -2.4f, 2f, -1.8f };
-            for (int i = 0; i < Lessons.Length; i++)
-            {
-                float along = Mathf.Lerp(0.22f, 0.78f, i / (Lessons.Length - 1f));
-                float x = Mathf.Lerp(room.FrameMin, room.FrameMax, along);
-                float floor = SurfaceAt(x, room.FrameY);
-                RoomPoster.Hang(transform, new Vector2(x, floor + 2.6f), tilt[i], Lessons[i]);
-            }
         }
 
         private bool HasBossFurtherRight(float x)
@@ -438,12 +432,16 @@ namespace Gstarr.World
             var plate = actor.gameObject.AddComponent<BossMark>();
             plate.DisplayName = kind == EnemyKind.Angel ? "석상" : "섀도우맨";
             if (kind == EnemyKind.Angel) actor.GetComponent<Angel>()?.BecomeBoss();
-            else actor.GetComponent<ShadowMan>()?.BecomeBoss();
+            else
+            {
+                actor.GetComponent<ShadowMan>()?.BecomeBoss();
+                FoeEffects.ShadowmanArrives();
+            }
             BossHealthHud.Ensure();
             actor.WaitForPlayerMove();
         }
 
-        private void SpawnInto(ArenaRoom room, EnemyKind kind, float along, float lift, bool midBoss = false)
+        private EnemyActor SpawnInto(ArenaRoom room, EnemyKind kind, float along, float lift, bool midBoss = false)
         {
             if (kind == EnemyKind.BlackShadowKid || kind == EnemyKind.BlackShadowThrow || kind == EnemyKind.AnnoyingKid)
                 lift = Mathf.Max(lift, 2.8f);
@@ -461,6 +459,7 @@ namespace Gstarr.World
                 actor.GetComponent<BossActor>()?.SetMidBoss(midBoss);
             }
             actor.WaitForPlayerMove();
+            return actor;
         }
 
         private static void ResumePlayer(Vector3 stand)

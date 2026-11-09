@@ -914,7 +914,7 @@ namespace Gstarr.Combat
         {
             if (player == null) return;
             if (direction.sqrMagnitude < 0.001f) direction = new Vector2(attackFacing, 0.4f);
-            player.GetComponent<Health>()?.TakeDamage(2, direction);
+            player.GetComponent<Health>()?.TakeEnemyHit(2, direction);
         }
 
         private void FindPlayer()

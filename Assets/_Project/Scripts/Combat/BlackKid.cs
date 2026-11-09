@@ -162,7 +162,7 @@ namespace Gstarr.Combat
             if (target == null || health == null || health != target.GetComponent<Health>()) return;
             Vector2 push = (Vector2)target.position - (Vector2)transform.position;
             if (push.sqrMagnitude < 0.01f) push = dash.sqrMagnitude > 0.01f ? dash : Vector2.right;
-            health.TakeDamage(1, push.normalized);
+            health.TakeEnemyHit(1, push.normalized);
         }
     }
 }

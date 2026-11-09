@@ -356,6 +356,9 @@ namespace Gstarr.Combat
         /// <summary>체력이 바닥까지 떨어져도 비틀리지 않고 바로 죽는다.</summary>
         public void SkipGloryKill() => gloryKill = false;
 
+        /// <summary>스타일 랭크와 상관없이, 체력이 깎이면 글로리 킬로 넘긴다.</summary>
+        public void AllowGloryKill() => gloryKill = true;
+
         public void ClampRoom() => ClampLeash();
 
         public void FaceToward(float dx)
@@ -598,6 +601,21 @@ namespace Gstarr.Combat
             return count;
         }
 
+        public static bool AnyoneNear(Vector3 point, float range, float height, bool sameRoom = false)
+        {
+            float rangeSqr = range * range;
+            for (int i = 0; i < All.Count; i++)
+            {
+                var enemy = All[i];
+                if (enemy == null || enemy.IsDead) continue;
+                if (sameRoom && ArenaDoorSpawner.SeparatedByDoor(enemy.transform.position.x, point.x)) continue;
+                Vector2 delta = enemy.transform.position - point;
+                if (Mathf.Abs(delta.y) <= height && delta.sqrMagnitude <= rangeSqr)
+                    return true;
+            }
+            return false;
+        }
+
         public bool CatchGlory(ref int nextHealth)
         {
             if (health == null || (state != State.Combat && state != State.Stunned)) return false;
@@ -636,6 +654,7 @@ namespace Gstarr.Combat
             staggerTimer = staggerSeconds;
             if (sprite != null) sprite.color = staggerColor;
             HoldInPlace();
+            CombatLesson.OnGloryActivated();
         }
 
         public void Stun(float seconds)
@@ -1606,7 +1625,7 @@ namespace Gstarr.Combat
             if (Mathf.Abs(player.position.x - moleSurfacePosition.x) > 1.15f) return;
             if (Mathf.Abs(player.position.y - moleSurfacePosition.y) > 1.4f) return;
             Gstarr.Game.GameAudio.Play(Gstarr.Game.GameAudio.Id.EnemySwing, 0.8f);
-            player.GetComponentInParent<Health>()?.TakeDamage(attackDamage, new Vector2(Mathf.Sign(player.position.x - moleSurfacePosition.x), 0.8f));
+            player.GetComponentInParent<Health>()?.TakeEnemyHit(attackDamage, new Vector2(Mathf.Sign(player.position.x - moleSurfacePosition.x), 0.8f));
         }
 
         private void AttackMelee(float verticalReach = 1.6f, bool keepMoving = false)
@@ -1625,7 +1644,7 @@ namespace Gstarr.Combat
             {
                 var target = hits[i].GetComponentInParent<Gstarr.Player.PlayerController>();
                 if (target == null) continue;
-                target.GetComponent<Health>()?.TakeDamage(attackDamage, new Vector2(Facing(), 0.4f));
+                target.GetComponent<Health>()?.TakeEnemyHit(attackDamage, new Vector2(Facing(), 0.4f));
                 break;
             }
         }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -25,6 +26,7 @@ namespace Gstarr.EditorTools
         public const string StageScenePrefix = "Stage_";
 
         private static bool queued;
+        private static bool waitingToSync;
 
         static StageAutoGenerator()
         {
@@ -45,7 +47,13 @@ namespace Gstarr.EditorTools
             EditorApplication.delayCall += () =>
             {
                 queued = false;
-                if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling) return;
+                if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
+                {
+                    if (waitingToSync) return;
+                    waitingToSync = true;
+                    EditorApplication.update += SyncWhenEditorIdle;
+                    return;
+                }
                 SyncStages();
                 EnsureMainMenuScene();
                 SyncBuildSettings();
@@ -69,9 +77,9 @@ namespace Gstarr.EditorTools
             foreach (var folder in AssetDatabase.GetSubFolders(MusicRoot))
             {
                 string folderName = Path.GetFileName(folder);
-                var clip = AssetDatabase.FindAssets("t:AudioClip", new[] { folder })
-                    .Select(g => AssetDatabase.LoadAssetAtPath<AudioClip>(AssetDatabase.GUIDToAssetPath(g)))
-                    .FirstOrDefault(c => c != null);
+                string path = $"{StagesFolder}/{folderName}.asset";
+                var stage = AssetDatabase.LoadAssetAtPath<StageData>(path);
+                var clip = PickClip(folder, stage);
                 TextAsset beat = null;
                 TextAsset glory = null;
                 foreach (var jsonPath in AssetDatabase.FindAssets("t:TextAsset", new[] { folder })
@@ -85,8 +93,6 @@ namespace Gstarr.EditorTools
                     else if (beat == null) beat = text;
                 }
 
-                string path = $"{StagesFolder}/{folderName}.asset";
-                var stage = AssetDatabase.LoadAssetAtPath<StageData>(path);
                 if (stage == null)
                 {
                     if (clip == null) continue;
@@ -96,8 +102,9 @@ namespace Gstarr.EditorTools
                     AssetDatabase.CreateAsset(stage, path);
                 }
 
-                if (stage.music != clip || stage.beatChart != beat || stage.gloryChart != glory)
+                if (clip != null && (stage.music != clip || stage.beatChart != beat || stage.gloryChart != glory))
                 {
+                    if (stage.music != clip) stage.firstBeatOffset = 0f;
                     stage.music = clip;
                     stage.beatChart = beat;
                     stage.gloryChart = glory;
@@ -142,6 +149,41 @@ namespace Gstarr.EditorTools
             }
 
             AssetDatabase.SaveAssets();
+        }
+
+        private static void SyncWhenEditorIdle()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling) return;
+            EditorApplication.update -= SyncWhenEditorIdle;
+            waitingToSync = false;
+            Queue();
+        }
+
+        /// <summary>폴더에 아직 있는 곡은 유지하고, 지워진 곡은 BPM 이 적힌 가장 최근 파일로 바꾼다.</summary>
+        private static AudioClip PickClip(string folder, StageData stage)
+        {
+            var clips = AssetDatabase.FindAssets("t:AudioClip", new[] { folder })
+                .Select(g => AssetDatabase.LoadAssetAtPath<AudioClip>(AssetDatabase.GUIDToAssetPath(g)))
+                .Where(c => c != null)
+                .ToList();
+            if (clips.Count == 0) return null;
+            if (stage != null && stage.music != null && clips.Contains(stage.music))
+            {
+                string current = AssetDatabase.GetAssetPath(stage.music).Replace('\\', '/');
+                if (current.StartsWith(folder + "/")) return stage.music;
+            }
+
+            AudioClip best = null;
+            var bestTime = DateTime.MinValue;
+            foreach (var clip in clips)
+            {
+                if (!Gstarr.Rhythm.BeatChart.TryParseBpm(clip.name, out _)) continue;
+                var time = File.GetLastWriteTime(AssetDatabase.GetAssetPath(clip));
+                if (best != null && time <= bestTime) continue;
+                best = clip;
+                bestTime = time;
+            }
+            return best != null ? best : clips[0];
         }
 
         public static string FindScenePath(string sceneName)

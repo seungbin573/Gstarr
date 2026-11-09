@@ -1,5 +1,6 @@
 using Gstarr.Combat;
 using Gstarr.Game;
+using Gstarr.World;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -74,7 +75,8 @@ namespace Gstarr.UI
             var player = GameObject.FindGameObjectWithTag("Player");
             if (player == null) return null;
             BossMark best = null;
-            float bestDistance = 26f;
+            float bestDistance = float.MaxValue;
+            float playerX = player.transform.position.x;
             var marks = BossMark.Living;
             for (int i = 0; i < marks.Count; i++)
             {
@@ -82,7 +84,8 @@ namespace Gstarr.UI
                 if (mark == null) continue;
                 var health = mark.GetComponent<Health>();
                 if (health == null || health.Current <= 0) continue;
-                float distance = Mathf.Abs(player.transform.position.x - mark.transform.position.x);
+                if (!ArenaDoorSpawner.SameRoom(playerX, mark.transform.position.x)) continue;
+                float distance = Mathf.Abs(playerX - mark.transform.position.x);
                 if (distance >= bestDistance) continue;
                 bestDistance = distance;
                 best = mark;

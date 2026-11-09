@@ -7,7 +7,7 @@ namespace Gstarr.Game
 {
     /// <summary>
     /// 메뉴 키 (프로콘 + / Esc) 로 여는 일시정지 창: RESUME / SETTINGS / MAIN MENU.
-    /// 음악과 박자 시계도 같이 멈춘다.
+    /// 플레이는 멈추고, 곡과 박자 바는 소리를 낮춘 채 이어진다.
     /// </summary>
     [RequireComponent(typeof(RhythmConductor))]
     public class PauseMenu : MonoBehaviour
@@ -87,7 +87,7 @@ namespace Gstarr.Game
             IsOpen = true;
             openedFrame = Time.frameCount;
             GamePause.SetPaused(true);
-            conductor.Pause();
+            conductor.DuckForStory(true);
             UIFactory.EnsureEventSystem();
             panel.gameObject.SetActive(true);
             listPanel.gameObject.SetActive(true);
@@ -102,7 +102,7 @@ namespace Gstarr.Game
             GameSettings.Save();
             panel.gameObject.SetActive(false);
             GamePause.SetPaused(false);
-            conductor.Resume();
+            conductor.DuckForStory(false);
         }
 
         private void OpenSettings()

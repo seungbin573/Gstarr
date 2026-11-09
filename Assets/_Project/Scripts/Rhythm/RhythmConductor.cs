@@ -92,8 +92,8 @@ namespace Gstarr.Rhythm
         private float storyDuck = 1f;
         private float storyDuckTarget = 1f;
 
-        /// <summary>이야기 중에는 곡을 끄지 않고 소리만 잠시 낮춘다.</summary>
-        public void DuckForStory(bool ducked) => storyDuckTarget = ducked ? 0.22f : 1f;
+        /// <summary>시간이 멈춘 설명·메뉴에서는 곡을 끄지 않고 소리만 낮춘다.</summary>
+        public void DuckForStory(bool ducked) => storyDuckTarget = ducked ? 0.4f : 1f;
 
         /// <summary>보스 방에서는 다른 곡을 내고, 박자 시계는 스테이지 곡을 유지한다.</summary>
         public void SetBossTheme(AudioClip clip, bool enabled)
@@ -269,6 +269,9 @@ namespace Gstarr.Rhythm
         private AudioSource source;
         private double dspStart;
         private double realStart;
+        private double lastClockSample;
+        private bool overlayWasHeld;
+        private int relockFrames;
         private double loopLength;
         private long nextBeat;
         private long nextHalfBeat;
@@ -346,6 +349,9 @@ namespace Gstarr.Rhythm
                 return;
             }
 
+            if (music.loadState == AudioDataLoadState.Unloaded)
+                music.LoadAudioData();
+
             // 파일 이름 끝의 BPM (예: "Song-118") 우선, 없으면 JSON
             if (BeatChart.TryParseBpm(music.name, out float bpm))
                 Chart = BeatChart.FromBpm(bpm, music.length, firstBeatOffset);
@@ -354,6 +360,14 @@ namespace Gstarr.Rhythm
             else
             {
                 Debug.LogWarning($"[RhythmConductor] '{music.name}' 이름 끝에 BPM(예: -118)이 없고 JSON 도 없어 박자 판정을 끕니다.", this);
+                Gstarr.Game.GamePause.SetCountdown(false);
+                enabled = false;
+                return;
+            }
+
+            if (Chart == null || Chart.Beats == null || Chart.Beats.Length == 0)
+            {
+                Debug.LogWarning($"[RhythmConductor] '{music.name}' 박자를 만들지 못해 카운트를 풀고 스테이지로 들어갑니다.", this);
                 Gstarr.Game.GamePause.SetCountdown(false);
                 enabled = false;
                 return;
@@ -399,27 +413,47 @@ namespace Gstarr.Rhythm
             // 커서가 미래로 점프한 채 남아 적들이 한참 동안 박자를 받지 못한다.
             double dspT = AudioSettings.dspTime - dspStart;
             double now = UnityEngine.Time.realtimeSinceStartupAsDouble;
-            double drift = dspT - (now - realStart);
-            if (Math.Abs(drift) > 0.5)
+            double gap = lastClockSample > 0 ? now - lastClockSample : 0;
+            lastClockSample = now;
+            bool held = Gstarr.Game.GamePause.IsPaused;
+            bool leftHold = overlayWasHeld && !held;
+            overlayWasHeld = held;
+            if (leftHold) relockFrames = 12;
+
+            double smooth = now - realStart;
+            bool hardLock = false;
+            if (SongTime >= 0 && (relockFrames > 0 || gap > 0.08))
+                hardLock = TryLockToSchedule(now, smooth, dspT);
+            if (relockFrames > 0) relockFrames--;
+
+            if (!hardLock)
             {
-                realStart = now - dspT;
-                SongTime = dspT;
-                nextBeat = FirstBeatAtOrAfter(SongTime);
-                nextHalfBeat = FirstHalfBeatAtOrAfter(SongTime);
+                double drift = dspT - smooth;
+                if (Math.Abs(drift) > 0.5)
+                {
+                    realStart = now - dspT;
+                    SongTime = dspT;
+                    PlaceBeatCursors();
+                    hardLock = true;
+                }
+                else
+                {
+                    double step = Math.Abs(drift) > 0.2 ? drift * 0.15 : Math.Clamp(drift * 0.08, -0.0015, 0.0015);
+                    realStart -= step;
+                    SongTime = now - realStart;
+                }
             }
-            else
-            {
-                double step = Math.Abs(drift) > 0.2 ? drift * 0.15 : Math.Clamp(drift * 0.08, -0.0015, 0.0015);
-                realStart -= step;
-                SongTime = now - realStart;
-            }
+
             if (!bossThemeOn) UpdateMusicCues();
             if (Gstarr.Game.GamePause.IsCountdown && SongTime >= 0)
                 Gstarr.Game.GamePause.SetCountdown(false);
 
-            DispatchBeats(ref nextBeat, false);
-            if (Chart.HalfBeats != null && Chart.HalfBeats.Length > 0)
-                DispatchBeats(ref nextHalfBeat, true);
+            if (!hardLock)
+            {
+                DispatchBeats(ref nextBeat, false);
+                if (Chart.HalfBeats != null && Chart.HalfBeats.Length > 0)
+                    DispatchBeats(ref nextHalfBeat, true);
+            }
 
             if (!loop && SongTime >= loopLength)
             {
@@ -428,6 +462,23 @@ namespace Gstarr.Rhythm
                 cueSource.Stop();
                 Finished?.Invoke();
             }
+        }
+
+        /// <summary>설명·메뉴를 닫거나 프레임이 밀린 직후, 박자 시계를 재생 중인 곡 스케줄에 다시 붙인다.</summary>
+        private bool TryLockToSchedule(double now, double smooth, double scheduled)
+        {
+            double delta = scheduled - smooth;
+            if (Math.Abs(delta) < 0.04) return false;
+            realStart = now - scheduled;
+            SongTime = scheduled;
+            PlaceBeatCursors();
+            return true;
+        }
+
+        private void PlaceBeatCursors()
+        {
+            nextBeat = FirstBeatAtOrAfter(SongTime + 0.0001);
+            nextHalfBeat = FirstHalfBeatAtOrAfter(SongTime + 0.0001);
         }
 
         /// <summary>한 프레임에 박자를 몰아 쏘지 않는다. 크게 밀리면 놓친 박자는 건너뛴다.</summary>

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using System.Globalization;
 using Gstarr.Game;
 using Gstarr.Rhythm;
 using UnityEngine;
@@ -7,107 +7,7 @@ using UnityEngine.UI;
 
 namespace Gstarr.World
 {
-    /// <summary>
-    /// 표지판 앞에 서면 A 가 뜨고, 누르면 그 파트의 설명과 예시 그림을 연다.
-    /// </summary>
-    [DefaultExecutionOrder(-80)]
-    public sealed class SignBoard : MonoBehaviour
-    {
-        private static readonly List<SignBoard> boards = new List<SignBoard>();
-
-        private RoomPoster.Part part;
-        private Transform prompt;
-        private Transform player;
-        private Vector3 promptRest;
-
-        private void OnEnable() => boards.Add(this);
-
-        private void OnDisable() => boards.Remove(this);
-
-        public void Arm(RoomPoster.Part lesson, float worldHeight)
-        {
-            part = lesson;
-            prompt = BuildPrompt();
-            promptRest = new Vector3(0f, -(worldHeight * 0.5f + 0.42f), 0f);
-            prompt.localPosition = promptRest;
-            prompt.gameObject.SetActive(false);
-            SignDetail.Ensure();
-        }
-
-        private void Update()
-        {
-            if (prompt == null) return;
-            if (SignDetail.IsOpen)
-            {
-                prompt.gameObject.SetActive(false);
-                return;
-            }
-
-            if (player == null)
-            {
-                var tagged = GameObject.FindGameObjectWithTag("Player");
-                if (tagged == null) return;
-                player = tagged.transform;
-            }
-
-            float dx = Mathf.Abs(player.position.x - transform.position.x);
-            float below = transform.position.y - player.position.y;
-            bool near = dx < 1.45f && below > 0.5f && below < 4.4f && !GamePause.BlocksGameplay && IsClosest(dx);
-            prompt.gameObject.SetActive(near);
-            if (!near) return;
-
-            float bob = Mathf.Sin(Time.unscaledTime * 5f) * 0.06f;
-            prompt.localPosition = promptRest + new Vector3(0f, bob, 0f);
-            if (SignDetail.ConfirmPressed()) SignDetail.Open(part);
-        }
-
-        private bool IsClosest(float dx)
-        {
-            for (int i = 0; i < boards.Count; i++)
-            {
-                var other = boards[i];
-                if (other == this) continue;
-                float otherDx = Mathf.Abs(player.position.x - other.transform.position.x);
-                if (otherDx < dx) return false;
-            }
-            return true;
-        }
-
-        private Transform BuildPrompt()
-        {
-            var root = new GameObject("ReadPrompt").transform;
-            root.SetParent(transform, false);
-
-            var button = new GameObject("A");
-            button.transform.SetParent(root, false);
-            button.transform.localPosition = new Vector3(-0.42f, 0f, 0f);
-            var renderer = button.AddComponent<SpriteRenderer>();
-            renderer.sprite = SignDetail.ButtonSprite();
-            renderer.sortingOrder = 6;
-
-            button.transform.localScale = new Vector3(0.72f, 0.72f, 1f);
-
-            var canvasGo = new GameObject("Read", typeof(RectTransform), typeof(Canvas));
-            canvasGo.transform.SetParent(root, false);
-            canvasGo.transform.localPosition = new Vector3(0.38f, 0f, 0f);
-            var canvas = canvasGo.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.WorldSpace;
-            canvas.sortingOrder = 6;
-            var rt = canvasGo.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(72f, 32f);
-            rt.localScale = Vector3.one * 0.02f;
-            var tag = UIFactory.CreateImage("Tag", rt, new Color(0.96f, 0.91f, 0.74f, 1f));
-            UIFactory.Place(tag.rectTransform, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(72f, 32f));
-            var text = UIFactory.CreateText("Label", rt, "읽기", 22, TextAnchor.MiddleCenter, FontStyle.Bold);
-            var outline = text.GetComponent<Outline>();
-            if (outline != null) outline.enabled = false;
-            text.color = new Color(0.1f, 0.07f, 0.05f, 1f);
-            UIFactory.Place(text.rectTransform, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(72f, 32f));
-            return root;
-        }
-    }
-
-    /// <summary>표지판 설명. 왼쪽은 예시 그림, 오른쪽은 그 그림이 말하는 조작.</summary>
+    /// <summary>조작 설명. 왼쪽은 예시 그림, 오른쪽은 그 그림이 말하는 조작. 시간이 멈춘 채로 연다.</summary>
     [DefaultExecutionOrder(-100)]
     public sealed class SignDetail : MonoBehaviour
     {
@@ -121,6 +21,16 @@ namespace Gstarr.World
             Attack,
             Item,
             Weapons,
+            Glory
+        }
+
+        public enum Lesson
+        {
+            Move,
+            Jump,
+            Dash,
+            Items,
+            Combat,
             Glory
         }
 
@@ -146,11 +56,18 @@ namespace Gstarr.World
         private Text prevLabel;
         private Page[] pages;
         private int page;
+        private int bodySize = 26;
         private bool visible;
         private bool waitingRelease;
         private bool releaseSeen;
-        private bool pausedMusic;
+        private bool lesson;
         private int openedFrame;
+        private Texture2D clipTexture;
+        private Sprite[] clipFrames;
+        private float[] clipDelays;
+        private int clipFrame;
+        private float clipTime;
+        private string clipName;
 
         public static bool IsOpen => instance != null && (instance.visible || instance.waitingRelease);
 
@@ -160,7 +77,9 @@ namespace Gstarr.World
             if (instance == null) return;
             instance.visible = false;
             instance.waitingRelease = false;
-            instance.pausedMusic = false;
+            instance.lesson = false;
+            RhythmConductor.Instance?.DuckForStory(false);
+            instance.StopClip();
             if (instance.sheet != null) instance.sheet.SetActive(false);
         }
 
@@ -172,16 +91,19 @@ namespace Gstarr.World
             instance.Build();
         }
 
-        public static void Open(RoomPoster.Part part)
+        /// <summary>처음 만나는 상황에 시간을 멈추고 그 조작만 보여 준다.</summary>
+        public static bool OpenLesson(Lesson lesson)
         {
             Ensure();
-            if (instance.visible || instance.waitingRelease) return;
-            instance.Load(part);
-            instance.sheet.SetActive(true);
-            instance.visible = true;
-            instance.openedFrame = Time.frameCount;
-            instance.PausePlay();
-            GameAudio.Play(GameAudio.Id.Ui, 0.55f);
+            if (instance.visible || instance.waitingRelease) return false;
+            instance.pages = LessonPages(lesson);
+            instance.page = 0;
+            instance.bodySize = 32;
+            instance.lesson = true;
+            instance.Show();
+            instance.Present();
+            GamePause.HaltMotion();
+            return true;
         }
 
         public static bool ConfirmPressed()
@@ -203,6 +125,8 @@ namespace Gstarr.World
 
         private void Update()
         {
+            if (visible) AdvanceClip();
+
             if (waitingRelease)
             {
                 if (Held())
@@ -227,7 +151,7 @@ namespace Gstarr.World
                 else Close();
                 return;
             }
-            if (EscapePressed())
+            if (!lesson && EscapePressed())
             {
                 Close();
                 return;
@@ -235,7 +159,7 @@ namespace Gstarr.World
             if (BackPressed())
             {
                 if (page > 0) Turn(-1);
-                else Close();
+                else if (!lesson) Close();
             }
         }
 
@@ -250,6 +174,7 @@ namespace Gstarr.World
         {
             visible = false;
             sheet.SetActive(false);
+            StopClip();
             waitingRelease = true;
             releaseSeen = false;
             GameAudio.Play(GameAudio.Id.Ui, 0.4f);
@@ -279,20 +204,13 @@ namespace Gstarr.World
 
         private void PausePlay()
         {
-            var conductor = RhythmConductor.Instance;
-            pausedMusic = conductor != null && conductor.IsReady && !conductor.IsPaused && !conductor.IsFinished;
-            if (pausedMusic) conductor.Pause();
+            RhythmConductor.Instance?.DuckForStory(true);
             GamePause.SetPaused(true);
         }
 
         private void ResumePlay()
         {
-            if (pausedMusic)
-            {
-                var conductor = RhythmConductor.Instance;
-                if (conductor != null) conductor.Resume();
-                pausedMusic = false;
-            }
+            RhythmConductor.Instance?.DuckForStory(false);
             GamePause.SetPaused(false);
         }
 
@@ -357,11 +275,13 @@ namespace Gstarr.World
             sheet.SetActive(false);
         }
 
-        private void Load(RoomPoster.Part part)
+        private void Present()
         {
-            pages = Pages(part);
-            page = 0;
-            Show();
+            sheet.SetActive(true);
+            visible = true;
+            openedFrame = Time.frameCount;
+            PausePlay();
+            GameAudio.Play(GameAudio.Id.Ui, 0.55f);
         }
 
         private void Show()
@@ -369,27 +289,48 @@ namespace Gstarr.World
             var leaf = pages[page];
             title.text = leaf.Title;
             body.text = leaf.Body;
+            body.fontSize = bodySize;
             caption.text = leaf.Caption;
-            example.sprite = Picture(leaf.Picture);
+            example.sprite = ExampleSprite(leaf.Picture);
             bool many = pages.Length > 1;
             pageMark.text = many ? (page + 1) + " / " + pages.Length : "";
             prevLabel.text = page > 0 ? "B  이전" : "";
             nextLabel.text = page < pages.Length - 1 ? "다음" : "닫기";
         }
 
-        private static Page[] Pages(RoomPoster.Part part)
+        private static Page[] LessonPages(Lesson lesson)
         {
-            switch (part)
+            switch (lesson)
             {
-                case RoomPoster.Part.Move:
+                case Lesson.Move:
                     return new[]
                     {
-                        Leaf("이동", "왼쪽 스틱을 좌우로 기울이면 그쪽으로 걷는다.", "기울인 쪽으로 걷는다", Pic.Move)
+                        Leaf("이동", "왼쪽 스틱을 좌우로 기울이면 그쪽으로 걷는다.\n키보드는 왼쪽, 오른쪽 방향키.", "기울인 쪽으로 걷는다", Pic.Move)
                     };
-                case RoomPoster.Part.Dpad:
+                case Lesson.Jump:
                     return new[]
                     {
-                        Leaf("십자키", "위·아래는 전투 아이템, 왼쪽·오른쪽은 효과 아이템이다.\n위와 왼쪽이 이전, 아래와 오른쪽이 다음이다.", "위아래 전투, 좌우 효과", Pic.Combat)
+                        Leaf("점프", "B로 뛴다. 키보드는 Z.\n공중에서 한 번 더 뛸 수 있다.", "B 점프", Pic.Jump)
+                    };
+                case Lesson.Dash:
+                    return new[]
+                    {
+                        Leaf("대시", "Y로 대시한다. 키보드는 X.\n스틱이 가리키는 쪽으로 파고든다.\n공중에서는 한 번이다.", "Y 대시", Pic.Dash)
+                    };
+                case Lesson.Items:
+                    return new[]
+                    {
+                        Leaf("아이템 고르기", "위·아래는 전투 아이템, 왼쪽·오른쪽은 회복 아이템이다.\n위와 왼쪽이 이전, 아래와 오른쪽이 다음이다.\n키보드는 전투 R·F, 회복 T·G.\n고른 아이템만 머리 위에 크게 뜬다. 공격은 위아래, 포션은 좌우로 넘어간다.", "위아래 전투, 좌우 회복", Pic.Combat),
+                        Leaf("아이템 사용", "X로 고른 아이템을 쓴다. 키보드는 V.\n쓰는 것도 노트가 링에 닿을 때다.", "링에 닿을 때 X", Pic.Item)
+                    };
+                case Lesson.Glory:
+                    return new[]
+                    {
+                        Leaf(
+                            "글로리 킬",
+                            "적이 노랗게 비틀거린다.\n가까이서 A를 누른다. 키보드는 C.\n노트 네 개가 가운데로 온다.\nX가 위, A가 오른쪽.\nB가 아래, Y가 왼쪽.\n네 번 맞추면 끝난다.\n틀리면 풀리고, 늦으면 그 노트만 다시 온다.",
+                            "가까이서 A, 방향을 맞춘다",
+                            Pic.Glory)
                     };
                 default:
                     string miss = GameSettings.RhythmAssist
@@ -397,8 +338,16 @@ namespace Gstarr.World
                         : "놓치면 공격이 나가지 않는다.";
                     return new[]
                     {
-                        Leaf("버튼", "B는 점프다. 공중에서 한 번 더 누를 수 있다.\nY는 대시다. 스틱 쪽으로 파고들고, 공중에서는 한 번이다.\nA는 공격이다. 노트가 링에 닿을 때 누른다. " + miss + "\nX는 고른 아이템이다. 쓰는 것도 박자다.\nL과 R로 무기를 바꾼다.", "B 점프, Y 대시, A 공격, X 아이템", Pic.Jump),
-                        Leaf("글로리 킬", "체력이 얼마 안 남으면 적이 비틀거린다. 가까이서 A를 누르면 시간이 느려지고, 노트 네 개가 가운데로 온다.\n버튼 자리가 방향이다. X가 위, A가 오른쪽, B가 아래, Y가 왼쪽.\n네 박자를 맞추면 끝난다. 버튼을 틀리면 바로 풀리고, 한 번 늦으면 그 노트만 다시 온다.\n스타일이 B 이상이면, 바로 쓰러지던 적도 한 번 버틴다.", "방향 버튼을 박자에 맞춘다", Pic.Glory)
+                        Leaf(
+                            "공격",
+                            "A로 공격한다. 키보드는 C.\n화면 아래 노트가 링에 닿을 때 누른다.\n" + miss,
+                            "링에 닿을 때 A",
+                            Pic.Attack),
+                        Leaf(
+                            "무기 교체",
+                            "L은 이전 무기, R은 다음 무기다.\n키보드는 Q와 E.\n검, 권총, 새총이 돌아간다.",
+                            "L 이전, R 다음",
+                            Pic.Weapons)
                     };
             }
         }
@@ -406,6 +355,139 @@ namespace Gstarr.World
         private static Page Leaf(string title, string body, string caption, Pic picture)
         {
             return new Page { Title = title, Body = body, Caption = caption, Picture = picture };
+        }
+
+        private void OnDestroy() => StopClip();
+
+        private Sprite ExampleSprite(Pic pic)
+        {
+            string name = ClipFile(pic);
+            if (string.IsNullOrEmpty(name))
+            {
+                StopClip();
+                return Picture(pic);
+            }
+
+            if (clipName == name && clipFrames != null && clipFrames.Length > 0)
+            {
+                clipFrame = 0;
+                clipTime = 0f;
+                return clipFrames[0];
+            }
+
+            if (!LoadClip(name))
+            {
+                StopClip();
+                return Picture(pic);
+            }
+
+            return clipFrames[0];
+        }
+
+        private static string ClipFile(Pic pic)
+        {
+            switch (pic)
+            {
+                case Pic.Move: return "moving";
+                case Pic.Jump: return "jump";
+                case Pic.Dash: return "dash";
+                case Pic.Combat: return "itemChange";
+                case Pic.Item: return "itemUse";
+                case Pic.Glory: return "glorykill";
+                case Pic.Attack: return "weaponAttack";
+                case Pic.Weapons: return "weaponChange";
+                default: return null;
+            }
+        }
+
+        private bool LoadClip(string name)
+        {
+            StopClip();
+            var texture = Resources.Load<Texture2D>("TutorialGifs/" + name);
+            var meta = Resources.Load<TextAsset>("TutorialGifs/" + name + "_frames");
+            if (texture == null || meta == null)
+            {
+                if (texture != null) Resources.UnloadAsset(texture);
+                return false;
+            }
+
+            var lines = meta.text.Split(new[] { '\r', '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
+            var head = lines.Length > 0 ? lines[0].Split(' ') : new string[0];
+            if (lines.Length < 2 || head.Length < 7
+                || !int.TryParse(head[0], out int frames) || !int.TryParse(head[1], out int cols)
+                || !int.TryParse(head[2], out int cellW) || !int.TryParse(head[3], out int cellH)
+                || !int.TryParse(head[4], out int pad) || !int.TryParse(head[5], out int atlasW)
+                || !int.TryParse(head[6], out int atlasH) || frames <= 0 || cols <= 0)
+            {
+                Resources.UnloadAsset(texture);
+                return false;
+            }
+
+            float scaleX = atlasW > 0 ? texture.width / (float)atlasW : 1f;
+            float scaleY = atlasH > 0 ? texture.height / (float)atlasH : 1f;
+            var delays = lines[1].Split(',');
+            clipFrames = new Sprite[frames];
+            clipDelays = new float[frames];
+            int strideX = cellW + pad * 2;
+            int strideY = cellH + pad * 2;
+            for (int i = 0; i < frames; i++)
+            {
+                int col = i % cols;
+                int row = i / cols;
+                float x = (col * strideX + pad) * scaleX;
+                float y = (atlasH - (row + 1) * strideY + pad) * scaleY;
+                var rect = new Rect(x, y, cellW * scaleX, cellH * scaleY);
+                clipFrames[i] = Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+                float ms = 40f;
+                if (i < delays.Length
+                    && float.TryParse(delays[i], NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed)
+                    && parsed > 0f)
+                    ms = parsed;
+                clipDelays[i] = ms / 1000f;
+            }
+
+            clipTexture = texture;
+            clipName = name;
+            clipFrame = 0;
+            clipTime = 0f;
+            return true;
+        }
+
+        private void AdvanceClip()
+        {
+            if (clipFrames == null || clipFrames.Length == 0 || example == null) return;
+            clipTime += Time.unscaledDeltaTime;
+            float wait = clipDelays != null && clipFrame < clipDelays.Length ? clipDelays[clipFrame] : 0.04f;
+            if (clipTime < wait) return;
+            clipTime -= wait;
+            clipFrame = (clipFrame + 1) % clipFrames.Length;
+            if (clipFrames[clipFrame] != null) example.sprite = clipFrames[clipFrame];
+        }
+
+        private void StopClip()
+        {
+            if (clipFrames != null)
+            {
+                for (int i = 0; i < clipFrames.Length; i++)
+                    if (clipFrames[i] != null) Destroy(clipFrames[i]);
+            }
+
+            clipFrames = null;
+            clipDelays = null;
+            clipName = null;
+            clipFrame = 0;
+            clipTime = 0f;
+            if (clipTexture == null) return;
+            var texture = clipTexture;
+            clipTexture = null;
+            if (isActiveAndEnabled) StartCoroutine(ReleaseTexture(texture));
+            else Resources.UnloadAsset(texture);
+        }
+
+        private static System.Collections.IEnumerator ReleaseTexture(Texture2D texture)
+        {
+            yield return new WaitForSecondsRealtime(1.5f);
+            if (texture != null) Resources.UnloadAsset(texture);
         }
 
         private static Sprite Picture(Pic pic)
@@ -419,7 +501,7 @@ namespace Gstarr.World
                 case Pic.Move: plate.SceneMove(); break;
                 case Pic.Combat: plate.SceneDpad(); break;
                 case Pic.Effect: plate.SceneEffect(); break;
-                case Pic.Jump: plate.SceneButtons(); break;
+                case Pic.Jump: plate.SceneJump(); break;
                 case Pic.Dash: plate.SceneDash(); break;
                 case Pic.Attack: plate.SceneAttack(); break;
                 case Pic.Item: plate.SceneItem(); break;

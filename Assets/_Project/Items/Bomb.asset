@@ -12,11 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ef5c3a50415a0c5469e7a7c99758d123, type: 3}
   m_Name: Bomb
   m_EditorClassIdentifier: Assembly-CSharp::Gstarr.Items.AreaDamageItem
-  displayName: Bomb
+  displayName: 폭발
   icon: {fileID: 21300000, guid: 4f87e1bbae013e24cb665cf6a35782fa, type: 3}
   category: 0
   maxStack: 9
   consumeOnUse: 1
+  iconScale: 1
   damage: 3
   radius: 2.5
   hitMask:

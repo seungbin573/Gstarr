@@ -14,7 +14,7 @@ namespace Gstarr.Rhythm
         [Tooltip("C, B, A, S 순서의 랭크 이미지")]
         [SerializeField] private Sprite[] rankSprites = new Sprite[ComboSystem.RankCount];
         [SerializeField] private Vector2 rankImageSize = new Vector2(300f, 246f);
-        // 아이템 리본(오른쪽 위, 아래끝 약 444) 아래에 둔다.
+        // 점수와 랭크는 오른쪽 위에 둔다. 아이템 십자는 플레이어를 따라다닌다.
         [SerializeField] private Vector2 panelPosition = new Vector2(-40f, -120f);
         [SerializeField] private Vector2 gaugeSize = new Vector2(280f, 18f);
 

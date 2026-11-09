@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Gstarr.Game.StageData
   order: 1
   displayName: STAGE 1
-  music: {fileID: 8300000, guid: 2df90ad73acb1474b94670960dd0cb46, type: 3}
+  music: {fileID: 8300000, guid: 7d142a6622fe3a5439f6a3ded826c00f, type: 3}
   musicCues: []
   beatChart: {fileID: 0}
   gloryChart: {fileID: 0}
-  firstBeatOffset: 0.479
+  firstBeatOffset: 0
   sceneName: Stage_1
   bossMusic: {fileID: 8300000, guid: bc52752f6721ad541899d0e09b3c4660, type: 3}

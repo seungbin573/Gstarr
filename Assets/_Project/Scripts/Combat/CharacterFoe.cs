@@ -440,7 +440,7 @@ namespace Gstarr.Combat
             if (player == null) return;
             var hp = player.GetComponent<Health>();
             if (hp == null) return;
-            hp.TakeDamage(damage, new Vector2(PlayerDir(), 0.35f));
+            hp.TakeEnemyHit(damage, new Vector2(PlayerDir(), 0.35f));
         }
 
         private void HoldGround()
@@ -608,11 +608,188 @@ namespace Gstarr.Combat
             return image;
         }
 
+        /// <summary>적의 공격이 플레이어에게 닿으면 가끔. Spam 그림은 화면을 도배한다.</summary>
+        public static void MaybeOnHit()
+        {
+            if (activeScare != null) return;
+            if (UnityEngine.Random.value > 0.42f) return;
+            if (!PickDistraction(out Sprite sprite, out bool spam)) return;
+            ShowGlitch(sprite, spam, 0.9f);
+        }
+
+        /// <summary>중간보스 섀도우맨이 나타날 때 경고를 화면 가득 깐다.</summary>
+        public static void ShadowmanArrives()
+        {
+            var sprite = LoadSprite(System.IO.Path.Combine(EffectFolder, "shadowmanWarning.png"));
+            if (sprite == null) return;
+            ShowGlitch(sprite, true, 1.2f);
+        }
+
         public static void Dismiss()
         {
             if (activeScare == null) return;
             Object.Destroy(activeScare);
             activeScare = null;
+        }
+
+        private const string EffectFolder = "Assets/arts/Effects";
+        private static Clip[] distractions;
+        private static bool distractionsScanned;
+
+        private struct Clip
+        {
+            public Sprite Sprite;
+            public bool Spam;
+        }
+
+        private static bool PickDistraction(out Sprite sprite, out bool spam)
+        {
+            sprite = null;
+            spam = false;
+            EnsureDistractions();
+            if (distractions == null || distractions.Length == 0) return false;
+            var pick = distractions[UnityEngine.Random.Range(0, distractions.Length)];
+            sprite = pick.Sprite;
+            spam = pick.Spam;
+            return sprite != null;
+        }
+
+        private static void EnsureDistractions()
+        {
+            if (distractionsScanned) return;
+            distractionsScanned = true;
+            string dir = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), EffectFolder);
+            if (!System.IO.Directory.Exists(dir))
+            {
+                distractions = new Clip[0];
+                return;
+            }
+
+            var found = new System.Collections.Generic.List<Clip>();
+            foreach (string file in System.IO.Directory.GetFiles(dir, "distract*.png"))
+            {
+                var sprite = LoadSprite(file);
+                if (sprite == null) continue;
+                string name = System.IO.Path.GetFileNameWithoutExtension(file);
+                found.Add(new Clip
+                {
+                    Sprite = sprite,
+                    Spam = name.IndexOf("Spam", System.StringComparison.OrdinalIgnoreCase) >= 0
+                });
+            }
+            distractions = found.ToArray();
+        }
+
+        private static Sprite LoadSprite(string fullPath)
+        {
+            if (!System.IO.File.Exists(fullPath)) return null;
+            byte[] bytes;
+            try { bytes = System.IO.File.ReadAllBytes(fullPath); }
+            catch { return null; }
+
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            if (!texture.LoadImage(bytes, false))
+            {
+                Object.Destroy(texture);
+                return null;
+            }
+
+            texture.filterMode = FilterMode.Bilinear;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.name = System.IO.Path.GetFileNameWithoutExtension(fullPath);
+            return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        private static void ShowGlitch(Sprite sprite, bool spam, float life)
+        {
+            if (sprite == null) return;
+            if (activeScare != null) Object.Destroy(activeScare);
+
+            var canvas = UIFactory.CreateCanvas(null, spam ? "GlitchSpam" : "GlitchPop", 160);
+            activeScare = canvas.gameObject;
+            var root = (RectTransform)canvas.transform;
+            var images = new System.Collections.Generic.List<UnityEngine.UI.Image>();
+
+            if (spam) Tile(root, sprite, images);
+            else PlaceOne(root, sprite, images);
+
+            var flash = NewImage("Flash", root);
+            Stretch(flash.rectTransform);
+            flash.color = new Color(1f, 1f, 1f, 0.85f);
+
+            var burst = canvas.gameObject.AddComponent<GlitchBurst>();
+            burst.Bind(images, flash, life);
+            CombatFeel.Shake(spam ? 0.28f : 0.16f, 0.18f);
+        }
+
+        private static void PlaceOne(RectTransform root, Sprite sprite, System.Collections.Generic.List<UnityEngine.UI.Image> images)
+        {
+            var image = NewImage("Pop", root);
+            image.sprite = sprite;
+            image.preserveAspect = true;
+            var rect = image.rectTransform;
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+            Fit(rect, sprite, 1180f, 640f);
+            rect.anchoredPosition = new Vector2(UnityEngine.Random.Range(-70f, 70f), UnityEngine.Random.Range(-40f, 50f));
+            rect.localEulerAngles = new Vector3(0f, 0f, UnityEngine.Random.Range(-7f, 7f));
+            images.Add(image);
+        }
+
+        private static void Tile(RectTransform root, Sprite sprite, System.Collections.Generic.List<UnityEngine.UI.Image> images)
+        {
+            const float viewW = 1920f;
+            const float viewH = 1080f;
+            float aspect = sprite.rect.width / Mathf.Max(1f, sprite.rect.height);
+            float tileH = 460f;
+            float tileW = tileH * aspect;
+            if (tileW > 980f)
+            {
+                tileW = 980f;
+                tileH = tileW / Mathf.Max(0.01f, aspect);
+            }
+
+            float stepX = tileW * 0.78f;
+            float stepY = tileH * 0.72f;
+            int cols = Mathf.CeilToInt(viewW / stepX) + 1;
+            int rows = Mathf.CeilToInt(viewH / stepY) + 1;
+            float originX = -viewW * 0.5f - stepX * 0.35f;
+            float originY = viewH * 0.5f + stepY * 0.25f;
+            for (int y = 0; y < rows; y++)
+            for (int x = 0; x < cols; x++)
+            {
+                var image = NewImage("Tile", root);
+                image.sprite = sprite;
+                image.preserveAspect = true;
+                var rect = image.rectTransform;
+                rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.sizeDelta = new Vector2(tileW, tileH);
+                rect.anchoredPosition = new Vector2(
+                    originX + x * stepX + UnityEngine.Random.Range(-18f, 18f),
+                    originY - y * stepY + UnityEngine.Random.Range(-14f, 14f));
+                rect.localEulerAngles = new Vector3(0f, 0f, UnityEngine.Random.Range(-4f, 4f));
+                images.Add(image);
+            }
+        }
+
+        private static void Fit(RectTransform rect, Sprite sprite, float maxW, float maxH)
+        {
+            float aspect = sprite.rect.width / Mathf.Max(1f, sprite.rect.height);
+            float width = maxW;
+            float height = width / Mathf.Max(0.01f, aspect);
+            if (height > maxH)
+            {
+                height = maxH;
+                width = height * aspect;
+            }
+            rect.sizeDelta = new Vector2(width, height);
+        }
+
+        private static void Stretch(RectTransform rect)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
         }
 
         private static GameObject activeScare;
@@ -677,6 +854,53 @@ namespace Gstarr.Combat
                     if (activeScare == gameObject) activeScare = null;
                     Destroy(gameObject);
                 }
+            }
+        }
+
+        private sealed class GlitchBurst : MonoBehaviour
+        {
+            private UnityEngine.UI.Image[] images;
+            private UnityEngine.UI.Image flash;
+            private float life;
+            private float duration;
+
+            public void Bind(System.Collections.Generic.List<UnityEngine.UI.Image> images, UnityEngine.UI.Image flash, float life)
+            {
+                this.images = images.ToArray();
+                this.flash = flash;
+                this.life = life;
+                duration = life;
+            }
+
+            private void Update()
+            {
+                life -= Time.unscaledDeltaTime;
+                float t = 1f - Mathf.Clamp01(life / Mathf.Max(0.01f, duration));
+                float alpha = t < 0.72f ? 1f : 1f - (t - 0.72f) / 0.28f;
+                float punch = t < 0.08f ? Mathf.Lerp(1.08f, 1f, t / 0.08f) : 1f;
+                if (flash != null)
+                {
+                    var color = flash.color;
+                    color.a = t < 0.07f ? 0.85f * (1f - t / 0.07f) : 0f;
+                    flash.color = color;
+                }
+
+                if (images != null)
+                {
+                    for (int i = 0; i < images.Length; i++)
+                    {
+                        var image = images[i];
+                        if (image == null) continue;
+                        var color = image.color;
+                        color.a = alpha;
+                        image.color = color;
+                        image.rectTransform.localScale = Vector3.one * punch;
+                    }
+                }
+
+                if (life > 0f) return;
+                if (activeScare == gameObject) activeScare = null;
+                Destroy(gameObject);
             }
         }
     }
