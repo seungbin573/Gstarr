@@ -726,62 +726,28 @@ namespace Gstarr.Combat
         {
             var image = NewImage("Pop", root);
             image.sprite = sprite;
-            image.preserveAspect = true;
-            var rect = image.rectTransform;
-            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-            Fit(rect, sprite, 1180f, 640f);
-            rect.anchoredPosition = new Vector2(UnityEngine.Random.Range(-70f, 70f), UnityEngine.Random.Range(-40f, 50f));
-            rect.localEulerAngles = new Vector3(0f, 0f, UnityEngine.Random.Range(-7f, 7f));
+            image.preserveAspect = false;
+            Stretch(image.rectTransform);
             images.Add(image);
         }
 
         private static void Tile(RectTransform root, Sprite sprite, System.Collections.Generic.List<UnityEngine.UI.Image> images)
         {
-            const float viewW = 1920f;
-            const float viewH = 1080f;
-            float aspect = sprite.rect.width / Mathf.Max(1f, sprite.rect.height);
-            float tileH = 460f;
-            float tileW = tileH * aspect;
-            if (tileW > 980f)
-            {
-                tileW = 980f;
-                tileH = tileW / Mathf.Max(0.01f, aspect);
-            }
-
-            float stepX = tileW * 0.78f;
-            float stepY = tileH * 0.72f;
-            int cols = Mathf.CeilToInt(viewW / stepX) + 1;
-            int rows = Mathf.CeilToInt(viewH / stepY) + 1;
-            float originX = -viewW * 0.5f - stepX * 0.35f;
-            float originY = viewH * 0.5f + stepY * 0.25f;
+            const int cols = 4;
+            const int rows = 4;
             for (int y = 0; y < rows; y++)
             for (int x = 0; x < cols; x++)
             {
                 var image = NewImage("Tile", root);
                 image.sprite = sprite;
-                image.preserveAspect = true;
+                image.preserveAspect = false;
                 var rect = image.rectTransform;
-                rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-                rect.sizeDelta = new Vector2(tileW, tileH);
-                rect.anchoredPosition = new Vector2(
-                    originX + x * stepX + UnityEngine.Random.Range(-18f, 18f),
-                    originY - y * stepY + UnityEngine.Random.Range(-14f, 14f));
-                rect.localEulerAngles = new Vector3(0f, 0f, UnityEngine.Random.Range(-4f, 4f));
+                rect.anchorMin = new Vector2(x / (float)cols, 1f - (y + 1) / (float)rows);
+                rect.anchorMax = new Vector2((x + 1) / (float)cols, 1f - y / (float)rows);
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
                 images.Add(image);
             }
-        }
-
-        private static void Fit(RectTransform rect, Sprite sprite, float maxW, float maxH)
-        {
-            float aspect = sprite.rect.width / Mathf.Max(1f, sprite.rect.height);
-            float width = maxW;
-            float height = width / Mathf.Max(0.01f, aspect);
-            if (height > maxH)
-            {
-                height = maxH;
-                width = height * aspect;
-            }
-            rect.sizeDelta = new Vector2(width, height);
         }
 
         private static void Stretch(RectTransform rect)
@@ -877,7 +843,6 @@ namespace Gstarr.Combat
                 life -= Time.unscaledDeltaTime;
                 float t = 1f - Mathf.Clamp01(life / Mathf.Max(0.01f, duration));
                 float alpha = t < 0.72f ? 1f : 1f - (t - 0.72f) / 0.28f;
-                float punch = t < 0.08f ? Mathf.Lerp(1.08f, 1f, t / 0.08f) : 1f;
                 if (flash != null)
                 {
                     var color = flash.color;
@@ -894,7 +859,6 @@ namespace Gstarr.Combat
                         var color = image.color;
                         color.a = alpha;
                         image.color = color;
-                        image.rectTransform.localScale = Vector3.one * punch;
                     }
                 }
 

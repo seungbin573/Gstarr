@@ -127,7 +127,7 @@ namespace Gstarr.Combat
                 struck = true;
                 visual.sprite = strike;
                 visual.color = Color.white;
-                if (summon) owner.BringRandomMob(transform.position);
+                if (summon) owner.DeliverMinion(EnemyKind.Bunny, transform.position);
                 else
                 {
                     var player = actor.PlayerTarget;
@@ -137,6 +137,74 @@ namespace Gstarr.Combat
                 }
             }
             if (elapsed >= 1.05f) Destroy(gameObject);
+        }
+    }
+
+    /// <summary>석상의 손이 몸에서 나와 몹을 데려온 뒤 돌아간다.</summary>
+    public sealed class AngelHandBring : MonoBehaviour
+    {
+        private Angel owner;
+        private SpriteRenderer visual;
+        private Vector3 from;
+        private Vector3 to;
+        private EnemyKind kind;
+        private float elapsed;
+        private bool dropped;
+
+        public static void Play(Angel owner, Vector2 origin, Vector2 destination, string art, EnemyKind kind, int direction)
+        {
+            var go = new GameObject(art);
+            var view = go.AddComponent<SpriteRenderer>();
+            view.sprite = CharacterArt.Monster(art, 1.8f);
+            view.sortingOrder = 16;
+            view.flipX = direction < 0;
+            go.transform.position = origin;
+            var bring = go.AddComponent<AngelHandBring>();
+            bring.owner = owner;
+            bring.visual = view;
+            bring.from = origin;
+            bring.to = destination;
+            bring.kind = kind;
+            owner.TrackEffect(go);
+        }
+
+        private void Update()
+        {
+            if (owner == null)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
+            elapsed += Time.deltaTime;
+            const float travel = 0.5f;
+            const float leave = 0.32f;
+            if (elapsed <= travel)
+            {
+                float u = Mathf.SmoothStep(0f, 1f, elapsed / travel);
+                var point = Vector3.Lerp(from, to, u);
+                point.y += Mathf.Sin(u * Mathf.PI) * 0.85f;
+                transform.position = point;
+                transform.localScale = Vector3.one * Mathf.Lerp(0.75f, 1.2f, u);
+                return;
+            }
+
+            if (!dropped)
+            {
+                dropped = true;
+                transform.position = to;
+                owner.DeliverMinion(kind, to);
+            }
+
+            float back = Mathf.Clamp01((elapsed - travel) / leave);
+            transform.position = Vector3.Lerp(to, from, back);
+            if (visual != null)
+            {
+                var color = visual.color;
+                color.a = 1f - back;
+                visual.color = color;
+            }
+            if (back >= 1f) Destroy(gameObject);
         }
     }
 }

@@ -396,6 +396,72 @@ namespace Gstarr.World
 
         private Tilemap groundMap;
 
+        private void EnsureGround()
+        {
+            if (groundMap != null) return;
+            var maps = FindObjectsByType<Tilemap>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            for (int i = 0; i < maps.Length; i++)
+            {
+                if (maps[i] == null || maps[i].gameObject.scene != gameObject.scene) continue;
+                if (maps[i].name != "Ground") continue;
+                groundMap = maps[i];
+                return;
+            }
+        }
+
+        private void FlattenBossRoom(ArenaRoom room)
+        {
+            EnsureGround();
+            if (groundMap == null) return;
+
+            var sample = groundMap.WorldToCell(new Vector3(room.FrameMin + 0.4f, room.FrameY - 0.05f, 0f));
+            var end = groundMap.WorldToCell(new Vector3(room.FrameMax - 0.4f, room.FrameY - 0.05f, 0f));
+            int x0 = Mathf.Min(sample.x, end.x);
+            int x1 = Mathf.Max(sample.x, end.x);
+            int floor = sample.y;
+            var bounds = groundMap.cellBounds;
+
+            TileBase fill = null;
+            for (int x = x0; x <= x1 && fill == null; x++)
+            {
+                for (int y = floor; y >= bounds.yMin; y--)
+                {
+                    fill = groundMap.GetTile(new Vector3Int(x, y, 0));
+                    if (fill != null) break;
+                }
+            }
+
+            for (int x = x0; x <= x1; x++)
+            {
+                for (int y = floor + 1; y <= floor + 8 && y < bounds.yMax; y++)
+                    groundMap.SetTile(new Vector3Int(x, y, 0), null);
+
+                if (fill == null) continue;
+                bool below = false;
+                for (int y = floor - 1; y >= bounds.yMin; y--)
+                {
+                    if (!groundMap.HasTile(new Vector3Int(x, y, 0))) continue;
+                    below = true;
+                    break;
+                }
+                groundMap.SetTile(new Vector3Int(x, floor, 0), fill);
+                if (below) continue;
+                for (int y = floor - 1; y >= floor - 12 && y >= bounds.yMin; y--)
+                    groundMap.SetTile(new Vector3Int(x, y, 0), fill);
+            }
+
+            var maps = FindObjectsByType<Tilemap>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            for (int i = 0; i < maps.Length; i++)
+            {
+                var map = maps[i];
+                if (map == null || map == groundMap || map.gameObject.scene != gameObject.scene) continue;
+                if (map.name.IndexOf("Platform", System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                for (int x = x0; x <= x1; x++)
+                    for (int y = floor; y <= floor + 8; y++)
+                        map.SetTile(new Vector3Int(x, y, 0), null);
+            }
+        }
+
         private float SurfaceAt(float worldX, float fallback)
         {
             if (groundMap == null)
@@ -424,6 +490,7 @@ namespace Gstarr.World
 
         private void SpawnFeatured(ArenaRoom room, EnemyKind kind, float along, int health)
         {
+            FlattenBossRoom(room);
             float x = Mathf.Lerp(room.FrameMin + 1.2f, room.FrameMax - 1.2f, along);
             float floor = SurfaceAt(x, room.FrameY);
             var position = new Vector3(x, floor + 0.08f, 0f);

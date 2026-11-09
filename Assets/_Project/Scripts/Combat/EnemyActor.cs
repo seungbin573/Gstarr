@@ -56,6 +56,7 @@ namespace Gstarr.Combat
 
         private bool staggerSpent;
         private bool gloryKill = true;
+        private bool gloryBlocked;
         private BossGlory bossGlory;
         private float staggerTimer;
         private float stunTimer;
@@ -356,6 +357,13 @@ namespace Gstarr.Combat
         /// <summary>체력이 바닥까지 떨어져도 비틀리지 않고 바로 죽는다.</summary>
         public void SkipGloryKill() => gloryKill = false;
 
+        /// <summary>스타일 랭크가 높아도 글로리 킬 없이 죽는다.</summary>
+        public void BlockGloryKill()
+        {
+            gloryKill = false;
+            gloryBlocked = true;
+        }
+
         /// <summary>스타일 랭크와 상관없이, 체력이 깎이면 글로리 킬로 넘긴다.</summary>
         public void AllowGloryKill() => gloryKill = true;
 
@@ -618,6 +626,7 @@ namespace Gstarr.Combat
 
         public bool CatchGlory(ref int nextHealth)
         {
+            if (gloryBlocked) return false;
             if (health == null || (state != State.Combat && state != State.Stunned)) return false;
             if (CatchBossGlory(ref nextHealth)) return true;
             if (GetComponent<BossMark>() != null) return false;

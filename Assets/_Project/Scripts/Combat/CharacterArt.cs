@@ -59,14 +59,14 @@ namespace Gstarr.Combat
         }
 
         public const string MonsterFolder = "Assets/arts/character/monsters/";
-        public const string Cross = "날라가는 십자가";
-        public const string Eye = "천사눈깔 (몹)";
-        public const string EyeTwo = "천사눈깔 2 (몹)";
-        public const string GunHand = "총 모양으로 게스처 하는 손 (몹)";
-        public const string SummonedHand = "천사석상이 소환하는 손";
-        public const string PullHand = "천사석상의 또 다른 손 (다른 랜덤 몹들을 멋대로 가져옴)";
-        public const string HandSkill = "천사석상 스킬22";
-        public const string MultiHand = "천사스킬 333 (여러번 공격)";
+        public const string Cross = "flying-cross";
+        public const string Eye = "angel-eye";
+        public const string EyeTwo = "angel-eye-two";
+        public const string GunHand = "gun-hand";
+        public const string SummonedHand = "summoned-hand";
+        public const string PullHand = "pull-hand";
+        public const string HandSkill = "angel-hand-skill";
+        public const string MultiHand = "angel-multi-hand";
 
         // Trim transparent canvas so the visual, hitbox and warning use the same size.
         public static Sprite Monster(string name, float length = 1.2f)

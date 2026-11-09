@@ -340,9 +340,12 @@ namespace Gstarr.Combat
                 if (item != null) ItemPickup.Spawn(item, 1, enemy.transform.position + Vector3.up * 0.4f, 6);
             }
 
+            if (banner != null)
+            {
+                banner.text = "+" + bonus.ToString("N0");
+                banner.color = new Color(1f, 0.9f, 0.35f);
+            }
             if (enemy != null) enemy.FinishGlory();
-            banner.text = "+" + bonus.ToString("N0");
-            banner.color = new Color(1f, 0.9f, 0.35f);
             if (note != null) note.gameObject.SetActive(false);
             if (noteLabel != null) noteLabel.gameObject.SetActive(false);
             endTimer = 0.85f;
@@ -351,9 +354,12 @@ namespace Gstarr.Combat
         private void Fail()
         {
             if (endTimer >= 0f) return;
+            if (banner != null)
+            {
+                banner.text = "FAILED";
+                banner.color = new Color(1f, 0.35f, 0.3f);
+            }
             if (enemy != null) enemy.CancelGlory();
-            banner.text = "FAILED";
-            banner.color = new Color(1f, 0.35f, 0.3f);
             if (note != null) note.gameObject.SetActive(false);
             if (noteLabel != null) noteLabel.gameObject.SetActive(false);
             endTimer = 0.55f;

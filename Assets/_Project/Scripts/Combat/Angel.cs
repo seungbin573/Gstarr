@@ -142,7 +142,7 @@ namespace Gstarr.Combat
                     if (quakeStep >= PulseCount) Enter(Phase.Recover);
                     break;
                 case Phase.Summon:
-                    if (elapsed >= 0.85f) Enter(Phase.Recover);
+                    if (elapsed >= 1.2f) Enter(Phase.Recover);
                     break;
                 case Phase.Recover:
                     if (elapsed >= RecoverSeconds) FinishRecover();
@@ -238,39 +238,71 @@ namespace Gstarr.Combat
             return new Vector2(x, actor.GroundY + (flying ? 1.6f : 0.1f));
         }
 
+        private int LivingMinions()
+        {
+            int count = 0;
+            for (int i = summons.Count - 1; i >= 0; i--)
+            {
+                var mob = summons[i];
+                if (mob == null)
+                {
+                    summons.RemoveAt(i);
+                    continue;
+                }
+                var life = mob.GetComponent<Health>();
+                if (life == null || life.Current <= 0)
+                {
+                    summons.RemoveAt(i);
+                    continue;
+                }
+                count++;
+            }
+            return count;
+        }
+
         private void SpawnMinion(EnemyKind kind, Vector2 position)
         {
-            summons.RemoveAll(item => item == null);
-            if (summons.Count >= 5) return;
+            if (!actor.CanAct || LivingMinions() >= 2) return;
             var mob = EnemyActor.Spawn(null, position, kind, 3);
+            mob.BlockGloryKill();
             mob.CopyLeashFrom(actor);
             var controller = mob.GetComponent<AngelSummon>();
             if (controller != null) controller.Owner = this;
             summons.Add(mob.gameObject);
         }
 
-        public void BringRandomMob(Vector2 position)
+        public void DeliverMinion(EnemyKind kind, Vector2 position)
         {
-            if (!actor.CanAct) return;
-            SpawnMinion(RandomMobs[Random.Range(0, RandomMobs.Length)], position + Vector2.up * 0.1f);
+            SpawnMinion(kind, position);
+        }
+
+        private void Bring(EnemyKind kind, Vector2 destination, string hand)
+        {
+            if (LivingMinions() >= 2) return;
+            Vector2 origin = (Vector2)transform.position + new Vector2(direction * 1.15f, 1.45f);
+            AngelHandBring.Play(this, origin, destination, hand, kind, direction);
         }
 
         private void SummonWave()
         {
+            int room = LivingMinions();
+            if (room >= 2) return;
             if (pattern == Pattern.PullMobs)
             {
-                AngelHandStrike.Spawn(this, SummonPosition(direction, false), CharacterArt.PullHand, true);
+                Bring(RandomMobs[Random.Range(0, RandomMobs.Length)], SummonPosition(direction, false), CharacterArt.PullHand);
                 return;
             }
             if (pattern == Pattern.GunHands)
             {
-                SpawnMinion(EnemyKind.AngelGunHand, SummonPosition(direction, true));
-                if (phase2) SpawnMinion(EnemyKind.AngelGunHand, SummonPosition(-direction, true));
+                Bring(EnemyKind.AngelGunHand, SummonPosition(direction, true), CharacterArt.SummonedHand);
+                if (phase2 && room == 0)
+                    Bring(EnemyKind.AngelGunHand, SummonPosition(-direction, true), CharacterArt.SummonedHand);
             }
             else
             {
-                SpawnMinion(EnemyKind.AngelEye, SummonPosition(direction, true));
-                SpawnMinion(EnemyKind.AngelEyeTwo, SummonPosition(-direction, true));
+                Bring(EnemyKind.AngelEye, SummonPosition(direction, true), CharacterArt.SummonedHand);
+                if (room == 0)
+                    Bring(EnemyKind.AngelEyeTwo, SummonPosition(-direction, true), CharacterArt.SummonedHand);
             }
         }
 
