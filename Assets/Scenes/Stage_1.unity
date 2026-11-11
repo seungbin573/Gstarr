@@ -233,7 +233,7 @@ MonoBehaviour:
   weapons:
   - name: Cutter
     type: 0
-    damage: 3
+    damage: 4
     fireInterval: 0.3
     sprite: {fileID: 0}
     holdOffset: {x: 0.1, y: -0.28}
@@ -248,7 +248,7 @@ MonoBehaviour:
     recoil: 0
   - name: Pistol
     type: 1
-    damage: 1
+    damage: 2
     fireInterval: 0.18
     sprite: {fileID: 0}
     holdOffset: {x: 0.12, y: -0.26}
@@ -263,7 +263,7 @@ MonoBehaviour:
     recoil: 0
   - name: Slingshot
     type: 2
-    damage: 1
+    damage: 2
     fireInterval: 0.7
     sprite: {fileID: 0}
     holdOffset: {x: 0.08, y: -0.3}

@@ -109,16 +109,16 @@ namespace Gstarr.World
         public static bool ConfirmPressed()
         {
             var pad = Gamepad.current;
-            if (pad != null && pad.buttonEast.wasPressedThisFrame) return true;
+            if (pad != null && pad.buttonNorth.wasPressedThisFrame) return true;
             var key = Keyboard.current;
-            return key != null && key.cKey.wasPressedThisFrame;
+            return key != null && (key.enterKey.wasPressedThisFrame || key.spaceKey.wasPressedThisFrame);
         }
 
         public static Sprite ButtonSprite()
         {
             if (buttonSprite != null) return buttonSprite;
             var plate = new Plate(40, 40, Color.clear);
-            plate.Face(20, 20, 16, new Color(1f, 0.55f, 0.2f, 1f), "A");
+            plate.Face(20, 20, 16, new Color(1f, 0.55f, 0.2f, 1f), "X");
             buttonSprite = plate.Bake(40f);
             return buttonSprite;
         }
@@ -197,9 +197,9 @@ namespace Gstarr.World
         private static bool Held()
         {
             var pad = Gamepad.current;
-            if (pad != null && (pad.buttonEast.isPressed || pad.buttonSouth.isPressed)) return true;
+            if (pad != null && (pad.buttonNorth.isPressed || pad.buttonSouth.isPressed)) return true;
             var key = Keyboard.current;
-            return key != null && (key.cKey.isPressed || key.zKey.isPressed || key.escapeKey.isPressed);
+            return key != null && (key.enterKey.isPressed || key.spaceKey.isPressed || key.zKey.isPressed || key.escapeKey.isPressed);
         }
 
         private void PausePlay()
@@ -270,7 +270,7 @@ namespace Gstarr.World
             nextLabel = UIFactory.CreateText("Next", card.transform, "닫기", 26, TextAnchor.MiddleLeft, FontStyle.Bold);
             nextLabel.color = ink;
             nextLabel.GetComponent<Outline>().enabled = false;
-            UIFactory.Place(nextLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(250f, -276f), new Vector2(140f, 40f));
+            UIFactory.Place(nextLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(300f, -276f), new Vector2(240f, 40f));
 
             sheet.SetActive(false);
         }
@@ -295,7 +295,7 @@ namespace Gstarr.World
             bool many = pages.Length > 1;
             pageMark.text = many ? (page + 1) + " / " + pages.Length : "";
             prevLabel.text = page > 0 ? "B  이전" : "";
-            nextLabel.text = page < pages.Length - 1 ? "다음" : "닫기";
+            nextLabel.text = page < pages.Length - 1 ? "Enter  다음" : "Enter  닫기";
         }
 
         private static Page[] LessonPages(Lesson lesson)

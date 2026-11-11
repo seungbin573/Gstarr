@@ -299,7 +299,7 @@ namespace Gstarr.Combat
             timer = 0.48f;
             SetPose(CharacterArt.Pose.Grab, 0.64f);
             GameAudio.Play(GameAudio.Id.EnemySwing, 0.9f);
-            HitPlayer(2);
+            HitPlayer(1);
             var control = player != null ? player.GetComponent<PlayerController>() : null;
             if (control != null)
             {
@@ -613,16 +613,38 @@ namespace Gstarr.Combat
         {
             if (activeScare != null) return;
             if (UnityEngine.Random.value > 0.42f) return;
-            if (!PickDistraction(out Sprite sprite, out bool spam)) return;
-            ShowGlitch(sprite, spam, 0.9f);
+            if (!PickDistraction(out Sprite sprite)) return;
+            ShowGlitch(sprite, 0.9f);
+        }
+
+        /// <summary>맞기 전에 그림과 잘라 둔 도배를 읽어 둔다. 처음 뜰 때 멈추지 않게.</summary>
+        public static void Prepare()
+        {
+            EnsureDistractions();
+            if (distractions != null)
+            {
+                for (int i = 0; i < distractions.Length; i++)
+                    TightSprite(distractions[i].Sprite);
+            }
+            WarningSprite();
         }
 
         /// <summary>중간보스 섀도우맨이 나타날 때 경고를 화면 가득 깐다.</summary>
         public static void ShadowmanArrives()
         {
-            var sprite = LoadSprite(System.IO.Path.Combine(EffectFolder, "shadowmanWarning.png"));
+            var sprite = WarningSprite();
             if (sprite == null) return;
-            ShowGlitch(sprite, true, 1.2f);
+            ShowGlitch(sprite, 1.2f);
+        }
+
+        private static Sprite warningSprite;
+
+        private static Sprite WarningSprite()
+        {
+            if (warningSprite != null) return warningSprite;
+            warningSprite = LoadSprite(System.IO.Path.Combine(EffectFolder, "shadowmanWarning.png"));
+            if (warningSprite != null) TightSprite(warningSprite);
+            return warningSprite;
         }
 
         public static void Dismiss()
@@ -639,18 +661,14 @@ namespace Gstarr.Combat
         private struct Clip
         {
             public Sprite Sprite;
-            public bool Spam;
         }
 
-        private static bool PickDistraction(out Sprite sprite, out bool spam)
+        private static bool PickDistraction(out Sprite sprite)
         {
             sprite = null;
-            spam = false;
             EnsureDistractions();
             if (distractions == null || distractions.Length == 0) return false;
-            var pick = distractions[UnityEngine.Random.Range(0, distractions.Length)];
-            sprite = pick.Sprite;
-            spam = pick.Spam;
+            sprite = distractions[UnityEngine.Random.Range(0, distractions.Length)].Sprite;
             return sprite != null;
         }
 
@@ -671,11 +689,7 @@ namespace Gstarr.Combat
                 var sprite = LoadSprite(file);
                 if (sprite == null) continue;
                 string name = System.IO.Path.GetFileNameWithoutExtension(file);
-                found.Add(new Clip
-                {
-                    Sprite = sprite,
-                    Spam = name.IndexOf("Spam", System.StringComparison.OrdinalIgnoreCase) >= 0
-                });
+                found.Add(new Clip { Sprite = sprite });
             }
             distractions = found.ToArray();
         }
@@ -700,18 +714,18 @@ namespace Gstarr.Combat
             return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
         }
 
-        private static void ShowGlitch(Sprite sprite, bool spam, float life)
+        private static void ShowGlitch(Sprite sprite, float life)
         {
             if (sprite == null) return;
             if (activeScare != null) Object.Destroy(activeScare);
 
-            var canvas = UIFactory.CreateCanvas(null, spam ? "GlitchSpam" : "GlitchPop", 160);
+            var canvas = UIFactory.CreateCanvas(null, "GlitchSpam", 160);
             activeScare = canvas.gameObject;
             var root = (RectTransform)canvas.transform;
             var images = new System.Collections.Generic.List<UnityEngine.UI.Image>();
 
-            if (spam) Tile(root, sprite, images);
-            else PlaceOne(root, sprite, images);
+            if (UnityEngine.Random.value < 0.5f) Tile(root, sprite, images);
+            else Scatter(root, sprite, images);
 
             var flash = NewImage("Flash", root);
             Stretch(flash.rectTransform);
@@ -719,35 +733,202 @@ namespace Gstarr.Combat
 
             var burst = canvas.gameObject.AddComponent<GlitchBurst>();
             burst.Bind(images, flash, life);
-            CombatFeel.Shake(spam ? 0.28f : 0.16f, 0.18f);
+            CombatFeel.Shake(0.28f, 0.18f);
         }
 
-        private static void PlaceOne(RectTransform root, Sprite sprite, System.Collections.Generic.List<UnityEngine.UI.Image> images)
+        private static readonly System.Collections.Generic.Dictionary<int, Sprite> tightSprites =
+            new System.Collections.Generic.Dictionary<int, Sprite>();
+
+        /// <summary>검은 여백을 떼고 그림만 남긴다. 화면을 그 그림으로 빈틈없이 덮기 위해서다.</summary>
+        private static Sprite TightSprite(Sprite sprite)
         {
-            var image = NewImage("Pop", root);
-            image.sprite = sprite;
-            image.preserveAspect = false;
-            Stretch(image.rectTransform);
-            images.Add(image);
+            if (sprite == null || sprite.texture == null || !sprite.texture.isReadable) return sprite;
+            int id = sprite.texture.GetInstanceID();
+            if (tightSprites.TryGetValue(id, out var cached)) return cached;
+
+            var tex = sprite.texture;
+            int w = tex.width;
+            int h = tex.height;
+            var pixels = tex.GetPixels32();
+            var cols = new int[w];
+            var rows = new int[h];
+            for (int y = 0; y < h; y++)
+            {
+                int row = y * w;
+                for (int x = 0; x < w; x++)
+                {
+                    var p = pixels[row + x];
+                    if (p.a < 24 || (p.r < 16 && p.g < 16 && p.b < 16)) continue;
+                    cols[x]++;
+                    rows[y]++;
+                }
+            }
+
+            int minX = 0, maxX = w - 1, minY = 0, maxY = h - 1;
+            const int minInk = 3;
+            while (minX < maxX && cols[minX] < minInk) minX++;
+            while (maxX > minX && cols[maxX] < minInk) maxX--;
+            while (minY < maxY && rows[minY] < minInk) minY++;
+            while (maxY > minY && rows[maxY] < minInk) maxY--;
+
+            Sprite tight = sprite;
+            if (maxX > minX + 8 && maxY > minY + 8)
+            {
+                const int pad = 8;
+                minX = Mathf.Max(0, minX - pad);
+                minY = Mathf.Max(0, minY - pad);
+                maxX = Mathf.Min(w - 1, maxX + pad);
+                maxY = Mathf.Min(h - 1, maxY + pad);
+                int cw = maxX - minX + 1;
+                int ch = maxY - minY + 1;
+                if (cw < w * 0.98f || ch < h * 0.98f)
+                    tight = Sprite.Create(tex, new Rect(minX, minY, cw, ch), new Vector2(0.5f, 0.5f), sprite.pixelsPerUnit);
+            }
+
+            tightSprites[id] = tight;
+            return tight;
         }
 
         private static void Tile(RectTransform root, Sprite sprite, System.Collections.Generic.List<UnityEngine.UI.Image> images)
         {
-            const int cols = 4;
-            const int rows = 4;
+            var plate = NewImage("Plate", root);
+            Stretch(plate.rectTransform);
+            plate.color = Color.black;
+            images.Add(plate);
+
+            sprite = TightSprite(sprite);
+            CanvasSpan(root, out float canvasW, out float canvasH);
+
+            float pictureAspect = sprite.rect.width / Mathf.Max(1f, sprite.rect.height);
+            float screenAspect = canvasW / Mathf.Max(1f, canvasH);
+
+            // 짧은 변을 여덟 칸으로 쪼개 화면 비에 맞춰 칸 수를 정한다.
+            const int alongShort = 8;
+            int cols;
+            int rows;
+            if (screenAspect >= 1f)
+            {
+                rows = alongShort;
+                cols = Mathf.Max(1, Mathf.CeilToInt(rows * screenAspect / pictureAspect));
+            }
+            else
+            {
+                cols = alongShort;
+                rows = Mathf.Max(1, Mathf.CeilToInt(cols * pictureAspect / screenAspect));
+            }
+
+            float tileH = canvasH / rows;
+            float tileW = tileH * pictureAspect;
+            float cover = Mathf.Max(canvasW / (cols * tileW), canvasH / (rows * tileH));
+            float stepW = tileW * cover;
+            float stepH = tileH * cover;
+            float drawW = stepW * 1.04f;
+            float drawH = stepH * 1.04f;
+            float sheetW = cols * stepW;
+            float sheetH = rows * stepH;
+            float startX = -sheetW * 0.5f + stepW * 0.5f;
+            float startY = sheetH * 0.5f - stepH * 0.5f;
+
             for (int y = 0; y < rows; y++)
             for (int x = 0; x < cols; x++)
             {
                 var image = NewImage("Tile", root);
                 image.sprite = sprite;
-                image.preserveAspect = false;
+                image.preserveAspect = true;
                 var rect = image.rectTransform;
-                rect.anchorMin = new Vector2(x / (float)cols, 1f - (y + 1) / (float)rows);
-                rect.anchorMax = new Vector2((x + 1) / (float)cols, 1f - y / (float)rows);
-                rect.offsetMin = Vector2.zero;
-                rect.offsetMax = Vector2.zero;
+                rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.sizeDelta = new Vector2(drawW, drawH);
+                rect.anchoredPosition = new Vector2(startX + x * stepW, startY - y * stepH);
                 images.Add(image);
             }
+        }
+
+        /// <summary>가운데부터 기울고 겹친 글자가 화면 끝까지 번진다.</summary>
+        private static void Scatter(RectTransform root, Sprite sprite, System.Collections.Generic.List<UnityEngine.UI.Image> images)
+        {
+            var plate = NewImage("Plate", root);
+            Stretch(plate.rectTransform);
+            plate.color = Color.black;
+            images.Add(plate);
+
+            sprite = TightSprite(sprite);
+            CanvasSpan(root, out float canvasW, out float canvasH);
+            float pictureAspect = sprite.rect.width / Mathf.Max(1f, sprite.rect.height);
+            float baseH = canvasH * 0.52f;
+            float baseW = baseH * pictureAspect;
+            float reach = 0.5f * Mathf.Sqrt(canvasW * canvasW + canvasH * canvasH);
+
+            for (int i = 0; i < 4; i++)
+            {
+                float scale = UnityEngine.Random.Range(0.9f, 1.5f);
+                Stamp(root, sprite, images,
+                    new Vector2(UnityEngine.Random.Range(-48f, 48f), UnityEngine.Random.Range(-36f, 36f)),
+                    baseW * scale, baseH * scale,
+                    UnityEngine.Random.Range(-180f, 180f),
+                    UnityEngine.Random.Range(0f, 0.03f));
+            }
+
+            const int rings = 5;
+            for (int ring = 1; ring <= rings; ring++)
+            {
+                float radius = reach * ring / rings;
+                int count = 5 + ring * 2;
+                float spin = UnityEngine.Random.Range(0f, 360f);
+                for (int i = 0; i < count; i++)
+                {
+                    float ang = (spin + i * (360f / count) + UnityEngine.Random.Range(-26f, 26f)) * Mathf.Deg2Rad;
+                    float dist = radius * UnityEngine.Random.Range(0.76f, 1.14f);
+                    float scale = UnityEngine.Random.Range(0.58f, 1.32f);
+                    Stamp(root, sprite, images,
+                        new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * dist,
+                        baseW * scale, baseH * scale,
+                        UnityEngine.Random.Range(-180f, 180f),
+                        Mathf.Clamp01(dist / reach) * 0.22f);
+                }
+            }
+
+            Vector2[] corners =
+            {
+                new Vector2(-canvasW * 0.4f, canvasH * 0.36f),
+                new Vector2(canvasW * 0.4f, canvasH * 0.36f),
+                new Vector2(-canvasW * 0.4f, -canvasH * 0.36f),
+                new Vector2(canvasW * 0.4f, -canvasH * 0.36f)
+            };
+            for (int i = 0; i < corners.Length; i++)
+            {
+                float scale = UnityEngine.Random.Range(0.85f, 1.25f);
+                Stamp(root, sprite, images, corners[i], baseW * scale, baseH * scale,
+                    UnityEngine.Random.Range(-180f, 180f), 0.2f);
+            }
+        }
+
+        private static void Stamp(RectTransform root, Sprite sprite, System.Collections.Generic.List<UnityEngine.UI.Image> images,
+            Vector2 position, float width, float height, float angle, float delay)
+        {
+            var image = NewImage("Stamp", root);
+            image.sprite = sprite;
+            image.preserveAspect = true;
+            var rect = image.rectTransform;
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(width, height);
+            rect.anchoredPosition = position;
+            rect.localEulerAngles = new Vector3(0f, 0f, angle);
+            rect.localScale = new Vector3(UnityEngine.Random.value < 0.5f ? -1f : 1f, UnityEngine.Random.value < 0.18f ? -1f : 1f, 1f);
+            image.gameObject.AddComponent<StampPop>().Arm(delay, rect.localScale);
+            images.Add(image);
+        }
+
+        private static void CanvasSpan(RectTransform root, out float canvasW, out float canvasH)
+        {
+            Canvas.ForceUpdateCanvases();
+            canvasW = root.rect.width;
+            canvasH = root.rect.height;
+            if (canvasW >= 2f && canvasH >= 2f) return;
+            float aspect = Screen.width / Mathf.Max(1f, (float)Screen.height);
+            canvasH = 1080f;
+            canvasW = 1080f * aspect;
         }
 
         private static void Stretch(RectTransform rect)
@@ -820,6 +1001,28 @@ namespace Gstarr.Combat
                     if (activeScare == gameObject) activeScare = null;
                     Destroy(gameObject);
                 }
+            }
+        }
+
+        private sealed class StampPop : MonoBehaviour
+        {
+            private Vector3 full = Vector3.one;
+            private float delay;
+            private float age;
+
+            public void Arm(float wait, Vector3 scale)
+            {
+                delay = wait;
+                full = scale;
+                transform.localScale = Vector3.zero;
+            }
+
+            private void Update()
+            {
+                age += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01((age - delay) / 0.1f);
+                float s = 1f - Mathf.Pow(1f - t, 3f);
+                transform.localScale = full * Mathf.Lerp(0.2f, 1f, s);
             }
         }
 

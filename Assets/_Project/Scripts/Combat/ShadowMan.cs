@@ -19,7 +19,7 @@ namespace Gstarr.Combat
         private const float GrabSeconds = 0.75f;
         private const float RecoverSeconds = 0.85f;
         private const float WalkFrameSeconds = 0.24f;
-        private const int GrabDamage = 3;
+        private const int GrabDamage = 2;
 
         private EnemyActor actor;
         private Health health;
@@ -104,7 +104,7 @@ namespace Gstarr.Combat
                     if (!rushHit && InReach(player))
                     {
                         rushHit = true;
-                        player.GetComponent<Health>()?.TakeEnemyHit(2, new Vector2(direction, 0.4f));
+                        player.GetComponent<Health>()?.TakeEnemyHit(1, new Vector2(direction, 0.4f));
                     }
                     if (elapsed >= 0.3f || !actor.RoomAhead(direction)) Enter(Phase.Recover);
                     break;

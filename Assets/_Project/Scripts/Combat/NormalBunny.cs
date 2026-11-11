@@ -73,7 +73,10 @@ namespace Gstarr.Combat
             actor.ClampRoom();
             if (popLeft > 0f)
             {
-                body.linearVelocity = new Vector2(popPush, body.linearVelocity.y);
+                float push = popPush;
+                if (Mathf.Abs(push) > 0.01f && SolidAt(transform.position.x + Mathf.Sign(push) * 0.42f, transform.position.y, 0.28f))
+                    push = 0f;
+                body.linearVelocity = new Vector2(push, body.linearVelocity.y);
                 return;
             }
 
@@ -180,7 +183,10 @@ namespace Gstarr.Combat
         {
             bodyScale = scale;
             popLeft = PopSeconds;
-            popPush = face * 2.8f;
+            int push = face;
+            if (SolidAt(transform.position.x + face * 0.5f, transform.position.y, 0.3f)) push = -face;
+            if (SolidAt(transform.position.x + push * 0.5f, transform.position.y, 0.3f)) push = 0;
+            popPush = push * 2.8f;
             transform.localScale = Vector3.one * (scale * 0.2f);
             if (visual != null) visual.flipX = face < 0;
             direction = face < 0 ? -1 : 1;
@@ -207,8 +213,40 @@ namespace Gstarr.Combat
             CombatFeel.Burst(origin, new Color(1f, 0.74f, 0.84f), 12);
             GameAudio.Play(GameAudio.Id.Dash, 0.55f);
             SplitGhost.Spawn(origin, visual != null ? visual.sprite : idle);
-            SpawnChild(origin + Vector3.left * 0.85f, -1);
-            SpawnChild(origin + Vector3.right * 0.85f, 1);
+            SpawnChild(ClearSplitPoint(origin, -1), -1);
+            SpawnChild(ClearSplitPoint(origin, 1), 1);
+        }
+
+        /// <summary>벽이나 문 밖에 겹치지 않는 쪽으로 태어난다.</summary>
+        private Vector3 ClearSplitPoint(Vector3 origin, int face)
+        {
+            const float half = 0.36f;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                int dir = pass == 0 ? face : -face;
+                float start = pass == 0 ? 0.42f : 0.78f;
+                for (float distance = start; distance <= 1.35f; distance += 0.16f)
+                {
+                    float x = origin.x + dir * distance;
+                    if (actor.HasLeash)
+                    {
+                        float min = actor.RoomMin + half + 0.08f;
+                        float max = actor.RoomMax - half - 0.08f;
+                        if (x < min || x > max) continue;
+                    }
+                    if (SolidAt(x, origin.y, half)) continue;
+                    return new Vector3(x, origin.y, origin.z);
+                }
+            }
+
+            return origin;
+        }
+
+        private static bool SolidAt(float x, float y, float half)
+        {
+            int mask = LayerMask.GetMask("Ground");
+            if (mask == 0) mask = Physics2D.DefaultRaycastLayers;
+            return Physics2D.OverlapBox(new Vector2(x, y + 0.42f), new Vector2(half * 2f, 0.72f), 0f, mask) != null;
         }
 
         private void SpawnChild(Vector3 position, int face)

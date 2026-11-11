@@ -329,33 +329,43 @@ namespace Gstarr.World
             bool bossRoom = index == rooms.Count - 1 && rooms.Count >= 2;
             if (bossRoom)
             {
-                SpawnFeatured(room, EnemyKind.Angel, 0.55f, 32);
+                SpawnFeatured(room, EnemyKind.Angel, 0.55f, 24);
                 return;
             }
 
             const float midBossX = 245f;
             if (room.FrameMin < midBossX && room.FrameMax > midBossX)
             {
-                SpawnFeatured(room, EnemyKind.Shadowman, 0.5f, 22);
+                SpawnFeatured(room, EnemyKind.Shadowman, 0.5f, 16);
                 return;
             }
 
             var plan = RoomPlan(index);
-            if (plan.Length == 1)
-            {
-                var actor = SpawnInto(room, plan[0], 0.62f, 0f);
-                if (index == FirstCombatRoom) actor.AllowGloryKill();
-                return;
-            }
-
-            float[] along = plan.Length == 2
-                ? new[] { 0.32f, 0.74f }
-                : new[] { 0.22f, 0.5f, 0.78f };
+            float width = room.FrameMax - room.FrameMin;
             for (int i = 0; i < plan.Length; i++)
             {
-                var actor = SpawnInto(room, plan[i], along[Mathf.Min(i, along.Length - 1)], 0f);
+                var actor = SpawnInto(room, plan[i], SpawnAlong(width, i, plan.Length), 0f);
                 if (index == FirstCombatRoom && i == 0) actor.AllowGloryKill();
             }
+        }
+
+        /// <summary>
+        /// 문 바로 안에 두지 않는다. 들어오며 걷는 동안 토끼 돌진이 닿지 않게 입구를 비운다.
+        /// </summary>
+        private static float SpawnAlong(float roomWidth, int index, int count)
+        {
+            float usable = Mathf.Max(4f, roomWidth - 2.4f);
+            const float entranceClear = 11.2f;
+            const float exitClear = 2.2f;
+            float near = Mathf.Clamp(entranceClear, 4f, Mathf.Max(4f, roomWidth - exitClear));
+            float far = roomWidth - exitClear;
+            if (count > 1) far = Mathf.Max(far, near + 3.2f * (count - 1));
+            far = Mathf.Min(far, Mathf.Max(near, roomWidth - 1.35f));
+
+            float offset = count <= 1
+                ? Mathf.Clamp(roomWidth * 0.68f, near, far)
+                : Mathf.Lerp(near, far, index / (float)(count - 1));
+            return Mathf.Clamp((offset - 1.2f) / usable, 0f, 1f);
         }
 
         /// <summary>앞은 토끼, 이어서 방해·추적·원거리를 한 종류씩 보여 주고, 뒤는 토끼와 섞는다. 보스 방은 여기 쓰지 않는다.</summary>

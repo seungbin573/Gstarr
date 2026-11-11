@@ -232,22 +232,22 @@ namespace Gstarr.Combat
 
         private static int DefaultHealth(EnemyKind kind) => kind switch
         {
-            EnemyKind.BeatChaser => 6,
-            EnemyKind.RangedBeat => 4,
-            EnemyKind.RangedHalfBeat => 4,
-            EnemyKind.Flyer => 4,
-            EnemyKind.Mole => 7,
-            EnemyKind.Boss => 28,
-            EnemyKind.Hopper => 4,
-            EnemyKind.Angel => 6,
-            EnemyKind.AnnoyingKid => 6,
-            EnemyKind.BlackShadowKid => 6,
-            EnemyKind.BlackShadowThrow => 6,
-            EnemyKind.Bunny => 6,
-            EnemyKind.DistortedBunny => 3,
-            EnemyKind.TwinBunny => 12,
-            EnemyKind.Shadowman => 15,
-            _ => 8
+            EnemyKind.BeatChaser => 4,
+            EnemyKind.RangedBeat => 3,
+            EnemyKind.RangedHalfBeat => 3,
+            EnemyKind.Flyer => 3,
+            EnemyKind.Mole => 5,
+            EnemyKind.Boss => 20,
+            EnemyKind.Hopper => 3,
+            EnemyKind.Angel => 4,
+            EnemyKind.AnnoyingKid => 4,
+            EnemyKind.BlackShadowKid => 4,
+            EnemyKind.BlackShadowThrow => 4,
+            EnemyKind.Bunny => 4,
+            EnemyKind.DistortedBunny => 2,
+            EnemyKind.TwinBunny => 8,
+            EnemyKind.Shadowman => 11,
+            _ => 5
         };
 
         public static EnemyActor NearestStaggered(Vector3 from, float range)
@@ -526,7 +526,7 @@ namespace Gstarr.Combat
         private const float SharedWidth = 0.9f;
         private const float SharedHeight = 1.9f;
 
-        /// <summary>보스 외 적은 모두 0.9 x 1.9. 발밑은 스프라이트 바닥에 맞춘다.</summary>
+        /// <summary>보스 외 적은 0.9 x 1.9. 토끼는 보이는 그림에 맞춘다.</summary>
         private void ApplyHitbox()
         {
             Bounds art = sprite != null && sprite.sprite != null
@@ -548,6 +548,10 @@ namespace Gstarr.Combat
                 capsule.sharedMaterial = material;
                 body = capsule;
             }
+            else if (IsSmallBunny(kind) && VisibleBox(sprite != null ? sprite.sprite : null, out Vector2 bunnySize, out Vector2 bunnyCenter))
+                body = AddBox(bunnySize, bunnyCenter, material);
+            else if (IsSmallBunny(kind))
+                body = AddBox(new Vector2(0.55f, 0.95f), new Vector2(midX, 0.475f), material);
             else
                 body = AddBox(new Vector2(SharedWidth, SharedHeight), new Vector2(midX, foot + SharedHeight * 0.5f), material);
 
@@ -570,6 +574,54 @@ namespace Gstarr.Combat
                             Physics2D.IgnoreCollision(mine[a], theirs[b], true);
                 }
             }
+        }
+
+        private static bool IsSmallBunny(EnemyKind enemyKind) =>
+            enemyKind == EnemyKind.Bunny || enemyKind == EnemyKind.DistortedBunny || enemyKind == EnemyKind.TwinBunny;
+
+        /// <summary>투명 여백을 빼고, 보이는 토끼 그림과 같은 크기의 판정을 만든다.</summary>
+        private static bool VisibleBox(Sprite art, out Vector2 size, out Vector2 center)
+        {
+            size = default;
+            center = default;
+            if (art == null || art.texture == null || !art.texture.isReadable) return false;
+
+            var rect = art.textureRect;
+            int x0 = Mathf.FloorToInt(rect.x);
+            int y0 = Mathf.FloorToInt(rect.y);
+            int w = Mathf.RoundToInt(rect.width);
+            int h = Mathf.RoundToInt(rect.height);
+            if (w < 2 || h < 2) return false;
+
+            var pixels = art.texture.GetPixels32();
+            int texW = art.texture.width;
+            int minX = w;
+            int minY = h;
+            int maxX = -1;
+            int maxY = -1;
+            for (int y = 0; y < h; y++)
+            {
+                int row = (y0 + y) * texW + x0;
+                for (int x = 0; x < w; x++)
+                {
+                    if (pixels[row + x].a <= 40) continue;
+                    if (x < minX) minX = x;
+                    if (y < minY) minY = y;
+                    if (x > maxX) maxX = x;
+                    if (y > maxY) maxY = y;
+                }
+            }
+
+            if (maxX < minX || maxY < minY) return false;
+            float ppu = Mathf.Max(1f, art.pixelsPerUnit);
+            Vector2 pivot = art.pivot;
+            float left = (minX - pivot.x) / ppu;
+            float right = (maxX + 1f - pivot.x) / ppu;
+            float bottom = (minY - pivot.y) / ppu;
+            float top = (maxY + 1f - pivot.y) / ppu;
+            size = new Vector2(Mathf.Max(0.2f, right - left), Mathf.Max(0.2f, top - bottom));
+            center = new Vector2((left + right) * 0.5f, (bottom + top) * 0.5f);
+            return true;
         }
 
         private BoxCollider2D AddBox(Vector2 size, Vector2 offset, PhysicsMaterial2D material)

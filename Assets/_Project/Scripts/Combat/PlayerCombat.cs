@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Gstarr.Game;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -67,19 +68,19 @@ namespace Gstarr.Combat
         {
             new Weapon
             {
-                name = "Cutter", type = WeaponType.Melee, damage = 3, fireInterval = 0.3f,
+                name = "Cutter", type = WeaponType.Melee, damage = 4, fireInterval = 0.3f,
                 holdOffset = new Vector2(0.1f, -0.28f),
                 meleeSize = new Vector2(1.15f, 0.85f), meleeReach = 0.72f
             },
             new Weapon
             {
-                name = "Pistol", type = WeaponType.Ranged, damage = 1, fireInterval = 0.18f,
+                name = "Pistol", type = WeaponType.Ranged, damage = 2, fireInterval = 0.18f,
                 holdOffset = new Vector2(0.12f, -0.26f), muzzleOffset = new Vector2(0.5f, 0.02f),
                 projectileSpeed = 14f, range = 9f, pellets = 1
             },
             new Weapon
             {
-                name = "Slingshot", type = WeaponType.Shotgun, damage = 1, fireInterval = 0.7f,
+                name = "Slingshot", type = WeaponType.Shotgun, damage = 2, fireInterval = 0.7f,
                 holdOffset = new Vector2(0.08f, -0.3f), muzzleOffset = new Vector2(0.26f, 0.24f),
                 projectileSpeed = 20f, range = 7f, pellets = 3, spreadAngle = 30f, recoil = 4.8f
             }
@@ -126,6 +127,7 @@ namespace Gstarr.Combat
         private int damageBonus;
         private float damageBonusTimer;
         private Sprite fallbackSprite;
+        private Sprite[] pistolRounds;
 
         public void SetTemporaryDamageBonus(int amount, float seconds)
         {
@@ -145,7 +147,7 @@ namespace Gstarr.Combat
             var health = GetComponent<Health>();
             if (health == null) health = gameObject.AddComponent<Health>();
             health.Configure(5, false);
-            health.InvulnOnHit = 1f;
+            health.InvulnOnHit = 1.5f;
             if (GetComponent<PlayerHealthView>() == null) gameObject.AddComponent<PlayerHealthView>();
             if (GetComponent<PlayerInventory>() == null) gameObject.AddComponent<PlayerInventory>();
             if (GetComponent<EquipmentSelectorView>() == null) gameObject.AddComponent<EquipmentSelectorView>();
@@ -153,6 +155,7 @@ namespace Gstarr.Combat
             SetupInput();
             ApplyArt();
             CreateWeaponVisual();
+            FoeEffects.Prepare();
         }
 
         private void SetupInput()
@@ -195,6 +198,7 @@ namespace Gstarr.Combat
             if (weapons == null || weapons.Length < 3) return;
 
             weapons[0].name = "Cutter";
+            weapons[0].damage = 4;
             weapons[0].sprite = PlayerArt.LoadTrimmed(folder + "무제320_20261104173934.png", new Vector2(0.84f, 0.14f), 0.62f);
             weapons[0].holdOffset = new Vector2(0.04f, -0.02f);
             weapons[0].restAngle = -105f;
@@ -202,11 +206,15 @@ namespace Gstarr.Combat
             weapons[0].meleeReach = 0.72f;
 
             weapons[1].name = "Pistol";
+            weapons[1].damage = 2;
             weapons[1].sprite = PlayerArt.LoadTrimmed(folder + "무제320_20261104173759.png", new Vector2(0.22f, 0.42f), 0.48f);
             weapons[1].holdOffset = new Vector2(0.06f, 0.02f);
             weapons[1].muzzleOffset = new Vector2(0.5f, 0.02f);
+            pistolRounds = LoadPistolRounds();
+            if (pistolRounds.Length > 0) weapons[1].projectileSprite = pistolRounds[0];
 
             weapons[2].name = "Slingshot";
+            weapons[2].damage = 2;
             weapons[2].sprite = PlayerArt.LoadTrimmed(folder + "무제320_20261104173326.png", new Vector2(0.48f, 0.08f), 0.42f);
             weapons[2].holdOffset = new Vector2(0.02f, 0f);
             weapons[2].muzzleOffset = new Vector2(0.26f, 0.24f);
@@ -556,9 +564,130 @@ namespace Gstarr.Combat
             var go = new GameObject("Bullet");
             go.transform.position = position;
             var sr = go.AddComponent<SpriteRenderer>();
-            sr.sprite = w.projectileSprite != null ? w.projectileSprite : GetFallbackSprite();
+            bool gumball = w.type == WeaponType.Ranged && pistolRounds != null && pistolRounds.Length > 0;
+            sr.sprite = gumball ? pistolRounds[0] : w.projectileSprite != null ? w.projectileSprite : GetFallbackSprite();
             sr.sortingOrder = weaponRenderer.sortingOrder;
-            return go.AddComponent<Projectile>();
+            var projectile = go.AddComponent<Projectile>();
+            if (gumball) projectile.SetAnimation(pistolRounds);
+            return projectile;
+        }
+
+        /// <summary>권총 탄. gb 그림의 검은 여백은 지우고, 구슬이 이어져 날아간다.</summary>
+        private static Sprite[] LoadPistolRounds()
+        {
+            const string folder = "Assets/arts/Weapons/";
+            string[] names = { "gb.png", "gb1.png", "gb2.png", "gb3.png", "gb4.png" };
+            var frames = new List<Sprite>(names.Length);
+            for (int i = 0; i < names.Length; i++)
+            {
+                var sprite = LoadGumball(folder + names[i], 300f);
+                if (sprite != null) frames.Add(sprite);
+            }
+            return frames.ToArray();
+        }
+
+        private static Sprite LoadGumball(string assetPath, float pixelsPerUnit)
+        {
+            string full = Path.Combine(Directory.GetCurrentDirectory(), assetPath);
+            if (!File.Exists(full)) return null;
+            byte[] bytes;
+            try { bytes = File.ReadAllBytes(full); }
+            catch { return null; }
+
+            var loaded = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            if (!loaded.LoadImage(bytes, false))
+            {
+                UnityEngine.Object.Destroy(loaded);
+                return null;
+            }
+
+            // RGB 파일은 알파가 없어서, 검은 배경을 지우려면 투명 텍스처로 다시 담아야 한다.
+            int w = loaded.width;
+            int h = loaded.height;
+            var source = loaded.GetPixels32();
+            UnityEngine.Object.Destroy(loaded);
+            var pixels = new Color32[source.Length];
+            var ink = new bool[source.Length];
+            for (int i = 0; i < source.Length; i++)
+            {
+                var p = source[i];
+                bool mark = p.a > 24 && (p.r > 22 || p.g > 22 || p.b > 22);
+                if (!mark)
+                {
+                    pixels[i] = new Color32(0, 0, 0, 0);
+                    continue;
+                }
+                pixels[i] = p;
+                ink[i] = true;
+            }
+
+            if (!LargestInk(ink, w, h, out int minX, out int minY, out int maxX, out int maxY))
+                return null;
+
+            var texture = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            texture.filterMode = FilterMode.Point;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.name = Path.GetFileNameWithoutExtension(assetPath);
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            var sprite = Sprite.Create(
+                texture,
+                new Rect(minX, minY, maxX - minX + 1, maxY - minY + 1),
+                new Vector2(0.5f, 0.5f),
+                pixelsPerUnit,
+                0,
+                SpriteMeshType.FullRect);
+            sprite.name = texture.name;
+            return sprite;
+        }
+
+        private static bool LargestInk(bool[] ink, int w, int h, out int minX, out int minY, out int maxX, out int maxY)
+        {
+            minX = minY = maxX = maxY = 0;
+            var seen = new bool[ink.Length];
+            var stack = new Stack<int>();
+            int best = 0;
+            bool found = false;
+            for (int start = 0; start < ink.Length; start++)
+            {
+                if (!ink[start] || seen[start]) continue;
+                int count = 0;
+                int x0 = w, y0 = h, x1 = -1, y1 = -1;
+                stack.Push(start);
+                seen[start] = true;
+                while (stack.Count > 0)
+                {
+                    int index = stack.Pop();
+                    int x = index % w;
+                    int y = index / w;
+                    count++;
+                    if (x < x0) x0 = x;
+                    if (y < y0) y0 = y;
+                    if (x > x1) x1 = x;
+                    if (y > y1) y1 = y;
+                    for (int oy = -1; oy <= 1; oy++)
+                    for (int ox = -1; ox <= 1; ox++)
+                    {
+                        if (ox == 0 && oy == 0) continue;
+                        int nx = x + ox;
+                        int ny = y + oy;
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                        int next = nx + ny * w;
+                        if (!ink[next] || seen[next]) continue;
+                        seen[next] = true;
+                        stack.Push(next);
+                    }
+                }
+
+                if (count <= best) continue;
+                best = count;
+                minX = x0;
+                minY = y0;
+                maxX = x1;
+                maxY = y1;
+                found = true;
+            }
+            return found;
         }
 
         private Sprite GetFallbackSprite()

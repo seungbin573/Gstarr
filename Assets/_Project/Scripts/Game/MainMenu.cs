@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -24,6 +25,7 @@ namespace Gstarr.Game
         private readonly Text[] leaderboardRows = new Text[5];
         private Text leaderboardStatus;
         private float resetStatusTimer;
+        private RectTransform selectCursor;
 
         private void Awake()
         {
@@ -79,6 +81,23 @@ namespace Gstarr.Game
                            || (Keyboard.current != null && (Keyboard.current.upArrowKey.wasPressedThisFrame || Keyboard.current.downArrowKey.wasPressedThisFrame));
                 if (nav) UIFactory.Select(current == mainPanel ? mainFirst : current == stagePanel ? stageFirst : settingsView.FirstSelectable);
             }
+
+            PlaceSelectCursor();
+        }
+
+        private void PlaceSelectCursor()
+        {
+            if (selectCursor == null) return;
+            var selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+            var target = selected != null ? selected.GetComponent<RectTransform>() : null;
+            bool show = current == mainPanel && target != null && target.IsChildOf(mainPanel);
+            selectCursor.gameObject.SetActive(show);
+            if (!show) return;
+
+            Vector3 edge = target.TransformPoint(new Vector3(target.rect.xMin, target.rect.center.y, 0f));
+            selectCursor.position = edge;
+            float bob = Mathf.Sin(Time.unscaledTime * 5f) * 4f;
+            selectCursor.anchoredPosition += new Vector2(-18f + bob, 0f);
         }
 
         private void Back()
@@ -118,32 +137,123 @@ namespace Gstarr.Game
                 UIFactory.Place(logoImage.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(-330f, 220f), new Vector2(1000f, 200f));
             }
 
-            var list = UIFactory.Place(UIFactory.CreateRect("Buttons", mainPanel), new Vector2(0.5f, 0.5f), new Vector2(-330f, -100f), new Vector2(420f, 220f));
-            UIFactory.AddVerticalLayout(list, 24f);
+            var list = UIFactory.Place(UIFactory.CreateRect("Buttons", mainPanel), new Vector2(0.5f, 0.5f), new Vector2(-330f, -80f), new Vector2(520f, 460f));
+            var layout = UIFactory.AddVerticalLayout(list, 18f);
+            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
 
-            var start = UIFactory.CreateButton("Start", list, "START", 44, () =>
-            {
-                if (IsResetShortcutPressed()) return;
-                StageData only = null;
-                int playable = 0;
-                foreach (var stage in StageData.LoadAll())
-                {
-                    if (!stage.IsPlayable) continue;
-                    playable++;
-                    only = stage;
-                }
-                if (playable == 1) StageSession.Play(only);
-                else Show(stagePanel, stageFirst);
-            });
-            UIFactory.SetHeight(start, 90f);
-            var settings = UIFactory.CreateButton("Settings", list, "SETTINGS", 44, () =>
+            var startArt = LoadMenuArt("game start.png");
+            var quitArt = LoadMenuArt("quit.png");
+            var selectArt = LoadMenuArt("ｓｅｌｅｃｔ.png");
+
+            var start = startArt != null
+                ? ArtButton("Start", list, startArt, 168f, BeginGame)
+                : UIFactory.CreateButton("Start", list, "START", 44, BeginGame);
+            if (startArt == null) UIFactory.SetHeight(start, 90f);
+
+            var settings = UIFactory.CreateButton("Settings", list, "SETTINGS", 36, () =>
             {
                 if (!IsResetShortcutPressed()) Show(settingsPanel, settingsView.FirstSelectable);
             });
-            UIFactory.SetHeight(settings, 90f);
+            UIFactory.SetHeight(settings, 72f);
+
+            var quit = quitArt != null
+                ? ArtButton("Quit", list, quitArt, 112f, QuitGame)
+                : UIFactory.CreateButton("Quit", list, "QUIT", 44, QuitGame);
+            if (quitArt == null) UIFactory.SetHeight(quit, 90f);
             mainFirst = start;
 
+            if (selectArt != null)
+            {
+                var cursor = UIFactory.CreateImage("Select", mainPanel, Color.white);
+                cursor.sprite = selectArt;
+                cursor.preserveAspect = true;
+                cursor.raycastTarget = false;
+                selectCursor = cursor.rectTransform;
+                selectCursor.anchorMin = selectCursor.anchorMax = new Vector2(0.5f, 0.5f);
+                selectCursor.pivot = new Vector2(1f, 0.5f);
+                selectCursor.sizeDelta = new Vector2(92f, 136f);
+                selectCursor.SetAsLastSibling();
+            }
+
             BuildLeaderboard(mainPanel);
+        }
+
+        private void BeginGame()
+        {
+            if (IsResetShortcutPressed()) return;
+            StageData only = null;
+            int playable = 0;
+            foreach (var stage in StageData.LoadAll())
+            {
+                if (!stage.IsPlayable) continue;
+                playable++;
+                only = stage;
+            }
+            if (playable == 1) StageSession.Play(only);
+            else Show(stagePanel, stageFirst);
+        }
+
+        private static void QuitGame()
+        {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
+        }
+
+        private Button ArtButton(string name, Transform parent, Sprite art, float height, UnityEngine.Events.UnityAction onClick)
+        {
+            var rt = UIFactory.CreateRect(name, parent);
+            var image = rt.gameObject.AddComponent<Image>();
+            image.sprite = art;
+            image.preserveAspect = true;
+            image.color = Color.white;
+            var button = rt.gameObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            var colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = Color.white;
+            colors.selectedColor = Color.white;
+            colors.pressedColor = new Color(0.82f, 0.82f, 0.82f, 1f);
+            colors.disabledColor = new Color(1f, 1f, 1f, 0.35f);
+            colors.fadeDuration = 0.04f;
+            button.colors = colors;
+            button.onClick.AddListener(() =>
+            {
+                GameAudio.Play(GameAudio.Id.Ui, 0.7f);
+                onClick();
+            });
+            var nav = button.navigation;
+            nav.mode = Navigation.Mode.Automatic;
+            button.navigation = nav;
+            UIFactory.SetHeight(button, height);
+            return button;
+        }
+
+        private static Sprite LoadMenuArt(string fileName)
+        {
+            string full = Path.Combine(Directory.GetCurrentDirectory(), "Assets/arts/UI", fileName);
+            if (!File.Exists(full)) return null;
+            byte[] bytes;
+            try { bytes = File.ReadAllBytes(full); }
+            catch { return null; }
+
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            if (!texture.LoadImage(bytes, false))
+            {
+                Destroy(texture);
+                return null;
+            }
+
+            texture.filterMode = FilterMode.Point;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.name = Path.GetFileNameWithoutExtension(fileName);
+            return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
         }
 
         private void BuildLeaderboard(RectTransform parent)
@@ -151,14 +261,25 @@ namespace Gstarr.Game
             var panel = UIFactory.CreateImage("Leaderboard", parent, UIFactory.PanelColor);
             UIFactory.Place(panel.rectTransform, new Vector2(1f, 0.5f), new Vector2(-290f, 0f), new Vector2(500f, 650f));
 
-            var heading = UIFactory.CreateText("Heading", panel.transform, "LEADERBOARD", 48, style: FontStyle.BoldAndItalic);
-            UIFactory.Place(heading.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -55f), new Vector2(460f, 70f));
-            heading.color = new Color(1f, 0.6f, 0.25f);
+            var listArt = LoadMenuArt("ｒａｎｋ ｌｉｓｔ.png");
+            if (listArt != null)
+            {
+                var headingArt = UIFactory.CreateImage("HeadingArt", panel.transform, Color.white);
+                headingArt.sprite = listArt;
+                headingArt.preserveAspect = true;
+                UIFactory.Place(headingArt.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -78f), new Vector2(360f, 150f));
+            }
+            else
+            {
+                var heading = UIFactory.CreateText("Heading", panel.transform, "LEADERBOARD", 48, style: FontStyle.BoldAndItalic);
+                UIFactory.Place(heading.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -55f), new Vector2(460f, 70f));
+                heading.color = new Color(1f, 0.6f, 0.25f);
+            }
 
             for (int i = 0; i < 5; i++)
             {
                 leaderboardRows[i] = UIFactory.CreateText("Rank" + (i + 1), panel.transform, "", 28, TextAnchor.MiddleLeft, FontStyle.Normal);
-                UIFactory.Place(leaderboardRows[i].rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -145f - i * 88f), new Vector2(420f, 76f));
+                UIFactory.Place(leaderboardRows[i].rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -248f - i * 70f), new Vector2(420f, 64f));
             }
 
             leaderboardStatus = UIFactory.CreateText("ResetHint", panel.transform, "SHIFT + ENTER: RESET SCORES", 18, TextAnchor.MiddleCenter, FontStyle.Normal);
