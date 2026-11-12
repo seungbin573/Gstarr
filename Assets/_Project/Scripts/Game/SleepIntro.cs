@@ -9,7 +9,8 @@ namespace Gstarr.Game
 {
     /// <summary>
     /// 스테이지 시작 인트로: 지친 에이든이 잠들며 꿈(스테이지)으로 넘어가는 장면.
-    ///   1) 교실 그림이 천천히 다가오고, dialog 말풍선에 대사가 한 글자씩 나온다.
+    ///   1) 첫 이야기는 picture/cb 배경 위에 c1~c6 이 차례로 붙는 만화다.
+    ///      그림이 없으면 예전처럼 교실이 다가오고, dialog 말풍선에 대사가 한 글자씩 나온다.
     ///      이름판은 에이든, 초상화(playerdialog)는 말풍선 위에 붙는다.
     ///      메트로놈 소리(째깍)가 곡 박자로 시작해 점점 느려지고 작아진다.
     ///   2) 대사마다 눈꺼풀이 무겁게 감겼다 뜨고, 마지막 대사 뒤 완전히 감긴다.
@@ -46,6 +47,11 @@ namespace Gstarr.Game
         private RectTransform sceneLayer;
         private Image fadeBlack;
         private Image photo;
+        private Image[] comicPanels;
+        private Image comicBackground;
+        private Texture2D[] loadedPictures;
+        private bool comicSleepy;
+        private bool comicSleepTextShown;
         private Image dim;
         private Image vignette;
         private Image dreamTint;
@@ -143,28 +149,38 @@ namespace Gstarr.Game
             // 이야기가 시작되는 순간 곡을 튼다. 눈을 떠도 그 재생은 끊지 않는다.
             Gstarr.Rhythm.RhythmConductor.Instance?.BeginWithStory();
 
-            // 0. 어둠에서 교실이 밝아진다
+            // 0. 어둠에서 첫 장면이 밝아진다. 만화가 있으면 그 페이지를, 없으면 교실을 쓴다.
             SetLids(0f);
             sceneLayer.gameObject.SetActive(true);
+            bool comic = TryBuildComic();
             zoomDuration = 3f + lines.Length * 3.6f;
             metronomeOn = true;
             StartCoroutine(Metronome());
-            yield return FadeImage(fadeBlack, 1f, 0f, 1.2f);
+            yield return FadeImage(fadeBlack, 1f, 0f, comic ? 1f : 1.2f);
 
-            // 1. 대사 한 줄씩. 줄마다 더 졸리고, 줄 사이에 눈이 무겁게 감겼다 뜬다
-            int n = lines.Length;
-            for (int i = 0; i < n && !skipped; i++)
+            if (comic)
             {
-                drowsyTarget = 0.85f * (i + 1) / Mathf.Max(1, n);
-                yield return TypeLine(lines[i], i == n - 1);
-                if (skipped) break;
-
-                if (i < n - 1)
+                photoStill = true;
+                photo.gameObject.SetActive(false);
+                yield return PlayComic(lines);
+            }
+            else
+            {
+                // 1. 대사 한 줄씩. 줄마다 더 졸리고, 줄 사이에 눈이 무겁게 감겼다 뜬다
+                int n = lines.Length;
+                for (int i = 0; i < n && !skipped; i++)
                 {
-                    float depth = Mathf.Lerp(0.4f, 0.75f, n > 2 ? i / (float)(n - 2) : 0f);
-                    float rest = Mathf.Lerp(0.05f, 0.22f, n > 2 ? i / (float)(n - 2) : 0f);
-                    StopBlink();
-                    blinkRoutine = StartCoroutine(Blink(depth, rest));
+                    drowsyTarget = 0.85f * (i + 1) / Mathf.Max(1, n);
+                    yield return TypeLine(lines[i], i == n - 1);
+                    if (skipped) break;
+
+                    if (i < n - 1)
+                    {
+                        float depth = Mathf.Lerp(0.4f, 0.75f, n > 2 ? i / (float)(n - 2) : 0f);
+                        float rest = Mathf.Lerp(0.05f, 0.22f, n > 2 ? i / (float)(n - 2) : 0f);
+                        StopBlink();
+                        blinkRoutine = StartCoroutine(Blink(depth, rest));
+                    }
                 }
             }
 
@@ -175,8 +191,9 @@ namespace Gstarr.Game
             yield return AnimateLid(lid, 1f, skipped ? 0.3f : 1.6f, EaseInOut);
             metronomeOn = false;
             sceneLayer.gameObject.SetActive(false);
+            ClearComic();
 
-            if (!skipped)
+            if (!skipped && !comicSleepTextShown)
             {
                 yield return Wait(0.5f);
                 yield return ShowCenter(SleepText, 0.5f, 1.0f, 0.5f);
@@ -187,6 +204,186 @@ namespace Gstarr.Game
                 yield return ContinueDream();
 
             // 3. 눈은 감긴 채로 넘긴다. 3, 2, 1 은 Play 가 이어서 맞춘다.
+        }
+
+        /// <summary>cb 를 바닥에 두고 c1~c6 을 자기 자리에 한 장씩 붙인다. 앞의 컷은 남는다.</summary>
+        private IEnumerator PlayComic(string[] lines)
+        {
+            int lineCount = lines != null ? lines.Length : 0;
+            int panelCount = comicPanels != null ? comicPanels.Length : 0;
+            int beats = Mathf.Max(lineCount, panelCount);
+            for (int i = 0; i < beats && !skipped; i++)
+            {
+                if (i < panelCount)
+                    yield return RevealPanel(comicPanels[i]);
+                if (skipped) yield break;
+
+                // c5(침대)부터 눈이 무거워진다. 그 전 컷은 또렷하게 둔다.
+                if (i >= 4)
+                    BeginDrowsy(i);
+
+                if (i == 4)
+                {
+                    if (caption.alpha > 0.01f)
+                        yield return FadeGroup(caption, caption.alpha, 0f, 0.2f);
+                    comicSleepTextShown = true;
+                    yield return ShowCenter(SleepText, 0.35f, 1.0f, 0.4f);
+                    continue;
+                }
+
+                string captionLine = CaptionForComicBeat(i, lines);
+                bool lastBeat = i == beats - 1;
+                if (captionLine != null)
+                {
+                    if (caption.alpha < 0.99f)
+                        yield return FadeGroup(caption, caption.alpha, 1f, 0.2f);
+                    yield return TypeLine(captionLine, lastBeat);
+                }
+                else
+                {
+                    if (caption.alpha > 0.01f)
+                        yield return FadeGroup(caption, caption.alpha, 0f, 0.25f);
+                    yield return HoldBeat(i == panelCount - 1 ? 2.4f : 1.35f);
+                }
+            }
+        }
+
+        /// <summary>c1 은 첫 마디, c2 는 잠들자는 말, c3·c4 는 "..." 이다.</summary>
+        private static string CaptionForComicBeat(int index, string[] lines)
+        {
+            if (index == 2 || index == 3) return "...";
+            if (lines == null) return null;
+            if (index == 0 && lines.Length > 0) return lines[0];
+            if (index == 1 && lines.Length > 2) return lines[2];
+            if (index == 1 && lines.Length > 1) return lines[1];
+            return null;
+        }
+
+        private void BeginDrowsy(int panelIndex)
+        {
+            float t = panelIndex <= 4 ? 0f : 1f;
+            drowsyTarget = Mathf.Lerp(0.5f, 0.88f, t);
+            comicSleepy = true;
+            StopBlink();
+            blinkRoutine = StartCoroutine(Blink(Mathf.Lerp(0.5f, 0.78f, t), Mathf.Lerp(0.14f, 0.32f, t)));
+        }
+
+        private IEnumerator RevealPanel(Image panel)
+        {
+            if (panel == null) yield break;
+            for (float t = 0f; t < 0.22f; t += Time.unscaledDeltaTime)
+            {
+                if (SkipPressed())
+                {
+                    skipped = true;
+                    panel.color = Color.white;
+                    yield break;
+                }
+                if (AdvancePressed()) break;
+                panel.color = new Color(1f, 1f, 1f, EaseOut(t / 0.22f));
+                yield return null;
+            }
+            panel.color = Color.white;
+        }
+
+        private IEnumerator HoldBeat(float seconds)
+        {
+            for (float h = 0f; h < seconds; h += Time.unscaledDeltaTime)
+            {
+                if (SkipPressed()) { skipped = true; yield break; }
+                if (AdvancePressed()) break;
+                yield return null;
+            }
+        }
+
+        private bool TryBuildComic()
+        {
+            string[] files = { "cb.png", "c1.png", "c2.png", "c3.png", "c4.png", "c5.png", "c6.png" };
+            var sprites = new Sprite[files.Length];
+            loadedPictures = new Texture2D[files.Length];
+            for (int i = 0; i < files.Length; i++)
+            {
+                sprites[i] = LoadPicture(files[i], out loadedPictures[i]);
+                if (sprites[i] == null) return false;
+            }
+
+            int insert = dim.transform.GetSiblingIndex();
+            var background = UIFactory.CreateImage("ComicBg", sceneLayer, Color.white);
+            UIFactory.Stretch(background.rectTransform);
+            background.sprite = sprites[0];
+            background.transform.SetSiblingIndex(insert);
+            comicBackground = background;
+
+            comicPanels = new Image[files.Length - 1];
+            for (int i = 0; i < comicPanels.Length; i++)
+            {
+                var panel = UIFactory.CreateImage("Comic" + (i + 1), sceneLayer, new Color(1f, 1f, 1f, 0f));
+                UIFactory.Stretch(panel.rectTransform);
+                panel.sprite = sprites[i + 1];
+                panel.transform.SetSiblingIndex(insert + 1 + i);
+                comicPanels[i] = panel;
+            }
+
+            // c4 를 오른쪽 빈 칸에 두고, c3 는 원래 가운데 자리에 둔다. 나오는 순서는 그대로다.
+            const float rightShift = 569f / 1672f;
+            var c4 = comicPanels[3].rectTransform;
+            c4.anchorMin = new Vector2(rightShift, 0f);
+            c4.anchorMax = new Vector2(1f + rightShift, 1f);
+            c4.offsetMin = Vector2.zero;
+            c4.offsetMax = Vector2.zero;
+            return true;
+        }
+
+        private void ClearComic()
+        {
+            comicSleepy = false;
+            if (comicBackground != null)
+            {
+                Destroy(comicBackground.gameObject);
+                comicBackground = null;
+            }
+            if (comicPanels != null)
+            {
+                for (int i = 0; i < comicPanels.Length; i++)
+                    if (comicPanels[i] != null) Destroy(comicPanels[i].gameObject);
+                comicPanels = null;
+            }
+            if (photo != null)
+            {
+                photo.gameObject.SetActive(true);
+                photo.color = Color.white;
+                photo.rectTransform.localScale = Vector3.one;
+            }
+        }
+
+        private static Sprite LoadPicture(string fileName, out Texture2D texture)
+        {
+            texture = null;
+            string full = Path.Combine(Application.dataPath, "arts", "picture", fileName);
+            if (!File.Exists(full)) return null;
+            byte[] bytes;
+            try { bytes = File.ReadAllBytes(full); }
+            catch { return null; }
+
+            texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            if (!texture.LoadImage(bytes, false))
+            {
+                UnityEngine.Object.Destroy(texture);
+                texture = null;
+                return null;
+            }
+
+            texture.filterMode = FilterMode.Bilinear;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.name = Path.GetFileNameWithoutExtension(fileName);
+            return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        private void OnDestroy()
+        {
+            if (loadedPictures == null) return;
+            for (int i = 0; i < loadedPictures.Length; i++)
+                if (loadedPictures[i] != null) Destroy(loadedPictures[i]);
         }
 
         private IEnumerator ContinueDream()
@@ -506,6 +703,11 @@ namespace Gstarr.Game
                 // 졸면서 고개가 까딱이는 느낌
                 photo.rectTransform.anchoredPosition = new Vector2(0f, Mathf.Sin(swayTime * 0.9f) * 7f * drowsy);
                 photo.color = Color.Lerp(Color.white, new Color(0.78f, 0.74f, 0.92f), drowsy);
+                dim.color = new Color(0f, 0f, 0f, 0.05f + 0.35f * drowsy);
+                vignette.color = new Color(0f, 0f, 0f, 0.35f + 0.6f * drowsy);
+            }
+            else if (comicSleepy && dim != null)
+            {
                 dim.color = new Color(0f, 0f, 0f, 0.05f + 0.35f * drowsy);
                 vignette.color = new Color(0f, 0f, 0f, 0.35f + 0.6f * drowsy);
             }
