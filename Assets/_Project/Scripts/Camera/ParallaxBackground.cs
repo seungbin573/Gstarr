@@ -1,11 +1,12 @@
 using Gstarr.Game;
+using Gstarr.Player;
 using UnityEngine;
 
 namespace Gstarr.CameraSystem
 {
     /// <summary>
     /// 화면보다 큰 원경 한 장을 깔고, 카메라가 그 위를 지나가는 것처럼 위치를 옮긴다.
-    /// 그림의 오른쪽 끝에 닿으면 지금 배경을 페이드 아웃하고 다음 배경을 드러낸다.
+    /// 플레이어가 구간 끝에 닿으면 지금 배경을 페이드 아웃하고 다음 배경을 드러낸다.
     /// 마지막 배경의 끝에서는 그 장면을 유지한다.
     /// </summary>
     [DisallowMultipleComponent]
@@ -51,6 +52,7 @@ namespace Gstarr.CameraSystem
         private SpriteRenderer front;
         private SpriteRenderer back;
         private Camera cam;
+        private Transform player;
         private float originX;
         private bool hasOrigin;
         private int index;
@@ -67,14 +69,14 @@ namespace Gstarr.CameraSystem
             return backgrounds[backgroundIndex];
         }
 
-        /// <summary>카메라가 있는 배경으로 바로 맞춘다. 페이드로 중간 그림을 훑지 않는다.</summary>
+        /// <summary>플레이어가 있는 배경으로 바로 맞춘다. 페이드로 중간 그림을 훑지 않는다.</summary>
         public void CatchUp()
         {
             if (cam == null) cam = Camera.main;
             if (!hasOrigin || cam == null || backgrounds == null || backgrounds.Length == 0) return;
             float segment = Mathf.Max(1f, segmentDistance);
             int last = backgrounds.Length - 1;
-            int target = Mathf.Clamp(Mathf.FloorToInt(Mathf.Max(0f, cam.transform.position.x - originX) / segment), 0, last);
+            int target = Mathf.Clamp(Mathf.FloorToInt(Mathf.Max(0f, ProgressX() - originX) / segment), 0, last);
             if (target == index && fadeDir == 0 && fade <= 0f) return;
             index = target;
             fade = 0f;
@@ -140,21 +142,32 @@ namespace Gstarr.CameraSystem
             {
                 resumeApplied = true;
                 int last = backgrounds.Length - 1;
-                float traveled = Mathf.Max(0f, cam.transform.position.x - originX);
+                float traveled = Mathf.Max(0f, ProgressX() - originX);
                 index = Mathf.Min(Mathf.FloorToInt(traveled / segment), last);
                 fade = 0f;
                 fadeDir = 0;
             }
 
             EnsureLayers();
-            UpdateFade(cam.transform.position.x, segment);
+            UpdateFade(ProgressX(), segment);
             Draw(segment);
         }
 
-        private void UpdateFade(float cameraX, float span)
+        private float ProgressX()
+        {
+            if (player == null)
+            {
+                var body = FindAnyObjectByType<PlayerController>();
+                if (body != null) player = body.transform;
+            }
+
+            return player != null ? player.position.x : cam.transform.position.x;
+        }
+
+        private void UpdateFade(float progressX, float span)
         {
             int last = backgrounds.Length - 1;
-            float traveled = Mathf.Max(0f, cameraX - originX);
+            float traveled = Mathf.Max(0f, progressX - originX);
             int target = Mathf.Min(Mathf.FloorToInt(traveled / span), last);
             float step = Time.deltaTime / Mathf.Max(0.05f, fadeDuration);
 

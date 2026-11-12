@@ -38,6 +38,8 @@ namespace Gstarr.Combat
         private bool splitAfterGlory;
         private float dashSpeed = NormalDashSpeed;
         private float dashDuration = DashSeconds;
+        private bool introHold;
+        private bool introHitless;
         private float gravity;
         private float popLeft;
         private float popPush;
@@ -82,7 +84,7 @@ namespace Gstarr.Combat
 
             if (!actor.CanAct)
             {
-                Enter(Phase.Idle);
+                if (!introHold) Enter(Phase.Idle);
                 return;
             }
 
@@ -101,14 +103,21 @@ namespace Gstarr.Combat
                 case Phase.Windup:
                     if (elapsed >= WindupSeconds)
                     {
-                        Enter(CanDash() ? Phase.Dash : Phase.Recover);
-                        if (phase == Phase.Dash) GameAudio.Play(GameAudio.Id.Dash, distorted ? 0.85f : 0.6f);
+                        bool dash = CanDash();
+                        Enter(dash ? Phase.Dash : Phase.Recover);
+                        if (dash) GameAudio.Play(GameAudio.Id.Dash, distorted ? 0.85f : 0.6f);
+                        else if (introHold) IntroChargeFinished = true;
                     }
                     break;
                 case Phase.Dash:
-                    if (elapsed >= dashDuration || !CanDash()) Enter(Phase.Recover);
+                    if (elapsed >= dashDuration || !CanDash())
+                    {
+                        Enter(Phase.Recover);
+                        if (introHold) IntroChargeFinished = true;
+                    }
                     break;
                 case Phase.Recover:
+                    if (introHold) break;
                     if (elapsed >= RecoverSeconds) Enter(Phase.Idle);
                     break;
             }
@@ -176,6 +185,48 @@ namespace Gstarr.Combat
             if (phase == Phase.Dash) index = elapsed < dashDuration * 0.4f ? 1 : 2;
             visual.sprite = (phase == Phase.Windup || phase == Phase.Dash) && charge.Length > 0
                 ? charge[Mathf.Min(index, charge.Length - 1)] : idle;
+        }
+
+        /// <summary>첫 만남 연출이 끝나 돌진 자세에서 멈춘 상태.</summary>
+        public bool IntroChargeFinished { get; private set; }
+
+        /// <summary>대사가 나오는 동안 그 자리에 세워 둔다.</summary>
+        public void HoldForIntro()
+        {
+            IntroChargeFinished = false;
+            introHold = true;
+            introHitless = true;
+            Enter(Phase.Idle);
+        }
+
+        /// <summary>
+        /// 처음 만났을 때 한 번만 플레이어 쪽으로 돌진한다.
+        /// 몸에 닿아도 데미지는 주지 않고, ReleaseIntroHold 전까지 다시 뛰지 않는다.
+        /// </summary>
+        public void BeginIntroCharge(Transform player)
+        {
+            IntroChargeFinished = false;
+            introHold = true;
+            introHitless = true;
+            if (player != null)
+            {
+                direction = player.position.x >= transform.position.x ? 1 : -1;
+                if (visual != null) visual.flipX = direction < 0;
+            }
+
+            float gap = player != null ? Mathf.Abs(player.position.x - transform.position.x) : 3f;
+            float travel = Mathf.Clamp(gap - 1.15f, 1.4f, 7.6f);
+            dashDuration = Mathf.Clamp(travel / Mathf.Max(1f, dashSpeed), 0.12f, 0.5f);
+            Enter(Phase.Windup);
+        }
+
+        /// <summary>연출 대기가 끝났다. 다음부터는 보통 토끼처럼 움직인다.</summary>
+        public void ReleaseIntroHold()
+        {
+            introHold = false;
+            introHitless = false;
+            dashDuration = twin ? TwinDashSeconds : DashSeconds;
+            if (phase != Phase.Idle) Enter(Phase.Idle);
         }
 
         /// <summary>분열로 태어난 토끼. 작게 튀어나온 뒤 노말 토끼처럼 움직인다.</summary>
@@ -319,6 +370,7 @@ namespace Gstarr.Combat
             {
                 if (hit || !StruckFromFront(collision)) return;
                 hit = true;
+                if (introHitless) return;
                 health.TakeEnemyHit(dashDamage, new Vector2(direction, 0.35f));
                 return;
             }
@@ -327,6 +379,7 @@ namespace Gstarr.Combat
                 if (collision.GetContact(i).normal.x * direction < -0.5f)
                 {
                     Enter(Phase.Recover);
+                    if (introHold) IntroChargeFinished = true;
                     return;
                 }
         }

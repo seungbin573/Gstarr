@@ -12,10 +12,36 @@ namespace Gstarr.Game
             public string Body;
         }
 
+        public const string Speaker = "에이든";
+
+        /// <summary>첫 장면. 교실에서 잠들기 전에 에이든이 하는 말.</summary>
+        public static readonly string[] DrowsyLines =
+        {
+            "아 힘들어.. 지친다..",
+            "...",
+            "그냥 한번만.. 제대로 자자..",
+        };
+
+        /// <summary>다음 장면. 꿈에서 눈을 뜬 뒤 에이든이 하는 말.</summary>
+        public static readonly string[] DreamLines =
+        {
+            "?? 뭐지.. 꿈인가.. 꿈인데 너무 현실적으로 몸이 느껴진다..",
+            "(주머니속에 무언가 있다)",
+            "엥? 이거 내 박스커터칼 아니야..? 이게 왜 여기있지?",
+            "그리고 웬 껌총이...",
+        };
+
+        /// <summary>첫 토끼를 만났을 때. 화면이 확대된 뒤 토끼가 돌진하고, 그 다음 전투 설명이 열린다.</summary>
+        public static readonly string[] BunnyMeetLines =
+        {
+            "뭐지? 토끼인가? 그런데 조금 이상한데...",
+            "으악!",
+        };
+
         public static readonly Beat Opening = new Beat
         {
-            Title = "임시 · 뒤틀린 학교",
-            Body = "(임시) 눈을 뜨자 에이든은 뒤틀린 학교 복도에 서 있었다.\n(임시) 형광등 아래, 복도가 끝없이 이어진다."
+            Title = Speaker,
+            Body = string.Join("\n", DreamLines)
         };
 
         /// <summary>

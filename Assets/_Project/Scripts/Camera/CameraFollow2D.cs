@@ -22,6 +22,7 @@ namespace Gstarr.CameraSystem
         private float forwardBoost;
         private Camera cam;
         private Transform focusTarget;
+        private Vector3 focusOffset;
         private bool focusing;
         private float previousSize;
         private float shakeTime;
@@ -61,14 +62,30 @@ namespace Gstarr.CameraSystem
 
         public void BeginFocus(Transform subject, float orthographicSize)
         {
+            BeginFocus(subject, orthographicSize, Vector3.zero);
+        }
+
+        public void BeginFocus(Transform subject, float orthographicSize, Vector3 worldOffset)
+        {
             if (subject == null) return;
             if (cam == null) cam = GetComponent<Camera>();
             if (!focusing && cam != null) previousSize = cam.orthographicSize;
             focusing = true;
             focusTarget = subject;
+            focusOffset = worldOffset;
             velocity = Vector3.zero;
             if (cam != null) cam.orthographicSize = Mathf.Max(0.01f, orthographicSize);
         }
+
+        /// <summary>이미 붙은 초점의 확대만 바꾼다. 위치 보간은 그대로 둔다.</summary>
+        public void SetFocusSize(float orthographicSize)
+        {
+            if (!focusing) return;
+            if (cam == null) cam = GetComponent<Camera>();
+            if (cam != null) cam.orthographicSize = Mathf.Max(0.01f, orthographicSize);
+        }
+
+        public bool IsFocusing => focusing;
 
         public void EndFocus()
         {
@@ -76,6 +93,7 @@ namespace Gstarr.CameraSystem
             if (cam != null) cam.orthographicSize = previousSize;
             focusing = false;
             focusTarget = null;
+            focusOffset = Vector3.zero;
             velocity = Vector3.zero;
         }
 
@@ -95,7 +113,7 @@ namespace Gstarr.CameraSystem
             if (focusing && focusTarget == null) EndFocus();
             if (focusing)
             {
-                Vector3 focusPosition = focusTarget.position;
+                Vector3 focusPosition = focusTarget.position + focusOffset;
                 focusPosition.z = transform.position.z;
                 transform.position = Vector3.SmoothDamp(transform.position, focusPosition,
                     ref velocity, smoothTime, Mathf.Infinity, Time.unscaledDeltaTime) + ShakeOffset();

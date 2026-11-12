@@ -46,9 +46,9 @@ namespace Gstarr.Player
 
             const float bodyX = 997f;
             float bodyY = Top(1524f);
-            bootBack = LimbAt("BootBack", Folder + "무제320_20261104171405.png", 944f, Top(1632f), order, rig, FootX, FootY, true);
-            // Both source boots point left. Mirror around each joint so +X faces right; the player root handles left turns.
-            bootFront = LimbAt("BootFront", Folder + "무제320_20261104171402.png", 1044f, Top(1590f), order + 1, rig, FootX, FootY, true);
+            // 양쪽 다 뒤집어 발끝이 +X를 보게 두고, 종아리만 안쪽 기울기만큼 바깥으로 돌려 A자로 선다.
+            bootBack = LimbAt("BootBack", Folder + "무제320_20261104171405.png", 944f, Top(1632f), order, rig, FootX, FootY, true, openStance: true);
+            bootFront = LimbAt("BootFront", Folder + "무제320_20261104171402.png", 1044f, Top(1590f), order + 1, rig, FootX, FootY, true, openStance: true);
             hoodie = LimbAt("Hoodie", Folder + "무제320_20261104171445.png", bodyX, bodyY, order + 3, rig, FootX, FootY);
             shorts = LimbAt("Shorts", Folder + "무제320_20261104171437.png", 992f, Top(1500f), order + 4, hoodie.Transform, bodyX, bodyY);
             // Feet stay in rig space: breathing and hip rotation must not tilt the soles.
@@ -251,9 +251,9 @@ namespace Gstarr.Player
             return new Vector3((bottom.x - top.x) / Ppu, (bottom.y - top.y) / Ppu, 0f);
         }
 
-        private Limb LimbAt(string name, string path, float jointX, float jointY, int order, Transform parent, float originX, float originY, bool flipX = false, float shiftX = 0f)
+        private Limb LimbAt(string name, string path, float jointX, float jointY, int order, Transform parent, float originX, float originY, bool flipX = false, float shiftX = 0f, bool openStance = false)
         {
-            var sprite = PlayerArt.LoadSheet(path, jointX, jointY, Ppu, flipX);
+            var sprite = PlayerArt.LoadSheet(path, jointX, jointY, Ppu, flipX, openStance);
             var local = new Vector3((jointX - originX) / Ppu + shiftX, (jointY - originY) / Ppu, 0f);
             return Place(name, sprite, local, order, parent);
         }

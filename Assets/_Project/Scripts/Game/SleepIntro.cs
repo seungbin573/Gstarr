@@ -1,4 +1,5 @@
 using System.Collections;
+using System.IO;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -7,8 +8,9 @@ using UnityEngine.UI;
 namespace Gstarr.Game
 {
     /// <summary>
-    /// 스테이지 시작 인트로: 음악 시간에 졸다가 잠들어 꿈(스테이지)으로 넘어가는 장면.
-    ///   1) 교실 그림이 천천히 에이든 쪽으로 다가오고, 대사가 한 글자씩 나온다.
+    /// 스테이지 시작 인트로: 지친 에이든이 잠들며 꿈(스테이지)으로 넘어가는 장면.
+    ///   1) 교실 그림이 천천히 다가오고, dialog 말풍선에 대사가 한 글자씩 나온다.
+    ///      이름판은 에이든, 초상화(playerdialog)는 말풍선 위에 붙는다.
     ///      메트로놈 소리(째깍)가 곡 박자로 시작해 점점 느려지고 작아진다.
     ///   2) 대사마다 눈꺼풀이 무겁게 감겼다 뜨고, 마지막 대사 뒤 완전히 감긴다.
     ///   3) 어둠 속 "Zzz..." 뒤 꿈 소리가 퍼지고, 눈을 뜨면 보라빛 꿈속(스테이지)이다.
@@ -113,7 +115,7 @@ namespace Gstarr.Game
         {
             var go = new GameObject("SleepIntro");
             var intro = go.AddComponent<SleepIntro>();
-            intro.Build(image, "해냈다!");
+            intro.Build(image, StageStory.Speaker);
             yield return intro.StartCoroutine(intro.RunClear(lines ?? new string[0]));
             reveal?.Invoke();
             yield return intro.StartCoroutine(FadeGroup(intro.rootGroup, 1f, 0f, intro.skipped ? 0.25f : 0.55f));
@@ -202,7 +204,7 @@ namespace Gstarr.Game
                 yield return AnimateLid(1f, 0.18f, 1.15f, EaseOut);
             }
 
-            if (titleText != null) titleText.text = string.IsNullOrEmpty(dreamTitle) ? "" : dreamTitle;
+            if (titleText != null) titleText.text = string.IsNullOrEmpty(dreamTitle) ? StageStory.Speaker : dreamTitle;
             yield return FadeGroup(caption, caption.alpha, 1f, 0.35f);
             for (int i = 0; i < dreamLines.Length && !skipped; i++)
                 yield return TypeLine(dreamLines[i], i == dreamLines.Length - 1);
@@ -570,21 +572,69 @@ namespace Gstarr.Game
             topLid = MakeLid("TopLid", root, true, out topSolid);
             bottomLid = MakeLid("BottomLid", root, false, out bottomSolid);
 
-            // 자막
+            // 자막. dialog.png 가 말풍선, playerdialog.png 가 그 위에서 말하는 에이든.
+            const float dialogWidth = 1500f;
+            const float dialogHeight = 325f; // 1500 * 167 / 770
+            const float dialogBottom = 36f;
             var captionRt = UIFactory.Stretch(UIFactory.CreateRect("Caption", root));
             caption = captionRt.gameObject.AddComponent<CanvasGroup>();
             caption.interactable = false;
             caption.blocksRaycasts = false;
-            var bar = UIFactory.CreateImage("CaptionBg", captionRt, new Color(0.015f, 0.02f, 0.04f, 0.8f));
-            UIFactory.Place(bar.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 30f), new Vector2(1640f, 240f));
-            titleText = UIFactory.CreateText("Title", captionRt, title ?? "", 28, TextAnchor.MiddleLeft, FontStyle.Bold);
-            UIFactory.Place(titleText.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 212f), new Vector2(1560f, 44f));
-            titleText.color = new Color(1f, 0.75f, 0.35f);
-            bodyText = UIFactory.CreateText("Body", captionRt, "", 34, TextAnchor.MiddleLeft, FontStyle.Normal);
-            UIFactory.Place(bodyText.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 110f), new Vector2(1560f, 90f));
-            promptText = UIFactory.CreateText("Prompt", captionRt, "", 20, TextAnchor.MiddleRight, FontStyle.Bold);
-            UIFactory.Place(promptText.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 48f), new Vector2(1560f, 30f));
-            promptText.color = new Color(1f, 1f, 1f, 0.6f);
+
+            var dialog = UIFactory.CreateImage("Dialog", captionRt, Color.white);
+            var dialogSprite = LoadDialogArt("dialog.png", false);
+            if (dialogSprite != null)
+            {
+                dialog.sprite = dialogSprite;
+                dialog.preserveAspect = true;
+            }
+            else
+            {
+                dialog.color = new Color(0.22f, 0.16f, 0.32f, 0.92f);
+            }
+            UIFactory.Place(dialog.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, dialogBottom), new Vector2(dialogWidth, dialogHeight));
+
+            var portraitSprite = LoadDialogArt("playerdialog.png", true);
+            if (portraitSprite != null)
+            {
+                var portrait = UIFactory.CreateImage("Portrait", captionRt, Color.white);
+                portrait.sprite = portraitSprite;
+                portrait.preserveAspect = true;
+                float portraitHeight = 300f;
+                float aspect = portraitSprite.rect.width / Mathf.Max(1f, portraitSprite.rect.height);
+                float portraitWidth = portraitHeight * aspect;
+                // 이름판(그림 왼쪽 위) 한가운데 위에 어깨가 걸치도록 붙인다.
+                float namePlateCenterX = -dialogWidth * 0.5f + (125f / 770f) * dialogWidth;
+                float dialogTop = dialogBottom + dialogHeight;
+                UIFactory.Place(
+                    portrait.rectTransform,
+                    new Vector2(0.5f, 0f),
+                    new Vector2(namePlateCenterX, dialogTop - 12f),
+                    new Vector2(portraitWidth, portraitHeight));
+            }
+
+            string speaker = string.IsNullOrEmpty(title) ? StageStory.Speaker : title;
+            titleText = UIFactory.CreateText("Name", captionRt, speaker, 26, TextAnchor.MiddleCenter, FontStyle.Bold);
+            // dialog.png 이름판 중심 (770×167 그림 기준, 왼쪽 위 배너).
+            float nameX = -dialogWidth * 0.5f + (125f / 770f) * dialogWidth;
+            float nameY = dialogBottom + dialogHeight - (16f / 167f) * dialogHeight - 22f;
+            UIFactory.Place(titleText.rectTransform, new Vector2(0.5f, 0f), new Vector2(nameX, nameY), new Vector2(250f, 44f));
+            titleText.color = new Color(0.98f, 0.96f, 1f);
+            var nameOutline = titleText.GetComponent<Outline>();
+            if (nameOutline != null)
+            {
+                nameOutline.effectColor = new Color(0.18f, 0.08f, 0.28f, 0.95f);
+                nameOutline.effectDistance = new Vector2(1.4f, -1.4f);
+            }
+
+            bodyText = UIFactory.CreateText("Body", captionRt, "", 32, TextAnchor.MiddleLeft, FontStyle.Normal);
+            UIFactory.Place(bodyText.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, dialogBottom + 78f), new Vector2(1240f, 156f));
+            bodyText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            bodyText.verticalOverflow = VerticalWrapMode.Truncate;
+            bodyText.lineSpacing = 1.05f;
+            promptText = UIFactory.CreateText("Prompt", captionRt, "", 18, TextAnchor.MiddleRight, FontStyle.Bold);
+            UIFactory.Place(promptText.rectTransform, new Vector2(0.5f, 0f), new Vector2(480f, dialogBottom + 22f), new Vector2(360f, 28f));
+            promptText.color = new Color(1f, 1f, 1f, 0.72f);
 
             centerText = UIFactory.CreateText("Sleep", root, "", 64, TextAnchor.MiddleCenter, FontStyle.BoldAndItalic);
             UIFactory.Place(centerText.rectTransform, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(900f, 160f));
@@ -689,6 +739,65 @@ namespace Gstarr.Game
         {
             t = Mathf.Clamp01(t);
             return 1f - (1f - t) * (1f - t);
+        }
+
+        // Assets/arts/UI 의 말풍선·초상화. 초상화는 빈 칸을 잘라 사람만 남긴다.
+        private static Sprite LoadDialogArt(string fileName, bool cropToOpaque)
+        {
+            string full = Path.Combine(Application.dataPath, "arts", "UI", fileName);
+            if (!File.Exists(full)) return null;
+            byte[] bytes;
+            try { bytes = File.ReadAllBytes(full); }
+            catch { return null; }
+
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            if (!texture.LoadImage(bytes, false))
+            {
+                UnityEngine.Object.Destroy(texture);
+                return null;
+            }
+
+            texture.filterMode = FilterMode.Point;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.name = Path.GetFileNameWithoutExtension(fileName);
+
+            var rect = new Rect(0f, 0f, texture.width, texture.height);
+            var pivot = new Vector2(0.5f, 0.5f);
+            if (cropToOpaque)
+            {
+                var pixels = texture.GetPixels32();
+                int w = texture.width;
+                int h = texture.height;
+                int minX = w;
+                int minY = h;
+                int maxX = -1;
+                int maxY = -1;
+                for (int y = 0; y < h; y++)
+                {
+                    int row = y * w;
+                    for (int x = 0; x < w; x++)
+                    {
+                        if (pixels[row + x].a <= 12) continue;
+                        if (x < minX) minX = x;
+                        if (y < minY) minY = y;
+                        if (x > maxX) maxX = x;
+                        if (y > maxY) maxY = y;
+                    }
+                }
+
+                if (maxX >= minX && maxY >= minY)
+                {
+                    const int pad = 2;
+                    minX = Mathf.Max(0, minX - pad);
+                    minY = Mathf.Max(0, minY - pad);
+                    maxX = Mathf.Min(w - 1, maxX + pad);
+                    maxY = Mathf.Min(h - 1, maxY + pad);
+                    rect = new Rect(minX, minY, maxX - minX + 1, maxY - minY + 1);
+                    pivot = new Vector2(0.5f, 0f);
+                }
+            }
+
+            return Sprite.Create(texture, rect, pivot, 100f);
         }
 
         // 가장자리가 어두운 원형 그림 (코드로 생성)

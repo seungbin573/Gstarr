@@ -329,20 +329,14 @@ namespace Gstarr.Game
             // 잠드는 인트로 (SleepIntro.cs). 예전 정지 컷신으로 돌리려면 아래를 PlayCutscene(...) 으로 바꾸면 된다.
             cutsceneActive = true;
             var background = FindAnyObjectByType<ParallaxBackground>();
-            string[] dreamLines = StageStory.Opening.Body.Split('\n');
             yield return SleepIntro.Play(
                 introCutscene,
-                "에이든의 음악 시간",
-                new[]
-                {
-                    "오후 3시 42분, 에이든은 졸음을 참으려 눈을 비볐다.",
-                    "하지만 선생님의 피아노 소리가 자장가처럼 들려왔다.",
-                    "결국 책상에 엎드린 순간, 교실은 괴물들이 사는 꿈속으로 변했다."
-                },
+                StageStory.Speaker,
+                StageStory.DrowsyLines,
                 conductor != null ? conductor.CountdownInterval : 0.5f,
                 BeginWakeCountdown,
-                StageStory.Opening.Title,
-                dreamLines,
+                StageStory.Speaker,
+                StageStory.DreamLines,
                 background != null ? background.SpriteAt(0) : null);
             wakeOwnsCountdown = false;
             coverUntilWake = false;

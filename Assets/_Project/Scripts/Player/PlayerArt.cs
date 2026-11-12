@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
@@ -6,7 +7,7 @@ namespace Gstarr.Player
     /// <summary>플레이어 파츠와 무기를 파일에서 읽어 발·손 피벗으로 맞춘다.</summary>
     public static class PlayerArt
     {
-        public static Sprite LoadSheet(string assetPath, float pivotX, float pivotY, float pixelsPerUnit, bool flipX = false)
+        public static Sprite LoadSheet(string assetPath, float pivotX, float pivotY, float pixelsPerUnit, bool flipX = false, bool openStance = false)
         {
             var texture = Read(assetPath);
             if (texture == null || pixelsPerUnit <= 0f) return null;
@@ -15,6 +16,7 @@ namespace Gstarr.Player
                 texture = FlipHorizontal(texture);
                 pivotX = texture.width - pivotX;
             }
+            if (openStance) OpenStance(texture, pivotY);
             var sprite = Sprite.Create(
                 texture,
                 new Rect(0f, 0f, texture.width, texture.height),
@@ -24,6 +26,88 @@ namespace Gstarr.Player
                 SpriteMeshType.FullRect);
             sprite.name = texture.name;
             return sprite;
+        }
+
+        /// <summary>
+        /// 뒤집힌 부츠의 종아리를, 지금 안쪽으로 기댄 각도만큼 바깥으로 민다.
+        /// 신발은 통째로 옮기기만 해서 발바닥 기울기는 그대로다.
+        /// </summary>
+        private static void OpenStance(Texture2D texture, float pivotY)
+        {
+            int w = texture.width;
+            int h = texture.height;
+            var src = texture.GetPixels32();
+            int yMin = h;
+            int yMax = -1;
+            var rowMin = new int[h];
+            var rowMax = new int[h];
+            var rowOn = new bool[h];
+            for (int i = 0; i < src.Length; i++)
+            {
+                if (src[i].a <= 40) continue;
+                int x = i % w;
+                int y = i / w;
+                if (!rowOn[y])
+                {
+                    rowOn[y] = true;
+                    rowMin[y] = rowMax[y] = x;
+                }
+                else
+                {
+                    if (x < rowMin[y]) rowMin[y] = x;
+                    if (x > rowMax[y]) rowMax[y] = x;
+                }
+                if (y < yMin) yMin = y;
+                if (y > yMax) yMax = y;
+            }
+
+            if (yMax < yMin) return;
+            var ys = new List<int>();
+            for (int y = yMax; y >= yMin; y--)
+                if (rowOn[y]) ys.Add(y);
+            if (ys.Count < 8) return;
+
+            int mid = ys.Count / 2;
+            var upper = new int[mid];
+            for (int i = 0; i < mid; i++) upper[i] = rowMax[ys[i]] - rowMin[ys[i]];
+            System.Array.Sort(upper);
+            int shaft = upper[mid / 2];
+            int ankle = ys[Mathf.Min(ys.Count - 1, (int)(ys.Count * 0.7f))];
+            for (int i = mid; i < ys.Count; i++)
+            {
+                if (rowMax[ys[i]] - rowMin[ys[i]] <= shaft + 28) continue;
+                ankle = ys[i];
+                break;
+            }
+
+            var shaftRows = new List<int>();
+            for (int i = 0; i < ys.Count; i++)
+                if (ys[i] > ankle + 8) shaftRows.Add(ys[i]);
+            if (shaftRows.Count < 8) return;
+
+            int y0 = shaftRows[Mathf.FloorToInt(shaftRows.Count * 0.15f)];
+            int y1 = shaftRows[Mathf.FloorToInt(shaftRows.Count * 0.9f)];
+            float cx0 = (rowMin[y0] + rowMax[y0]) * 0.5f;
+            float cx1 = (rowMin[y1] + rowMax[y1]) * 0.5f;
+            float lean = Mathf.Atan2(cx1 - cx0, y0 - y1) * Mathf.Rad2Deg;
+            float k = Mathf.Tan(-2f * lean * Mathf.Deg2Rad);
+            float boundary = k * (pivotY - ankle);
+
+            var dst = new Color32[src.Length];
+            for (int y = 0; y < h; y++)
+            {
+                float shift = y > ankle ? k * (pivotY - y) : boundary;
+                int row = y * w;
+                for (int x = 0; x < w; x++)
+                {
+                    int sx = Mathf.RoundToInt(x - shift);
+                    if ((uint)sx >= (uint)w) continue;
+                    dst[row + x] = src[row + sx];
+                }
+            }
+
+            texture.SetPixels32(dst);
+            texture.Apply();
         }
 
         /// <summary>여백을 자르고, pivot01 은 잘린 그림 안에서의 손잡이 위치다. worldLength 는 긴 변.</summary>

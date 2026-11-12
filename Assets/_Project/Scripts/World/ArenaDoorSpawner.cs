@@ -103,6 +103,7 @@ namespace Gstarr.World
             {
                 var room = active.rooms[i];
                 if (room.Contains(a) && room.Contains(b)) return true;
+                if (room.IsLocked && room.Holds(a) && room.Holds(b)) return true;
             }
             return false;
         }
@@ -140,6 +141,14 @@ namespace Gstarr.World
                 }
             }
             return range;
+        }
+
+        internal static void SyncBarrier(DoorGate gate)
+        {
+            if (gate == null || gate.BarrierIndex < 0 || gate.BarrierIndex >= doorBarriers.Count) return;
+            doorBarriers[gate.BarrierIndex] = gate.FaceMoved
+                ? new Vector2(gate.SolidMin, gate.SolidMax)
+                : new Vector2(gate.MinX, gate.MaxX);
         }
 
         private Collider2D playerBody;
@@ -229,6 +238,7 @@ namespace Gstarr.World
                 gate.MaxX = corner.x + tilemap.cellSize.x;
                 gate.FloorY = corner.y;
                 gate.OpeningHeight = tilemap.cellSize.y * tilesTall;
+                gate.BarrierIndex = gates.Count;
                 gates.Add(gate);
                 doorBarriers.Add(new Vector2(gate.MinX, gate.MaxX));
             }
@@ -854,6 +864,14 @@ namespace Gstarr.World
             }
 
             float x = player.center.x;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                if (!rooms[i].IsLocked || !rooms[i].Holds(x)) continue;
+                cameraFollow.SetFrame(rooms[i].FrameMin, rooms[i].FrameMax, rooms[i].FrameY + 2.6f);
+                UpdateBossMusic(x);
+                return;
+            }
+
             int index = -1;
             for (int i = 0; i < rooms.Count; i++)
                 if (x >= rooms[i].FrameMin) index = i;
@@ -879,7 +897,8 @@ namespace Gstarr.World
             for (int i = 0; i < rooms.Count; i++)
             {
                 if (!rooms[i].HasBoss) continue;
-                if (x >= rooms[i].FrameMin && x <= rooms[i].FrameMax) inBossRoom = true;
+                if (rooms[i].IsLocked && rooms[i].Holds(x)) inBossRoom = true;
+                else if (x >= rooms[i].FrameMin && x <= rooms[i].FrameMax) inBossRoom = true;
             }
             if (RunCheckpoint.SuppressBossTheme)
             {
@@ -901,7 +920,42 @@ namespace Gstarr.World
         public float MaxX;
         public float FloorY;
         public float OpeningHeight;
+        public int BarrierIndex = -1;
         private int lockCount;
+        private bool faceMoved;
+
+        public bool FaceMoved => faceMoved;
+
+        public float SolidMin => Blocks.Count > 0 ? Blocks[0].FaceX(false) : MinX;
+
+        public float SolidMax => Blocks.Count > 0 ? Blocks[0].FaceX(true) : MaxX;
+
+        public float RestInner(bool faceOnRight)
+        {
+            if (Blocks.Count == 0) return faceOnRight ? MaxX : MinX;
+            return Blocks[0].RestFace(faceOnRight);
+        }
+
+        public float InnerFace(bool faceOnRight)
+        {
+            if (Blocks.Count == 0) return faceOnRight ? MaxX : MinX;
+            return Blocks[0].FaceX(faceOnRight);
+        }
+
+        public void PlaceRoomFace(float worldFace, bool faceOnRight)
+        {
+            for (int i = 0; i < Blocks.Count; i++) Blocks[i].PlaceFace(worldFace, faceOnRight);
+            faceMoved = true;
+            ArenaDoorSpawner.SyncBarrier(this);
+        }
+
+        public void ResetRoomFace()
+        {
+            if (!faceMoved) return;
+            for (int i = 0; i < Blocks.Count; i++) Blocks[i].ResetFace();
+            faceMoved = false;
+            ArenaDoorSpawner.SyncBarrier(this);
+        }
 
         public void Lock()
         {
@@ -920,6 +974,7 @@ namespace Gstarr.World
             if (lockCount == 0)
             {
                 for (int i = 0; i < Blocks.Count; i++) Blocks[i].Open();
+                ResetRoomFace();
             }
         }
     }
@@ -985,7 +1040,16 @@ namespace Gstarr.World
         }
 
         public bool HadFight { get; private set; }
+        public bool IsLocked => locked;
         public bool Contains(float x) => x >= innerMin && x <= innerMax;
+
+        /// <summary>잠긴 동안은 화면 밖으로 밀어 둔 문 안쪽까지 이 방이다.</summary>
+        public bool Holds(float x)
+        {
+            float min = left.InnerFace(true);
+            float max = right != null ? right.InnerFace(false) : innerMax;
+            return x >= min - 0.05f && x <= max + 0.05f;
+        }
         public bool HasBoss => anchored.Count > 0 || HostsBoss;
         public float FrameMin => innerMin;
         public float FrameMax => innerMax;
@@ -1031,7 +1095,10 @@ namespace Gstarr.World
             if (!locked && HasEntered(bounds))
                 TryLock(player);
             if (locked)
+            {
+                AlignDoorsOutsideScreen();
                 KeepInside(player, force: false);
+            }
 
             if (locked && AllDead())
             {
@@ -1082,10 +1149,11 @@ namespace Gstarr.World
 
             HadFight = true;
             locked = true;
-            KeepInside(player, force: true);
-            Physics2D.SyncTransforms();
             left.Lock();
             right?.Lock();
+            AlignDoorsOutsideScreen();
+            KeepInside(player, force: true);
+            Physics2D.SyncTransforms();
             StageHUD.HideAdvance();
             for (int i = 0; i < occupants.Count; i++)
             {
@@ -1094,11 +1162,50 @@ namespace Gstarr.World
             }
         }
 
+        /// <summary>
+        /// 시야는 그대로 두고, 방이 화면보다 좁으면 문 충돌만 화면 가장자리 밖으로 민다.
+        /// </summary>
+        private void AlignDoorsOutsideScreen()
+        {
+            var cam = Camera.main;
+            if (cam == null || !cam.orthographic)
+            {
+                left.ResetRoomFace();
+                right?.ResetRoomFace();
+                return;
+            }
+
+            var follow = cam.GetComponent<CameraSystem.CameraFollow2D>();
+            if (follow != null && follow.IsFocusing) return;
+
+            float halfW = cam.orthographicSize * Mathf.Max(0.01f, cam.aspect);
+            float span = innerMax - innerMin;
+            if (span >= halfW * 2f - 0.02f)
+            {
+                left.ResetRoomFace();
+                right?.ResetRoomFace();
+                return;
+            }
+
+            float center = (innerMin + innerMax) * 0.5f;
+            const float outside = 0.06f;
+            float leftFace = center - halfW - outside;
+            if (leftFace < left.RestInner(true) - 0.02f) left.PlaceRoomFace(leftFace, true);
+            else left.ResetRoomFace();
+
+            if (right == null) return;
+            float rightFace = center + halfW + outside;
+            if (rightFace > right.RestInner(false) + 0.02f) right.PlaceRoomFace(rightFace, false);
+            else right.ResetRoomFace();
+        }
+
         private void KeepInside(Collider2D player, bool force)
         {
             float half = player.bounds.extents.x;
-            float min = innerMin + half + 0.08f;
-            float max = right != null ? innerMax - half - 0.08f : float.PositiveInfinity;
+            float leftEdge = left.InnerFace(true);
+            float rightEdge = right != null ? right.InnerFace(false) : float.PositiveInfinity;
+            float min = leftEdge + half + 0.02f;
+            float max = rightEdge - half - 0.02f;
             if (min > max) min = max = (innerMin + innerMax) * 0.5f;
 
             var body = player.attachedRigidbody;
@@ -1196,7 +1303,40 @@ namespace Gstarr.World
             };
             box.enabled = false;
             block.body = box;
+            block.restHalf = box.size.x * 0.5f;
+            block.restCenterX = go.transform.position.x;
             return block;
+        }
+
+        private float restCenterX;
+        private float restHalf;
+
+        public float RestFace(bool faceOnRight) => faceOnRight ? restCenterX + restHalf : restCenterX - restHalf;
+
+        public float FaceX(bool faceOnRight)
+        {
+            if (body is not BoxCollider2D box) return RestFace(faceOnRight);
+            float half = box.size.x * 0.5f;
+            float center = transform.position.x + box.offset.x;
+            return faceOnRight ? center + half : center - half;
+        }
+
+        public void PlaceFace(float worldFace, bool faceOnRight)
+        {
+            if (body is not BoxCollider2D box) return;
+            float half = box.size.x * 0.5f;
+            float center = faceOnRight ? worldFace - half : worldFace + half;
+            var offset = box.offset;
+            offset.x = center - transform.position.x;
+            box.offset = offset;
+        }
+
+        public void ResetFace()
+        {
+            if (body is not BoxCollider2D box) return;
+            var offset = box.offset;
+            offset.x = 0f;
+            box.offset = offset;
         }
 
         public void Close()
